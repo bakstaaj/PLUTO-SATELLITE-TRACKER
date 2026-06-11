@@ -293,6 +293,16 @@
       return response.json();
     }
 
+    async function postJson(url, payload) {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) throw new Error(`${url}: ${response.status}`);
+      return response.json();
+    }
+
     function setDl(id, entries) {
       const node = document.getElementById(id);
       node.innerHTML = "";
@@ -418,9 +428,10 @@
     }
 
     async function refreshRadioStatus() {
-      const [status, hardware] = await Promise.all([
+      const [status, hardware, track] = await Promise.all([
         getJson("/api/radio/status"),
-        getJson("/api/radio/hardware")
+        getJson("/api/radio/hardware"),
+        getJson("/api/radio/track/status")
       ]);
       const entries = [
         ["State", status.state || "idle"]
@@ -429,6 +440,8 @@
       if (status.downlink_hz) entries.push(["Downlink", formatHz(status.downlink_hz)]);
       if (status.uplink_hz) entries.push(["Uplink", formatHz(status.uplink_hz)]);
       if (status.mode) entries.push(["Mode", status.mode]);
+      if (track.state && track.state !== "idle") entries.push(["Track", track.name || track.state]);
+      if (track.point_count) entries.push(["Track points", track.point_count]);
       entries.push(...radioHardwareEntries(hardware));
       setDl("radioStatus", entries);
     }
@@ -497,6 +510,42 @@
       }
     }
 
+    async function planDopplerTrack(pass, button) {
+      const radio = pass.radio || {};
+      const plan = pass.doppler_plan;
+      if (!plan || !(plan.points || []).length) return;
+
+      const payload = {
+        ok: true,
+        state: "track_planned",
+        name: pass.name || "",
+        norad_id: pass.norad_id || null,
+        aos_utc: pass.aos_utc || "",
+        tca_utc: pass.tca_utc || "",
+        los_utc: pass.los_utc || "",
+        mode: radio.mode || (pass.modes || [])[0] || "",
+        description: radio.description || "",
+        point_count: plan.points.length,
+        doppler_plan: plan
+      };
+
+      button.disabled = true;
+      button.textContent = "Planning...";
+      try {
+        await postJson("/api/radio/track/plan", payload);
+        button.textContent = "Track planned";
+        await refreshRadioStatus();
+      } catch (error) {
+        button.textContent = "Plan failed";
+        throw error;
+      } finally {
+        setTimeout(() => {
+          button.disabled = false;
+          button.textContent = "Plan Doppler Track";
+        }, 1200);
+      }
+    }
+
     function renderPassDetail(pass) {
       const node = document.getElementById("passDetail");
       if (!pass) {
@@ -547,6 +596,7 @@
             </dl>
             <button id="planRadioButton" type="button">Plan Radio Target</button>
             <button id="tuneRadioButton" type="button">Tune Receiver</button>
+            <button id="planDopplerButton" type="button">Plan Doppler Track</button>
           </div>
           <div class="full-width">
             <h3>Doppler Preview</h3>
@@ -591,6 +641,14 @@
       tuneButton.disabled = !radio.downlink_hz || radio.pluto_tunable === false;
       tuneButton.addEventListener("click", () => {
         tuneRadioTarget(pass, tuneButton).catch((error) => {
+          document.getElementById("status").textContent = error.message;
+        });
+      });
+
+      const dopplerButton = node.querySelector("#planDopplerButton");
+      dopplerButton.disabled = !pass.doppler_plan || !(pass.doppler_plan.points || []).length;
+      dopplerButton.addEventListener("click", () => {
+        planDopplerTrack(pass, dopplerButton).catch((error) => {
           document.getElementById("status").textContent = error.message;
         });
       });
@@ -642,13 +700,14 @@
     }
 
     async function refresh() {
-      const [status, config, catalog, passes, radioStatus, radioHardware] = await Promise.all([
+      const [status, config, catalog, passes, radioStatus, radioHardware, radioTrack] = await Promise.all([
         getJson("/api/status"),
         getJson("/api/config"),
         getJson("/api/satellites"),
         getJson("/api/passes"),
         getJson("/api/radio/status"),
-        getJson("/api/radio/hardware")
+        getJson("/api/radio/hardware"),
+        getJson("/api/radio/track/status")
       ]);
 
       document.getElementById("status").textContent = status.ok ? "Backend online" : "Backend warning";
@@ -673,6 +732,8 @@
         ["Downlink", radioStatus.downlink_hz ? formatHz(radioStatus.downlink_hz) : "-"],
         ["Mode", radioStatus.mode || "-"],
         ["LO path", radioStatus.lo_path || "-"],
+        ["Track", radioTrack.state && radioTrack.state !== "idle" ? (radioTrack.name || radioTrack.state) : "-"],
+        ["Track points", radioTrack.point_count || "-"],
         ...radioHardwareEntries(radioHardware)
       ]);
 

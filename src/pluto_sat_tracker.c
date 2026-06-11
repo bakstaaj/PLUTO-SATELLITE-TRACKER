@@ -22,7 +22,7 @@
 #define DEFAULT_DATA_DIR "data"
 #define DEFAULT_WEB_DIR "web"
 #define DEFAULT_CONFIG_DIR "config"
-#define REQ_BUF_SIZE 4096
+#define REQ_BUF_SIZE 131072
 #define PATH_BUF_SIZE 1024
 #define PLUTO_MIN_HZ 70000000LL
 #define PLUTO_MAX_HZ 6000000000LL
@@ -642,6 +642,46 @@ static void send_radio_hardware(int fd)
     send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
 }
 
+static void send_radio_track_plan(int fd, const struct app_config *cfg, const char *body)
+{
+    char path[PATH_BUF_SIZE];
+    char tmp_path[PATH_BUF_SIZE + 8];
+    char response[256];
+    FILE *f;
+
+    if (!body || body[0] != '{' || !strstr(body, "\"doppler_plan\"")) {
+        send_text(fd, 400, "Bad Request", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"valid Doppler track JSON is required\"}\n");
+        return;
+    }
+
+    join_path(path, sizeof(path), cfg->data_dir, "radio_track.json");
+    snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
+
+    f = fopen(tmp_path, "wb");
+    if (!f) {
+        send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"could not write Doppler track plan\"}\n");
+        return;
+    }
+
+    fputs(body, f);
+    if (body[strlen(body) - 1] != '\n') {
+        fputc('\n', f);
+    }
+    fclose(f);
+
+    if (rename(tmp_path, path) != 0) {
+        unlink(tmp_path);
+        send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"could not publish Doppler track plan\"}\n");
+        return;
+    }
+
+    snprintf(response, sizeof(response), "{\"ok\":true,\"state\":\"track_planned\"}\n");
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", response);
+}
+
 static void send_radio_tune(int fd, const struct app_config *cfg, const char *query)
 {
     char name[256] = "";
@@ -736,13 +776,29 @@ static void send_radio_tune(int fd, const struct app_config *cfg, const char *qu
     send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
 }
 
-static void handle_request(int fd, const struct app_config *cfg, const char *method, const char *path, const char *query)
+static void handle_request(
+    int fd,
+    const struct app_config *cfg,
+    const char *method,
+    const char *path,
+    const char *query,
+    const char *body)
 {
     char file_path[PATH_BUF_SIZE];
 
-    if (strcmp(method, "GET") != 0 && strcmp(method, "HEAD") != 0) {
+    if (strcmp(method, "GET") != 0 && strcmp(method, "HEAD") != 0 && strcmp(method, "POST") != 0) {
         send_text(fd, 405, "Method Not Allowed", "application/json; charset=utf-8",
                   "{\"ok\":false,\"error\":\"method not allowed\"}\n");
+        return;
+    }
+
+    if (strcmp(method, "POST") == 0) {
+        if (strcmp(path, "/api/radio/track/plan") == 0) {
+            send_radio_track_plan(fd, cfg, body);
+        } else {
+            send_text(fd, 404, "Not Found", "application/json; charset=utf-8",
+                      "{\"ok\":false,\"error\":\"not found\"}\n");
+        }
         return;
     }
 
@@ -766,6 +822,10 @@ static void handle_request(int fd, const struct app_config *cfg, const char *met
         join_path(file_path, sizeof(file_path), cfg->data_dir, "radio_target.json");
         send_json_file_or_default(fd, file_path,
                                   "{\"ok\":true,\"state\":\"idle\",\"message\":\"No radio target planned.\"}\n");
+    } else if (strcmp(path, "/api/radio/track/status") == 0) {
+        join_path(file_path, sizeof(file_path), cfg->data_dir, "radio_track.json");
+        send_json_file_or_default(fd, file_path,
+                                  "{\"ok\":true,\"state\":\"idle\",\"message\":\"No Doppler track planned.\"}\n");
     } else if (strcmp(path, "/api/radio/hardware") == 0) {
         send_radio_hardware(fd);
     } else if (strcmp(path, "/api/radio/plan") == 0) {
@@ -778,6 +838,46 @@ static void handle_request(int fd, const struct app_config *cfg, const char *met
     }
 }
 
+static int header_name_matches(const char *line, const char *name)
+{
+    while (*name) {
+        if (tolower((unsigned char)*line) != tolower((unsigned char)*name)) {
+            return 0;
+        }
+        line++;
+        name++;
+    }
+    return *line == ':';
+}
+
+static size_t content_length_from_headers(const char *headers)
+{
+    const char *line = headers;
+
+    while (line && *line) {
+        const char *next = strstr(line, "\r\n");
+        const char *value;
+
+        if (line[0] == '\r' || line[0] == '\n') {
+            break;
+        }
+
+        if (header_name_matches(line, "Content-Length")) {
+            value = strchr(line, ':');
+            if (value) {
+                while (*++value == ' ') {
+                    ;
+                }
+                return (size_t)strtoul(value, NULL, 10);
+            }
+        }
+
+        line = next ? next + 2 : NULL;
+    }
+
+    return 0;
+}
+
 static void serve_client(int fd, const struct app_config *cfg)
 {
     char req[REQ_BUF_SIZE];
@@ -785,13 +885,50 @@ static void serve_client(int fd, const struct app_config *cfg)
     char target[PATH_BUF_SIZE] = "";
     char query_copy[PATH_BUF_SIZE] = "";
     char *query;
+    char *headers_end;
+    char *body = "";
+    size_t header_len;
+    size_t content_len;
+    size_t total_len;
     ssize_t got;
+    ssize_t total;
 
-    got = recv(fd, req, sizeof(req) - 1, 0);
-    if (got <= 0) {
+    total = recv(fd, req, sizeof(req) - 1, 0);
+    if (total <= 0) {
         return;
     }
-    req[got] = '\0';
+    req[total] = '\0';
+
+    while (!strstr(req, "\r\n\r\n") && (size_t)total < sizeof(req) - 1) {
+        got = recv(fd, req + total, sizeof(req) - 1 - (size_t)total, 0);
+        if (got <= 0) {
+            break;
+        }
+        total += got;
+        req[total] = '\0';
+    }
+
+    headers_end = strstr(req, "\r\n\r\n");
+    if (headers_end) {
+        header_len = (size_t)(headers_end - req) + 4;
+        content_len = content_length_from_headers(req);
+        total_len = header_len + content_len;
+        if (total_len >= sizeof(req)) {
+            send_text(fd, 413, "Payload Too Large", "application/json; charset=utf-8",
+                      "{\"ok\":false,\"error\":\"request body is too large\"}\n");
+            return;
+        }
+        while ((size_t)total < total_len) {
+            got = recv(fd, req + total, total_len - (size_t)total, 0);
+            if (got <= 0) {
+                break;
+            }
+            total += got;
+            req[total] = '\0';
+        }
+        body = req + header_len;
+        body[content_len] = '\0';
+    }
 
     if (sscanf(req, "%15s %1023s", method, target) != 2) {
         send_text(fd, 400, "Bad Request", "application/json; charset=utf-8",
@@ -810,7 +947,7 @@ static void serve_client(int fd, const struct app_config *cfg)
         fflush(stdout);
     }
 
-    handle_request(fd, cfg, method, target, query_copy);
+    handle_request(fd, cfg, method, target, query_copy, body);
 }
 
 static int create_server_socket(const struct app_config *cfg)
