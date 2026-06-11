@@ -1,0 +1,9 @@
+.git
+.pluto.env
+build
+dist
+downloads
+cache
+test_output
+*.o
+*.log

@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pluto Satellite Tracker</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f8fb;
+      --panel: #ffffff;
+      --ink: #18212f;
+      --muted: #657286;
+      --line: #d8e0ea;
+      --accent: #006f9f;
+      --good: #1a7f37;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 650;
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: minmax(260px, 360px) 1fr;
+      gap: 16px;
+      padding: 16px;
+    }
+
+    section {
+      min-width: 0;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+    }
+
+    h2 {
+      margin: 0 0 12px;
+      font-size: 15px;
+    }
+
+    dl {
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      gap: 8px 12px;
+      margin: 0;
+      font-size: 14px;
+    }
+
+    dt {
+      color: var(--muted);
+    }
+
+    dd {
+      margin: 0;
+      overflow-wrap: anywhere;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      padding: 8px;
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .status {
+      color: var(--good);
+      font-weight: 650;
+    }
+
+    .empty {
+      color: var(--muted);
+      padding: 24px 8px;
+      text-align: center;
+    }
+
+    @media (max-width: 760px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+
+      header {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Pluto Satellite Tracker</h1>
+    <div id="status" class="status">Connecting...</div>
+  </header>
+
+  <main>
+    <section>
+      <h2>Observer</h2>
+      <dl id="observer">
+        <dt>Name</dt><dd>Loading...</dd>
+      </dl>
+    </section>
+
+    <section>
+      <h2>Next Passes</h2>
+      <div id="passes" class="empty">Pass prediction will appear here after the orbit engine is added.</div>
+    </section>
+
+    <section>
+      <h2>Storage</h2>
+      <dl id="storage">
+        <dt>Data</dt><dd>Loading...</dd>
+      </dl>
+    </section>
+
+    <section>
+      <h2>Satellite Catalog</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>NORAD</th>
+            <th>Modes</th>
+          </tr>
+        </thead>
+        <tbody id="satellites">
+          <tr><td colspan="3" class="empty">Loading...</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <script>
+    async function getJson(url) {
+      const response = await fetch(url, { cache: "no-store" });
+      if (!response.ok) throw new Error(`${url}: ${response.status}`);
+      return response.json();
+    }
+
+    function setDl(id, entries) {
+      const node = document.getElementById(id);
+      node.innerHTML = "";
+      for (const [label, value] of entries) {
+        const dt = document.createElement("dt");
+        const dd = document.createElement("dd");
+        dt.textContent = label;
+        dd.textContent = value ?? "";
+        node.append(dt, dd);
+      }
+    }
+
+    async function refresh() {
+      const [status, config, catalog] = await Promise.all([
+        getJson("/api/status"),
+        getJson("/api/config"),
+        getJson("/api/satellites")
+      ]);
+
+      document.getElementById("status").textContent = status.ok ? "Backend online" : "Backend warning";
+
+      setDl("observer", [
+        ["Name", config.name],
+        ["Latitude", `${config.latitude_deg} deg`],
+        ["Longitude", `${config.longitude_deg} deg`],
+        ["Altitude", `${config.altitude_m} m`],
+        ["Minimum elevation", `${config.minimum_elevation_deg} deg`]
+      ]);
+
+      setDl("storage", [
+        ["Web", status.web_dir],
+        ["Config", status.config_dir],
+        ["Data", status.data_dir]
+      ]);
+
+      const tbody = document.getElementById("satellites");
+      const satellites = catalog.satellites || [];
+      if (!satellites.length) {
+        tbody.innerHTML = '<tr><td colspan="3" class="empty">Catalog is ready for TLE and repeater metadata import.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = "";
+      for (const sat of satellites) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td></td><td></td><td></td>`;
+        tr.children[0].textContent = sat.name || "";
+        tr.children[1].textContent = sat.norad_id || "";
+        tr.children[2].textContent = (sat.modes || []).join(", ");
+        tbody.appendChild(tr);
+      }
+    }
+
+    refresh().catch((error) => {
+      document.getElementById("status").textContent = "Backend unavailable";
+      document.getElementById("passes").textContent = error.message;
+    });
+  </script>
+</body>
+</html>

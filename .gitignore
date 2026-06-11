@@ -1,0 +1,12 @@
+.pluto.env
+dist/
+build/
+pluto_sat_tracker
+*.o
+*.exe
+*.log
+*.tmp
+downloads/
+cache/
+test_output/
+__pycache__/

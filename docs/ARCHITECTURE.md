@@ -1,0 +1,49 @@
+# Architecture
+
+## Runtime Layout
+
+Small persistent runtime files:
+
+```text
+/mnt/jffs2/pluto_sat_tracker/
+  pluto_sat_tracker
+  run_tracker.sh
+  web/index.html
+  config/observer.json
+```
+
+Larger SD-card data repositories:
+
+```text
+/media/mmcblk0p1/pluto_sat_tracker/
+  data/repositories.json
+  data/satellites.json
+  cache/
+  logs/
+```
+
+## Initial HTTP Surface
+
+```text
+/SatelliteTracker/
+/SatelliteTracker/index.html
+/api/status
+/api/config
+/api/satellites
+/api/passes
+```
+
+## Data Sources
+
+The initial public catalog source manifest is in `data/repositories.json`.
+
+Planned source classes:
+
+- CelesTrak GP/TLE groups for amateur radio, cubesats, weather, and active satellites.
+- CelesTrak JSON/OMM GP data for future 6-digit catalog number support.
+- SatNOGS DB satellite and transmitter metadata for beacon/repeater mode labels.
+- User-maintained overrides for locally important satellites and frequencies.
+
+## Radio Control Boundary
+
+The first milestone does not tune the AD9361 yet. Radio management will be added behind explicit backend functions so satellite prediction, scheduling, and UI work can proceed without prematurely coupling everything to RF control.

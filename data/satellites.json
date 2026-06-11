@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "updated_utc": null,
+  "satellites": [],
+  "notes": [
+    "This file is the local SD-card catalog seed.",
+    "TLE refresh and amateur beacon/repeater metadata import will be added next."
+  ]
+}
