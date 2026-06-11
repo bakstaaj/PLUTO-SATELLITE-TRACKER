@@ -14,6 +14,7 @@
       --line: #d8e0ea;
       --accent: #006f9f;
       --good: #1a7f37;
+      --warn: #a15c00;
     }
 
     * {
@@ -127,7 +128,7 @@
 
     .pass-row {
       display: grid;
-      grid-template-columns: 1.4fr 1fr 1fr;
+      grid-template-columns: 1.3fr 1fr 1.2fr;
       gap: 8px;
       padding: 8px 0;
       border-bottom: 1px solid var(--line);
@@ -136,6 +137,16 @@
 
     .pass-row strong {
       display: block;
+    }
+
+    .radio-ok {
+      color: var(--good);
+      font-weight: 650;
+    }
+
+    .radio-warn {
+      color: var(--warn);
+      font-weight: 650;
     }
 
     @media (max-width: 760px) {
@@ -242,6 +253,15 @@
       return `${minutes} min`;
     }
 
+    function renderRadioTarget(pass) {
+      const radio = pass.radio || {};
+      const downlink = radio.downlink_hz || (pass.downlinks_hz || [])[0];
+      if (!downlink) return "No downlink";
+      const mode = radio.mode || (pass.modes || [])[0] || "";
+      const prefix = radio.pluto_tunable === false ? "Out of range" : "Tune";
+      return `${prefix} ${formatHz(downlink)} ${mode}`.trim();
+    }
+
     function renderPasses(payload) {
       const node = document.getElementById("passes");
       const passes = payload.passes || [];
@@ -263,8 +283,9 @@
           downlink ? `${formatHz(downlink)} ${((pass.modes || [])[0] || "")}` : ((pass.modes || [])[0] || "");
         row.children[1].textContent =
           `${formatTime(pass.aos_utc)}-${formatTime(pass.los_utc)} (${formatDuration(pass.duration_s)})`;
-        row.children[2].textContent =
-          `Max ${pass.max_elevation_deg} deg, az ${pass.aos_azimuth_deg}-${pass.los_azimuth_deg}`;
+        row.children[2].className = pass.radio && pass.radio.pluto_tunable === false ? "radio-warn" : "radio-ok";
+        row.children[2].textContent = renderRadioTarget(pass);
+        row.title = `Max ${pass.max_elevation_deg} deg, az ${pass.aos_azimuth_deg}-${pass.los_azimuth_deg}`;
         node.appendChild(row);
       }
     }

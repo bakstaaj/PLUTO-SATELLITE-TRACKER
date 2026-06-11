@@ -1,5 +1,5 @@
 {
-  "generated_utc": "2026-06-11T20:25:47Z",
+  "generated_utc": "2026-06-11T20:36:58Z",
   "hours": 24.0,
   "metadata": {
     "minimum_elevation_deg": 10,
@@ -17,31 +17,8 @@
   },
   "passes": [
     {
-      "aos_azimuth_deg": 151.2,
-      "aos_utc": "2026-06-11T20:26:16Z",
-      "downlinks_hz": [
-        435791000,
-        435675000,
-        435715000
-      ],
-      "duration_s": 855,
-      "los_azimuth_deg": 350.0,
-      "los_utc": "2026-06-11T20:40:31Z",
-      "max_elevation_deg": 68.6,
-      "modes": [
-        "CW",
-        "FM",
-        "FMN",
-        "AFSK"
-      ],
-      "name": "XIWANG-1 (HOPE-1)",
-      "norad_id": 36122,
-      "range_at_tca_km": 1280.6,
-      "tca_utc": "2026-06-11T20:33:11Z"
-    },
-    {
-      "aos_azimuth_deg": 312.9,
-      "aos_utc": "2026-06-11T20:32:07Z",
+      "aos_azimuth_deg": 113.4,
+      "aos_utc": "2026-06-11T20:36:54Z",
       "downlinks_hz": [
         145825000,
         145800000,
@@ -50,10 +27,10 @@
         130167000,
         437023000
       ],
-      "duration_s": 399,
-      "los_azimuth_deg": 121.4,
+      "duration_s": 113,
+      "los_azimuth_deg": 120.8,
       "los_utc": "2026-06-11T20:38:47Z",
-      "max_elevation_deg": 66.0,
+      "max_elevation_deg": 30.7,
       "modes": [
         "AFSK",
         "FM",
@@ -66,21 +43,32 @@
       ],
       "name": "ISS (ZARYA)",
       "norad_id": 25544,
-      "range_at_tca_km": 455.1,
-      "tca_utc": "2026-06-11T20:35:41Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode V APRS",
+        "downlink_hz": 145825000,
+        "invert": false,
+        "mode": "AFSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transceiver",
+        "uplink_hz": 145825000
+      },
+      "range_at_tca_km": 756.1,
+      "tca_utc": "2026-06-11T20:36:54Z"
     },
     {
-      "aos_azimuth_deg": 95.8,
-      "aos_utc": "2026-06-11T20:35:43Z",
+      "aos_azimuth_deg": 86.0,
+      "aos_utc": "2026-06-11T20:36:54Z",
       "downlinks_hz": [
         145825000,
         435025000,
         2401500000
       ],
-      "duration_s": 292,
-      "los_azimuth_deg": 35.1,
+      "duration_s": 221,
+      "los_azimuth_deg": 32.5,
       "los_utc": "2026-06-11T20:40:35Z",
-      "max_elevation_deg": 15.2,
+      "max_elevation_deg": 15.1,
       "modes": [
         "AFSK",
         "PSK",
@@ -88,37 +76,93 @@
       ],
       "name": "UOSAT 2 (UO-11)",
       "norad_id": 14781,
-      "range_at_tca_km": 1625.1,
-      "tca_utc": "2026-06-11T20:38:11Z"
+      "radio": {
+        "alive": true,
+        "description": "1k2 AFSK TLM",
+        "downlink_hz": 145825000,
+        "invert": false,
+        "mode": "AFSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 1628.7,
+      "tca_utc": "2026-06-11T20:38:24Z"
     },
     {
-      "aos_azimuth_deg": 300.5,
+      "aos_azimuth_deg": 357.3,
+      "aos_utc": "2026-06-11T20:36:54Z",
+      "downlinks_hz": [
+        435791000,
+        435675000,
+        435715000
+      ],
+      "duration_s": 217,
+      "los_azimuth_deg": 349.7,
+      "los_utc": "2026-06-11T20:40:31Z",
+      "max_elevation_deg": 32.7,
+      "modes": [
+        "CW",
+        "FM",
+        "FMN",
+        "AFSK"
+      ],
+      "name": "XIWANG-1 (HOPE-1)",
+      "norad_id": 36122,
+      "radio": {
+        "alive": true,
+        "description": "Mode V/U FM",
+        "downlink_hz": 435675000,
+        "invert": true,
+        "mode": "FM",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transceiver",
+        "uplink_hz": 145825000
+      },
+      "range_at_tca_km": 1918.7,
+      "tca_utc": "2026-06-11T20:36:54Z"
+    },
+    {
+      "aos_azimuth_deg": 299.7,
       "aos_utc": "2026-06-11T20:40:27Z",
       "downlinks_hz": [
         145825000,
         400630000
       ],
       "duration_s": 370,
-      "los_azimuth_deg": 144.4,
+      "los_azimuth_deg": 143.5,
       "los_utc": "2026-06-11T20:46:38Z",
-      "max_elevation_deg": 56.2,
+      "max_elevation_deg": 55.5,
       "modes": [
         "FSK"
       ],
       "name": "KNACKSAT-2",
       "norad_id": 67683,
-      "range_at_tca_km": 459.5,
-      "tca_utc": "2026-06-11T20:43:41Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode V/V - FSK9k6 - Digipeater - AX.25 G3RUH",
+        "downlink_hz": 145825000,
+        "invert": false,
+        "mode": "FSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transceiver",
+        "uplink_hz": 145825000
+      },
+      "range_at_tca_km": 463.5,
+      "tca_utc": "2026-06-11T20:43:24Z"
     },
     {
-      "aos_azimuth_deg": 87.2,
+      "aos_azimuth_deg": 91.7,
       "aos_utc": "2026-06-11T20:56:45Z",
       "downlinks_hz": [
         10473350000,
         436270000
       ],
       "duration_s": 188,
-      "los_azimuth_deg": 43.6,
+      "los_azimuth_deg": 48.1,
       "los_utc": "2026-06-11T20:59:53Z",
       "max_elevation_deg": 12.6,
       "modes": [
@@ -127,11 +171,22 @@
       ],
       "name": "239ALFEROV (RS61S)",
       "norad_id": 64881,
-      "range_at_tca_km": 1479.3,
-      "tca_utc": "2026-06-11T20:58:11Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U - GFSK9k6 - AX.25 Beacon and Telemetry (Geoscan framing)",
+        "downlink_hz": 436270000,
+        "invert": false,
+        "mode": "GFSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 1478.6,
+      "tca_utc": "2026-06-11T20:58:24Z"
     },
     {
-      "aos_azimuth_deg": 159.4,
+      "aos_azimuth_deg": 159.0,
       "aos_utc": "2026-06-11T20:56:59Z",
       "downlinks_hz": [
         437384000,
@@ -139,46 +194,68 @@
         437385000
       ],
       "duration_s": 477,
-      "los_azimuth_deg": 352.3,
+      "los_azimuth_deg": 352.0,
       "los_utc": "2026-06-11T21:04:56Z",
-      "max_elevation_deg": 69.5,
+      "max_elevation_deg": 72.2,
       "modes": [
         "FSK"
       ],
       "name": "UWE-3",
       "norad_id": 39446,
-      "range_at_tca_km": 597.3,
-      "tca_utc": "2026-06-11T21:00:41Z"
+      "radio": {
+        "alive": true,
+        "description": "PE0SAT - 9k6 FSK TLM",
+        "downlink_hz": 437384000,
+        "invert": false,
+        "mode": "FSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 589.3,
+      "tca_utc": "2026-06-11T21:00:54Z"
     },
     {
-      "aos_azimuth_deg": 282.9,
+      "aos_azimuth_deg": 280.2,
       "aos_utc": "2026-06-11T21:02:27Z",
       "downlinks_hz": [
         145980000,
         145978500
       ],
       "duration_s": 300,
-      "los_azimuth_deg": 216.5,
+      "los_azimuth_deg": 214.1,
       "los_utc": "2026-06-11T21:07:28Z",
-      "max_elevation_deg": 15.2,
+      "max_elevation_deg": 15.3,
       "modes": [
         "FM",
         "DUV"
       ],
       "name": "FOX-1A (AO-85)",
       "norad_id": 40967,
-      "range_at_tca_km": 1580.6,
-      "tca_utc": "2026-06-11T21:04:41Z"
+      "radio": {
+        "alive": false,
+        "description": "FM Transponder",
+        "downlink_hz": 145980000,
+        "invert": false,
+        "mode": "FM",
+        "pluto_tunable": true,
+        "status": "inactive",
+        "type": "Transceiver",
+        "uplink_hz": 435180000
+      },
+      "range_at_tca_km": 1579.6,
+      "tca_utc": "2026-06-11T21:04:54Z"
     },
     {
-      "aos_azimuth_deg": 146.1,
+      "aos_azimuth_deg": 145.1,
       "aos_utc": "2026-06-11T21:06:37Z",
       "downlinks_hz": [
         437356000,
         14099000
       ],
       "duration_s": 474,
-      "los_azimuth_deg": 1.6,
+      "los_azimuth_deg": 0.7,
       "los_utc": "2026-06-11T21:14:31Z",
       "max_elevation_deg": 45.9,
       "modes": [
@@ -187,17 +264,28 @@
       ],
       "name": "ZACUBE-1 (TSHEPISOSAT)",
       "norad_id": 39417,
-      "range_at_tca_km": 787.6,
-      "tca_utc": "2026-06-11T21:10:41Z"
+      "radio": {
+        "alive": true,
+        "description": "FSK1k2 TLM",
+        "downlink_hz": 437356000,
+        "invert": false,
+        "mode": "FSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 786.0,
+      "tca_utc": "2026-06-11T21:10:24Z"
     },
     {
-      "aos_azimuth_deg": 127.9,
+      "aos_azimuth_deg": 125.7,
       "aos_utc": "2026-06-11T21:20:01Z",
       "downlinks_hz": [
         436160000
       ],
       "duration_s": 358,
-      "los_azimuth_deg": 16.6,
+      "los_azimuth_deg": 14.5,
       "los_utc": "2026-06-11T21:26:00Z",
       "max_elevation_deg": 26.0,
       "modes": [
@@ -205,47 +293,80 @@
       ],
       "name": "GEOSCAN 2 (RS92S2)",
       "norad_id": 64890,
-      "range_at_tca_km": 970.0,
-      "tca_utc": "2026-06-11T21:23:11Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U - GFSK9k6 - AX.25 Beacon and Ham Payload (Geoscan framing)",
+        "downlink_hz": 436160000,
+        "invert": false,
+        "mode": "GFSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 967.8,
+      "tca_utc": "2026-06-11T21:22:54Z"
     },
     {
-      "aos_azimuth_deg": 132.0,
+      "aos_azimuth_deg": 130.1,
       "aos_utc": "2026-06-11T21:21:10Z",
       "downlinks_hz": [
         436940000
       ],
       "duration_s": 370,
-      "los_azimuth_deg": 12.9,
+      "los_azimuth_deg": 15.5,
       "los_utc": "2026-06-11T21:27:20Z",
-      "max_elevation_deg": 28.1,
+      "max_elevation_deg": 28.0,
       "modes": [
         "GFSK"
       ],
       "name": "GEOSCAN 6 (RS92S6)",
       "norad_id": 64879,
-      "range_at_tca_km": 924.0,
-      "tca_utc": "2026-06-11T21:24:11Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U - GFSK9k6 - AX.25 Beacon and Ham Payload (Geoscan framing)",
+        "downlink_hz": 436940000,
+        "invert": false,
+        "mode": "GFSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 926.4,
+      "tca_utc": "2026-06-11T21:24:24Z"
     },
     {
-      "aos_azimuth_deg": 137.4,
+      "aos_azimuth_deg": 139.4,
       "aos_utc": "2026-06-11T21:22:19Z",
       "downlinks_hz": [
         435830000
       ],
       "duration_s": 402,
-      "los_azimuth_deg": 8.5,
+      "los_azimuth_deg": 7.0,
       "los_utc": "2026-06-11T21:29:01Z",
-      "max_elevation_deg": 35.4,
+      "max_elevation_deg": 35.0,
       "modes": [
         "GFSK"
       ],
       "name": "INNOSAT 16 (RS92S7)",
       "norad_id": 64878,
-      "range_at_tca_km": 808.6,
-      "tca_utc": "2026-06-11T21:25:41Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U - GFSK9k6 - AX.25 Beacon and Ham Payload (Geoscan framing)",
+        "downlink_hz": 435830000,
+        "invert": false,
+        "mode": "GFSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 815.1,
+      "tca_utc": "2026-06-11T21:25:54Z"
     },
     {
-      "aos_azimuth_deg": 124.7,
+      "aos_azimuth_deg": 127.1,
       "aos_utc": "2026-06-11T21:23:20Z",
       "downlinks_hz": [
         145950000,
@@ -253,9 +374,9 @@
         145935000
       ],
       "duration_s": 405,
-      "los_azimuth_deg": 16.3,
+      "los_azimuth_deg": 14.4,
       "los_utc": "2026-06-11T21:30:06Z",
-      "max_elevation_deg": 26.5,
+      "max_elevation_deg": 26.4,
       "modes": [
         "USB",
         "CW",
@@ -263,29 +384,51 @@
       ],
       "name": "FUNCUBE-1 (AO-73)",
       "norad_id": 39444,
-      "range_at_tca_km": 1109.1,
-      "tca_utc": "2026-06-11T21:26:41Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U/V Linear",
+        "downlink_hz": 145950000,
+        "invert": true,
+        "mode": "USB",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transponder",
+        "uplink_hz": 435130000
+      },
+      "range_at_tca_km": 1112.0,
+      "tca_utc": "2026-06-11T21:26:54Z"
     },
     {
-      "aos_azimuth_deg": 136.1,
+      "aos_azimuth_deg": 134.3,
       "aos_utc": "2026-06-11T21:27:24Z",
       "downlinks_hz": [
         435970000
       ],
       "duration_s": 386,
-      "los_azimuth_deg": 8.8,
+      "los_azimuth_deg": 11.0,
       "los_utc": "2026-06-11T21:33:51Z",
-      "max_elevation_deg": 33.2,
+      "max_elevation_deg": 32.9,
       "modes": [
         "GFSK"
       ],
       "name": "GEOSCAN 1 (RS92S1)",
       "norad_id": 64880,
-      "range_at_tca_km": 817.9,
-      "tca_utc": "2026-06-11T21:30:41Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U - GFSK9k6 - AX.25 Beacon and Ham Payload (Geoscan framing)",
+        "downlink_hz": 435970000,
+        "invert": false,
+        "mode": "GFSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 823.5,
+      "tca_utc": "2026-06-11T21:30:24Z"
     },
     {
-      "aos_azimuth_deg": 319.7,
+      "aos_azimuth_deg": 319.4,
       "aos_utc": "2026-06-11T21:50:32Z",
       "downlinks_hz": [
         29354000,
@@ -293,7 +436,7 @@
         29398700
       ],
       "duration_s": 1358,
-      "los_azimuth_deg": 180.7,
+      "los_azimuth_deg": 180.3,
       "los_utc": "2026-06-11T22:13:10Z",
       "max_elevation_deg": 49.9,
       "modes": [
@@ -302,35 +445,57 @@
       ],
       "name": "RADIO ROSTO (RS15)",
       "norad_id": 23439,
-      "range_at_tca_km": 2558.2,
-      "tca_utc": "2026-06-11T22:01:41Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode T TLM 1",
+        "downlink_hz": 29352500,
+        "invert": false,
+        "mode": "CW",
+        "pluto_tunable": false,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 2560.3,
+      "tca_utc": "2026-06-11T22:01:54Z"
     },
     {
-      "aos_azimuth_deg": 158.1,
+      "aos_azimuth_deg": 158.8,
       "aos_utc": "2026-06-11T21:51:43Z",
       "downlinks_hz": [
         435335000
       ],
       "duration_s": 416,
-      "los_azimuth_deg": 354.5,
+      "los_azimuth_deg": 354.0,
       "los_utc": "2026-06-11T21:58:39Z",
-      "max_elevation_deg": 67.9,
+      "max_elevation_deg": 65.3,
       "modes": [
         "GFSK"
       ],
       "name": "GEOSCAN 4 (RS92S4)",
       "norad_id": 64892,
-      "range_at_tca_km": 507.6,
-      "tca_utc": "2026-06-11T21:55:11Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U - GFSK9k6 - AX.25 Beacon and Ham Payload (Geoscan framing)",
+        "downlink_hz": 435335000,
+        "invert": false,
+        "mode": "GFSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 517.1,
+      "tca_utc": "2026-06-11T21:55:24Z"
     },
     {
-      "aos_azimuth_deg": 250.7,
+      "aos_azimuth_deg": 253.8,
       "aos_utc": "2026-06-11T21:52:06Z",
       "downlinks_hz": [
         437445000
       ],
       "duration_s": 149,
-      "los_azimuth_deg": 281.1,
+      "los_azimuth_deg": 284.2,
       "los_utc": "2026-06-11T21:54:35Z",
       "max_elevation_deg": 11.2,
       "modes": [
@@ -339,17 +504,28 @@
       ],
       "name": "CUBEBUG-2 (LO-74)",
       "norad_id": 39440,
-      "range_at_tca_km": 1734.2,
-      "tca_utc": "2026-06-11T21:53:11Z"
+      "radio": {
+        "alive": true,
+        "description": "UHF 1K2 AFSK Telemetry",
+        "downlink_hz": 437445000,
+        "invert": false,
+        "mode": "AFSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 1733.0,
+      "tca_utc": "2026-06-11T21:53:24Z"
     },
     {
-      "aos_azimuth_deg": 265.5,
+      "aos_azimuth_deg": 262.2,
       "aos_utc": "2026-06-11T21:53:42Z",
       "downlinks_hz": [
         437305000
       ],
       "duration_s": 339,
-      "los_azimuth_deg": 342.7,
+      "los_azimuth_deg": 339.4,
       "los_utc": "2026-06-11T21:59:21Z",
       "max_elevation_deg": 17.2,
       "modes": [
@@ -357,47 +533,80 @@
       ],
       "name": "O/OREOS (USA 219)",
       "norad_id": 37224,
-      "range_at_tca_km": 1481.0,
-      "tca_utc": "2026-06-11T21:56:41Z"
+      "radio": {
+        "alive": true,
+        "description": "AFSK Beacon",
+        "downlink_hz": 437305000,
+        "invert": false,
+        "mode": "AFSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 1480.4,
+      "tca_utc": "2026-06-11T21:56:24Z"
     },
     {
-      "aos_azimuth_deg": 62.6,
+      "aos_azimuth_deg": 65.4,
       "aos_utc": "2026-06-11T21:55:56Z",
       "downlinks_hz": [
         437421500
       ],
       "duration_s": 269,
-      "los_azimuth_deg": 122.8,
+      "los_azimuth_deg": 125.5,
       "los_utc": "2026-06-11T22:00:25Z",
-      "max_elevation_deg": 14.2,
+      "max_elevation_deg": 14.1,
       "modes": [
         "FSK"
       ],
       "name": "UNISAT-6",
       "norad_id": 40012,
-      "range_at_tca_km": 1646.4,
-      "tca_utc": "2026-06-11T21:58:11Z"
+      "radio": {
+        "alive": true,
+        "description": "9k6 FSK TLM",
+        "downlink_hz": 437421500,
+        "invert": false,
+        "mode": "FSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 1649.6,
+      "tca_utc": "2026-06-11T21:58:24Z"
     },
     {
-      "aos_azimuth_deg": 167.9,
+      "aos_azimuth_deg": 168.0,
       "aos_utc": "2026-06-11T22:02:26Z",
       "downlinks_hz": [
         435740000
       ],
       "duration_s": 415,
-      "los_azimuth_deg": 347.6,
+      "los_azimuth_deg": 347.5,
       "los_utc": "2026-06-11T22:09:22Z",
-      "max_elevation_deg": 77.9,
+      "max_elevation_deg": 87.9,
       "modes": [
         "GFSK"
       ],
       "name": "GEOSCAN 3 (RS92S3)",
       "norad_id": 64893,
-      "range_at_tca_km": 476.7,
-      "tca_utc": "2026-06-11T22:05:41Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U - GFSK9k6 - AX.25 Beacon and Ham Payload (Geoscan framing)",
+        "downlink_hz": 435740000,
+        "invert": false,
+        "mode": "GFSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 467.3,
+      "tca_utc": "2026-06-11T22:05:54Z"
     },
     {
-      "aos_azimuth_deg": 190.1,
+      "aos_azimuth_deg": 188.7,
       "aos_utc": "2026-06-11T22:09:23Z",
       "downlinks_hz": [
         145825000,
@@ -405,9 +614,9 @@
         2401500000
       ],
       "duration_s": 482,
-      "los_azimuth_deg": 332.5,
+      "los_azimuth_deg": 333.6,
       "los_utc": "2026-06-11T22:17:25Z",
-      "max_elevation_deg": 42.8,
+      "max_elevation_deg": 43.2,
       "modes": [
         "AFSK",
         "PSK",
@@ -415,31 +624,53 @@
       ],
       "name": "UOSAT 2 (UO-11)",
       "norad_id": 14781,
-      "range_at_tca_km": 847.5,
-      "tca_utc": "2026-06-11T22:13:11Z"
+      "radio": {
+        "alive": true,
+        "description": "1k2 AFSK TLM",
+        "downlink_hz": 145825000,
+        "invert": false,
+        "mode": "AFSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 842.6,
+      "tca_utc": "2026-06-11T22:13:24Z"
     },
     {
-      "aos_azimuth_deg": 55.9,
+      "aos_azimuth_deg": 52.8,
       "aos_utc": "2026-06-11T22:10:16Z",
       "downlinks_hz": [
         437463100,
         437345000
       ],
       "duration_s": 355,
-      "los_azimuth_deg": 134.8,
+      "los_azimuth_deg": 131.9,
       "los_utc": "2026-06-11T22:16:11Z",
-      "max_elevation_deg": 17.3,
+      "max_elevation_deg": 17.2,
       "modes": [
         "CW",
         "AFSK"
       ],
       "name": "CUBESAT XI-V",
       "norad_id": 28895,
-      "range_at_tca_km": 1622.2,
-      "tca_utc": "2026-06-11T22:13:11Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U CW BEACON",
+        "downlink_hz": 437463100,
+        "invert": false,
+        "mode": "CW",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 1622.6,
+      "tca_utc": "2026-06-11T22:13:24Z"
     },
     {
-      "aos_azimuth_deg": 252.7,
+      "aos_azimuth_deg": 249.1,
       "aos_utc": "2026-06-11T22:10:40Z",
       "downlinks_hz": [
         145825000,
@@ -450,7 +681,7 @@
         437023000
       ],
       "duration_s": 139,
-      "los_azimuth_deg": 217.0,
+      "los_azimuth_deg": 213.3,
       "los_utc": "2026-06-11T22:13:00Z",
       "max_elevation_deg": 11.4,
       "modes": [
@@ -465,29 +696,51 @@
       ],
       "name": "ISS (ZARYA)",
       "norad_id": 25544,
-      "range_at_tca_km": 1398.5,
-      "tca_utc": "2026-06-11T22:11:41Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode V APRS",
+        "downlink_hz": 145825000,
+        "invert": false,
+        "mode": "AFSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transceiver",
+        "uplink_hz": 145825000
+      },
+      "range_at_tca_km": 1396.8,
+      "tca_utc": "2026-06-11T22:11:54Z"
     },
     {
-      "aos_azimuth_deg": 180.8,
+      "aos_azimuth_deg": 181.7,
       "aos_utc": "2026-06-11T22:13:31Z",
       "downlinks_hz": [
         436660000
       ],
       "duration_s": 413,
-      "los_azimuth_deg": 338.5,
+      "los_azimuth_deg": 339.2,
       "los_utc": "2026-06-11T22:20:24Z",
-      "max_elevation_deg": 54.5,
+      "max_elevation_deg": 55.8,
       "modes": [
         "GFSK"
       ],
       "name": "GEOSCAN 5 (RS92S5)",
       "norad_id": 64891,
-      "range_at_tca_km": 571.6,
-      "tca_utc": "2026-06-11T22:17:11Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U - GFSK9k6 - AX.25 Beacon and Ham Payload (Geoscan framing)",
+        "downlink_hz": 436660000,
+        "invert": false,
+        "mode": "GFSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 563.1,
+      "tca_utc": "2026-06-11T22:16:54Z"
     },
     {
-      "aos_azimuth_deg": 222.4,
+      "aos_azimuth_deg": 223.8,
       "aos_utc": "2026-06-11T22:16:26Z",
       "downlinks_hz": [
         435791000,
@@ -495,7 +748,7 @@
         435715000
       ],
       "duration_s": 617,
-      "los_azimuth_deg": 313.2,
+      "los_azimuth_deg": 311.5,
       "los_utc": "2026-06-11T22:26:43Z",
       "max_elevation_deg": 20.8,
       "modes": [
@@ -506,17 +759,28 @@
       ],
       "name": "XIWANG-1 (HOPE-1)",
       "norad_id": 36122,
+      "radio": {
+        "alive": true,
+        "description": "Mode V/U FM",
+        "downlink_hz": 435675000,
+        "invert": true,
+        "mode": "FM",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transceiver",
+        "uplink_hz": 145825000
+      },
       "range_at_tca_km": 2424.2,
-      "tca_utc": "2026-06-11T22:21:41Z"
+      "tca_utc": "2026-06-11T22:21:24Z"
     },
     {
-      "aos_azimuth_deg": 331.2,
+      "aos_azimuth_deg": 331.0,
       "aos_utc": "2026-06-11T22:27:31Z",
       "downlinks_hz": [
         436750000
       ],
       "duration_s": 3202,
-      "los_azimuth_deg": 212.4,
+      "los_azimuth_deg": 212.8,
       "los_utc": "2026-06-11T23:20:53Z",
       "max_elevation_deg": 39.2,
       "modes": [
@@ -525,88 +789,143 @@
       ],
       "name": "GREENCUBE (IO-117)",
       "norad_id": 53109,
-      "range_at_tca_km": 7158.0,
-      "tca_utc": "2026-06-11T22:54:11Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U TLM 2k4 GMSK AX25",
+        "downlink_hz": 436750000,
+        "invert": false,
+        "mode": "GMSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 7157.9,
+      "tca_utc": "2026-06-11T22:53:54Z"
     },
     {
-      "aos_azimuth_deg": 197.4,
+      "aos_azimuth_deg": 195.3,
       "aos_utc": "2026-06-11T22:27:51Z",
       "downlinks_hz": [
         10473350000,
         436270000
       ],
       "duration_s": 387,
-      "los_azimuth_deg": 328.2,
+      "los_azimuth_deg": 325.9,
       "los_utc": "2026-06-11T22:34:18Z",
-      "max_elevation_deg": 34.0,
+      "max_elevation_deg": 33.9,
       "modes": [
         "DVB-S2",
         "GFSK"
       ],
       "name": "239ALFEROV (RS61S)",
       "norad_id": 64881,
-      "range_at_tca_km": 792.1,
-      "tca_utc": "2026-06-11T22:31:11Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U - GFSK9k6 - AX.25 Beacon and Telemetry (Geoscan framing)",
+        "downlink_hz": 436270000,
+        "invert": false,
+        "mode": "GFSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 794.5,
+      "tca_utc": "2026-06-11T22:30:54Z"
     },
     {
-      "aos_azimuth_deg": 191.2,
+      "aos_azimuth_deg": 189.3,
       "aos_utc": "2026-06-11T22:29:16Z",
       "downlinks_hz": [
         436436000
       ],
       "duration_s": 379,
-      "los_azimuth_deg": 330.8,
+      "los_azimuth_deg": 332.2,
       "los_utc": "2026-06-11T22:35:35Z",
-      "max_elevation_deg": 40.5,
+      "max_elevation_deg": 41.3,
       "modes": [
         "GFSK"
       ],
       "name": "INNOSAT 3 (RS92S0)",
       "norad_id": 64894,
-      "range_at_tca_km": 651.9,
-      "tca_utc": "2026-06-11T22:32:11Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U - GFSK9k6 - AX.25 Beacon and Ham Payload (Geoscan framing)",
+        "downlink_hz": 436436000,
+        "invert": false,
+        "mode": "GFSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 643.5,
+      "tca_utc": "2026-06-11T22:32:24Z"
     },
     {
-      "aos_azimuth_deg": 127.2,
+      "aos_azimuth_deg": 125.9,
       "aos_utc": "2026-06-11T22:36:05Z",
       "downlinks_hz": [
         435225000,
         435325000
       ],
       "duration_s": 552,
-      "los_azimuth_deg": 7.5,
+      "los_azimuth_deg": 9.2,
       "los_utc": "2026-06-11T22:45:17Z",
-      "max_elevation_deg": 31.1,
+      "max_elevation_deg": 31.0,
       "modes": [
         "FSK"
       ],
       "name": "TECHSAT 1B (GO-32)",
       "norad_id": 25397,
-      "range_at_tca_km": 1387.4,
-      "tca_utc": "2026-06-11T22:40:41Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U 9k6 FSK",
+        "downlink_hz": 435225000,
+        "invert": false,
+        "mode": "FSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 1390.7,
+      "tca_utc": "2026-06-11T22:40:54Z"
     },
     {
-      "aos_azimuth_deg": 245.3,
+      "aos_azimuth_deg": 241.6,
       "aos_utc": "2026-06-11T22:43:52Z",
       "downlinks_hz": [
         437356000,
         14099000
       ],
       "duration_s": 224,
-      "los_azimuth_deg": 290.1,
+      "los_azimuth_deg": 293.0,
       "los_utc": "2026-06-11T22:47:37Z",
-      "max_elevation_deg": 12.8,
+      "max_elevation_deg": 12.7,
       "modes": [
         "FSK",
         "CW"
       ],
       "name": "ZACUBE-1 (TSHEPISOSAT)",
       "norad_id": 39417,
-      "range_at_tca_km": 1721.0,
-      "tca_utc": "2026-06-11T22:45:41Z"
+      "radio": {
+        "alive": true,
+        "description": "FSK1k2 TLM",
+        "downlink_hz": 437356000,
+        "invert": false,
+        "mode": "FSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 1723.1,
+      "tca_utc": "2026-06-11T22:45:54Z"
     },
     {
-      "aos_azimuth_deg": 14.7,
+      "aos_azimuth_deg": 15.8,
       "aos_utc": "2026-06-11T22:46:28Z",
       "downlinks_hz": [
         435605000,
@@ -616,9 +935,9 @@
         435660000
       ],
       "duration_s": 725,
-      "los_azimuth_deg": 126.1,
+      "los_azimuth_deg": 127.2,
       "los_utc": "2026-06-11T22:58:34Z",
-      "max_elevation_deg": 28.0,
+      "max_elevation_deg": 27.9,
       "modes": [
         "CW",
         "FSK",
@@ -628,11 +947,22 @@
       ],
       "name": "RS-44 & BREEZE-KM R/B",
       "norad_id": 44909,
-      "range_at_tca_km": 2059.0,
-      "tca_utc": "2026-06-11T22:52:41Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode V/U - Transponder",
+        "downlink_hz": 435610000,
+        "invert": true,
+        "mode": "USB",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transponder",
+        "uplink_hz": 145935000
+      },
+      "range_at_tca_km": 2061.9,
+      "tca_utc": "2026-06-11T22:52:24Z"
     },
     {
-      "aos_azimuth_deg": 95.6,
+      "aos_azimuth_deg": 94.4,
       "aos_utc": "2026-06-11T22:47:28Z",
       "downlinks_hz": [
         435100000,
@@ -643,7 +973,7 @@
         2304100000
       ],
       "duration_s": 685,
-      "los_azimuth_deg": 9.6,
+      "los_azimuth_deg": 11.1,
       "los_utc": "2026-06-11T22:58:53Z",
       "max_elevation_deg": 21.0,
       "modes": [
@@ -652,11 +982,22 @@
       ],
       "name": "OSCAR 7 (AO-7)",
       "norad_id": 7530,
-      "range_at_tca_km": 2800.9,
-      "tca_utc": "2026-06-11T22:53:11Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U/V (B) Lin",
+        "downlink_hz": 145925000,
+        "invert": true,
+        "mode": "USB",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transponder",
+        "uplink_hz": 432125000
+      },
+      "range_at_tca_km": 2802.1,
+      "tca_utc": "2026-06-11T22:53:24Z"
     },
     {
-      "aos_azimuth_deg": 168.3,
+      "aos_azimuth_deg": 168.4,
       "aos_utc": "2026-06-11T22:47:55Z",
       "downlinks_hz": [
         437275000,
@@ -664,9 +1005,9 @@
         437274600
       ],
       "duration_s": 461,
-      "los_azimuth_deg": 346.4,
+      "los_azimuth_deg": 346.5,
       "los_utc": "2026-06-11T22:55:37Z",
-      "max_elevation_deg": 84.0,
+      "max_elevation_deg": 81.8,
       "modes": [
         "CW",
         "AFSK",
@@ -674,17 +1015,28 @@
       ],
       "name": "CUTE-1.7+APD II (CO-65)",
       "norad_id": 32785,
-      "range_at_tca_km": 537.5,
-      "tca_utc": "2026-06-11T22:51:41Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode L/U Digipeater",
+        "downlink_hz": 437475000,
+        "invert": false,
+        "mode": "GMSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transceiver",
+        "uplink_hz": 1267600000
+      },
+      "range_at_tca_km": 540.0,
+      "tca_utc": "2026-06-11T22:51:54Z"
     },
     {
-      "aos_azimuth_deg": 229.5,
+      "aos_azimuth_deg": 232.6,
       "aos_utc": "2026-06-11T22:53:58Z",
       "downlinks_hz": [
         436160000
       ],
       "duration_s": 268,
-      "los_azimuth_deg": 302.0,
+      "los_azimuth_deg": 304.9,
       "los_utc": "2026-06-11T22:58:26Z",
       "max_elevation_deg": 15.8,
       "modes": [
@@ -692,35 +1044,57 @@
       ],
       "name": "GEOSCAN 2 (RS92S2)",
       "norad_id": 64890,
-      "range_at_tca_km": 1322.0,
-      "tca_utc": "2026-06-11T22:56:11Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U - GFSK9k6 - AX.25 Beacon and Ham Payload (Geoscan framing)",
+        "downlink_hz": 436160000,
+        "invert": false,
+        "mode": "GFSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 1324.8,
+      "tca_utc": "2026-06-11T22:56:24Z"
     },
     {
-      "aos_azimuth_deg": 233.6,
+      "aos_azimuth_deg": 236.8,
       "aos_utc": "2026-06-11T22:55:26Z",
       "downlinks_hz": [
         436940000
       ],
       "duration_s": 251,
-      "los_azimuth_deg": 296.5,
+      "los_azimuth_deg": 299.7,
       "los_utc": "2026-06-11T22:59:38Z",
-      "max_elevation_deg": 14.8,
+      "max_elevation_deg": 14.9,
       "modes": [
         "GFSK"
       ],
       "name": "GEOSCAN 6 (RS92S6)",
       "norad_id": 64879,
-      "range_at_tca_km": 1377.7,
-      "tca_utc": "2026-06-11T22:57:41Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U - GFSK9k6 - AX.25 Beacon and Ham Payload (Geoscan framing)",
+        "downlink_hz": 436940000,
+        "invert": false,
+        "mode": "GFSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 1377.0,
+      "tca_utc": "2026-06-11T22:57:24Z"
     },
     {
-      "aos_azimuth_deg": 248.2,
+      "aos_azimuth_deg": 243.8,
       "aos_utc": "2026-06-11T22:57:42Z",
       "downlinks_hz": [
         435830000
       ],
       "duration_s": 195,
-      "los_azimuth_deg": 290.3,
+      "los_azimuth_deg": 293.5,
       "los_utc": "2026-06-11T23:00:57Z",
       "max_elevation_deg": 12.5,
       "modes": [
@@ -728,11 +1102,22 @@
       ],
       "name": "INNOSAT 16 (RS92S7)",
       "norad_id": 64878,
-      "range_at_tca_km": 1539.2,
-      "tca_utc": "2026-06-11T22:59:11Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U - GFSK9k6 - AX.25 Beacon and Ham Payload (Geoscan framing)",
+        "downlink_hz": 435830000,
+        "invert": false,
+        "mode": "GFSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 1538.5,
+      "tca_utc": "2026-06-11T22:59:24Z"
     },
     {
-      "aos_azimuth_deg": 215.9,
+      "aos_azimuth_deg": 218.1,
       "aos_utc": "2026-06-11T22:58:03Z",
       "downlinks_hz": [
         145950000,
@@ -740,9 +1125,9 @@
         145935000
       ],
       "duration_s": 370,
-      "los_azimuth_deg": 315.1,
+      "los_azimuth_deg": 312.3,
       "los_utc": "2026-06-11T23:04:13Z",
-      "max_elevation_deg": 21.1,
+      "max_elevation_deg": 21.0,
       "modes": [
         "USB",
         "CW",
@@ -750,8 +1135,19 @@
       ],
       "name": "FUNCUBE-1 (AO-73)",
       "norad_id": 39444,
-      "range_at_tca_km": 1282.3,
-      "tca_utc": "2026-06-11T23:01:11Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U/V Linear",
+        "downlink_hz": 145950000,
+        "invert": true,
+        "mode": "USB",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transponder",
+        "uplink_hz": 435130000
+      },
+      "range_at_tca_km": 1285.5,
+      "tca_utc": "2026-06-11T23:00:54Z"
     },
     {
       "aos_azimuth_deg": 130.4,
@@ -762,7 +1158,7 @@
         145825000
       ],
       "duration_s": 6195,
-      "los_azimuth_deg": 113.3,
+      "los_azimuth_deg": 113.4,
       "los_utc": "2026-06-12T00:41:53Z",
       "max_elevation_deg": 12.4,
       "modes": [
@@ -771,29 +1167,51 @@
       ],
       "name": "PHASE 3B (AO-10)",
       "norad_id": 14129,
-      "range_at_tca_km": 25587.5,
-      "tca_utc": "2026-06-12T00:02:41Z"
+      "radio": {
+        "alive": true,
+        "description": "Engineering Beacon",
+        "downlink_hz": 145987000,
+        "invert": false,
+        "mode": "CW",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 25558.1,
+      "tca_utc": "2026-06-12T00:02:54Z"
     },
     {
-      "aos_azimuth_deg": 245.5,
+      "aos_azimuth_deg": 241.2,
       "aos_utc": "2026-06-11T23:02:22Z",
       "downlinks_hz": [
         435970000
       ],
       "duration_s": 189,
-      "los_azimuth_deg": 288.7,
+      "los_azimuth_deg": 292.1,
       "los_utc": "2026-06-11T23:05:32Z",
-      "max_elevation_deg": 12.4,
+      "max_elevation_deg": 12.5,
       "modes": [
         "GFSK"
       ],
       "name": "GEOSCAN 1 (RS92S1)",
       "norad_id": 64880,
-      "range_at_tca_km": 1502.3,
-      "tca_utc": "2026-06-11T23:04:11Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U - GFSK9k6 - AX.25 Beacon and Ham Payload (Geoscan framing)",
+        "downlink_hz": 435970000,
+        "invert": false,
+        "mode": "GFSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 1498.7,
+      "tca_utc": "2026-06-11T23:03:54Z"
     },
     {
-      "aos_azimuth_deg": 1.8,
+      "aos_azimuth_deg": 2.9,
       "aos_utc": "2026-06-11T23:03:19Z",
       "downlinks_hz": [
         145840000,
@@ -803,9 +1221,9 @@
         2267700000
       ],
       "duration_s": 358,
-      "los_azimuth_deg": 205.9,
+      "los_azimuth_deg": 207.0,
       "los_utc": "2026-06-11T23:09:17Z",
-      "max_elevation_deg": 55.0,
+      "max_elevation_deg": 55.5,
       "modes": [
         "CW",
         "GMSK",
@@ -815,18 +1233,29 @@
       ],
       "name": "SONATE-2",
       "norad_id": 59112,
-      "range_at_tca_km": 475.9,
-      "tca_utc": "2026-06-11T23:06:11Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode V/V - APRS digipeater",
+        "downlink_hz": 145825000,
+        "invert": false,
+        "mode": "AFSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transceiver",
+        "uplink_hz": 145825000
+      },
+      "range_at_tca_km": 472.8,
+      "tca_utc": "2026-06-11T23:06:24Z"
     },
     {
-      "aos_azimuth_deg": 119.0,
+      "aos_azimuth_deg": 122.5,
       "aos_utc": "2026-06-11T23:15:13Z",
       "downlinks_hz": [
         436795000,
         149025000
       ],
       "duration_s": 175,
-      "los_azimuth_deg": 93.5,
+      "los_azimuth_deg": 90.8,
       "los_utc": "2026-06-11T23:18:08Z",
       "max_elevation_deg": 11.3,
       "modes": [
@@ -834,11 +1263,22 @@
       ],
       "name": "SAUDISAT 1C (SO-50)",
       "norad_id": 27607,
-      "range_at_tca_km": 1971.7,
-      "tca_utc": "2026-06-11T23:16:41Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode V/U FM Voice CTCSS 67.0 Hz",
+        "downlink_hz": 436795000,
+        "invert": false,
+        "mode": "FM",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transceiver",
+        "uplink_hz": 145850000
+      },
+      "range_at_tca_km": 1975.2,
+      "tca_utc": "2026-06-11T23:16:54Z"
     },
     {
-      "aos_azimuth_deg": 107.6,
+      "aos_azimuth_deg": 105.8,
       "aos_utc": "2026-06-11T23:18:26Z",
       "downlinks_hz": [
         436847500,
@@ -846,20 +1286,31 @@
         436848700
       ],
       "duration_s": 455,
-      "los_azimuth_deg": 21.2,
+      "los_azimuth_deg": 19.4,
       "los_utc": "2026-06-11T23:26:02Z",
-      "max_elevation_deg": 20.2,
+      "max_elevation_deg": 20.1,
       "modes": [
         "CW",
         "AFSK"
       ],
       "name": "CUBESAT XI-IV (CO-57)",
       "norad_id": 27848,
-      "range_at_tca_km": 1804.6,
-      "tca_utc": "2026-06-11T23:22:11Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U CW Beacon",
+        "downlink_hz": 436847500,
+        "invert": false,
+        "mode": "CW",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 1805.9,
+      "tca_utc": "2026-06-11T23:22:24Z"
     },
     {
-      "aos_azimuth_deg": 17.7,
+      "aos_azimuth_deg": 16.3,
       "aos_utc": "2026-06-11T23:21:52Z",
       "downlinks_hz": [
         435315700,
@@ -868,7 +1319,7 @@
         435353000
       ],
       "duration_s": 811,
-      "los_azimuth_deg": 116.5,
+      "los_azimuth_deg": 115.1,
       "los_utc": "2026-06-11T23:35:23Z",
       "max_elevation_deg": 23.8,
       "modes": [
@@ -879,38 +1330,60 @@
       ],
       "name": "YUBILEINY (RS30)",
       "norad_id": 32953,
-      "range_at_tca_km": 2738.2,
-      "tca_utc": "2026-06-11T23:28:41Z"
+      "radio": {
+        "alive": true,
+        "description": "PE0SAT - CW Beacon",
+        "downlink_hz": 435315700,
+        "invert": false,
+        "mode": "CW",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 2739.4,
+      "tca_utc": "2026-06-11T23:28:54Z"
     },
     {
-      "aos_azimuth_deg": 354.9,
+      "aos_azimuth_deg": 356.5,
       "aos_utc": "2026-06-11T23:30:15Z",
       "downlinks_hz": [
         437421500
       ],
       "duration_s": 465,
-      "los_azimuth_deg": 218.9,
+      "los_azimuth_deg": 217.8,
       "los_utc": "2026-06-11T23:38:01Z",
-      "max_elevation_deg": 40.9,
+      "max_elevation_deg": 40.5,
       "modes": [
         "FSK"
       ],
       "name": "UNISAT-6",
       "norad_id": 40012,
-      "range_at_tca_km": 853.2,
-      "tca_utc": "2026-06-11T23:34:11Z"
+      "radio": {
+        "alive": true,
+        "description": "9k6 FSK TLM",
+        "downlink_hz": 437421500,
+        "invert": false,
+        "mode": "FSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 858.4,
+      "tca_utc": "2026-06-11T23:33:54Z"
     },
     {
-      "aos_azimuth_deg": 150.2,
+      "aos_azimuth_deg": 149.3,
       "aos_utc": "2026-06-11T23:35:09Z",
       "downlinks_hz": [
         437485000,
         437485700
       ],
       "duration_s": 405,
-      "los_azimuth_deg": 359.7,
+      "los_azimuth_deg": 358.8,
       "los_utc": "2026-06-11T23:41:54Z",
-      "max_elevation_deg": 49.3,
+      "max_elevation_deg": 49.5,
       "modes": [
         "FMN",
         "CW",
@@ -919,31 +1392,53 @@
       ],
       "name": "SEEDS II (CO-66)",
       "norad_id": 32791,
-      "range_at_tca_km": 606.4,
-      "tca_utc": "2026-06-11T23:38:41Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U Digi",
+        "downlink_hz": 437485000,
+        "invert": false,
+        "mode": "FMN",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 604.4,
+      "tca_utc": "2026-06-11T23:38:24Z"
     },
     {
-      "aos_azimuth_deg": 129.8,
+      "aos_azimuth_deg": 127.8,
       "aos_utc": "2026-06-11T23:36:04Z",
       "downlinks_hz": [
         435950000,
         2266000000
       ],
       "duration_s": 364,
-      "los_azimuth_deg": 15.9,
-      "los_utc": "2026-06-11T23:42:08Z",
-      "max_elevation_deg": 27.4,
+      "los_azimuth_deg": 13.8,
+      "los_utc": "2026-06-11T23:42:09Z",
+      "max_elevation_deg": 27.3,
       "modes": [
         "AFSK TUBiX10",
         "BPSK"
       ],
       "name": "SALSAT",
       "norad_id": 46495,
-      "range_at_tca_km": 931.6,
-      "tca_utc": "2026-06-11T23:39:11Z"
+      "radio": {
+        "alive": true,
+        "description": "AFSK 1k2 TLM",
+        "downlink_hz": 435950000,
+        "invert": false,
+        "mode": "AFSK TUBiX10",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 934.6,
+      "tca_utc": "2026-06-11T23:38:54Z"
     },
     {
-      "aos_azimuth_deg": 125.3,
+      "aos_azimuth_deg": 124.0,
       "aos_utc": "2026-06-11T23:37:39Z",
       "downlinks_hz": [
         437470000,
@@ -951,40 +1446,62 @@
         436835820
       ],
       "duration_s": 543,
-      "los_azimuth_deg": 9.1,
+      "los_azimuth_deg": 10.8,
       "los_utc": "2026-06-11T23:46:42Z",
-      "max_elevation_deg": 29.1,
+      "max_elevation_deg": 29.0,
       "modes": [
         "AFSK",
         "CW"
       ],
       "name": "CUTE-1 (CO-55)",
       "norad_id": 27844,
-      "range_at_tca_km": 1456.7,
-      "tca_utc": "2026-06-11T23:42:11Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U TLM",
+        "downlink_hz": 437470000,
+        "invert": false,
+        "mode": "AFSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 1459.8,
+      "tca_utc": "2026-06-11T23:42:24Z"
     },
     {
-      "aos_azimuth_deg": 356.3,
+      "aos_azimuth_deg": 355.2,
       "aos_utc": "2026-06-11T23:45:54Z",
       "downlinks_hz": [
         437463100,
         437345000
       ],
       "duration_s": 502,
-      "los_azimuth_deg": 220.1,
+      "los_azimuth_deg": 221.5,
       "los_utc": "2026-06-11T23:54:17Z",
-      "max_elevation_deg": 40.2,
+      "max_elevation_deg": 39.9,
       "modes": [
         "CW",
         "AFSK"
       ],
       "name": "CUBESAT XI-V",
       "norad_id": 28895,
-      "range_at_tca_km": 955.6,
-      "tca_utc": "2026-06-11T23:50:11Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U CW BEACON",
+        "downlink_hz": 437463100,
+        "invert": false,
+        "mode": "CW",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 960.7,
+      "tca_utc": "2026-06-11T23:49:54Z"
     },
     {
-      "aos_azimuth_deg": 67.0,
+      "aos_azimuth_deg": 63.7,
       "aos_utc": "2026-06-11T23:55:44Z",
       "downlinks_hz": [
         435352000,
@@ -992,26 +1509,37 @@
         435353000
       ],
       "duration_s": 267,
-      "los_azimuth_deg": 121.5,
+      "los_azimuth_deg": 118.1,
       "los_utc": "2026-06-12T00:00:12Z",
-      "max_elevation_deg": 13.4,
+      "max_elevation_deg": 13.5,
       "modes": [
         "CW",
         "DOKA"
       ],
       "name": "MOZHAETS 4 (RS22)",
       "norad_id": 27939,
-      "range_at_tca_km": 1840.5,
-      "tca_utc": "2026-06-11T23:58:11Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U CW Beacon",
+        "downlink_hz": 435352000,
+        "invert": false,
+        "mode": "CW",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 1839.5,
+      "tca_utc": "2026-06-11T23:57:54Z"
     },
     {
-      "aos_azimuth_deg": 40.8,
+      "aos_azimuth_deg": 42.4,
       "aos_utc": "2026-06-11T23:57:31Z",
       "downlinks_hz": [
         437568000
       ],
       "duration_s": 499,
-      "los_azimuth_deg": 148.8,
+      "los_azimuth_deg": 146.6,
       "los_utc": "2026-06-12T00:05:51Z",
       "max_elevation_deg": 25.1,
       "modes": [
@@ -1019,30 +1547,52 @@
       ],
       "name": "STRAND-1",
       "norad_id": 39090,
-      "range_at_tca_km": 1509.0,
-      "tca_utc": "2026-06-12T00:01:41Z"
+      "radio": {
+        "alive": false,
+        "description": "UHF 9k6 FSK TLM",
+        "downlink_hz": 437568000,
+        "invert": false,
+        "mode": "FSK",
+        "pluto_tunable": true,
+        "status": "inactive",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 1510.6,
+      "tca_utc": "2026-06-12T00:01:54Z"
     },
     {
-      "aos_azimuth_deg": 203.5,
+      "aos_azimuth_deg": 201.8,
       "aos_utc": "2026-06-12T00:15:47Z",
       "downlinks_hz": [
         435225000,
         435325000
       ],
       "duration_s": 559,
-      "los_azimuth_deg": 322.3,
+      "los_azimuth_deg": 323.7,
       "los_utc": "2026-06-12T00:25:07Z",
-      "max_elevation_deg": 30.9,
+      "max_elevation_deg": 31.1,
       "modes": [
         "FSK"
       ],
       "name": "TECHSAT 1B (GO-32)",
       "norad_id": 25397,
-      "range_at_tca_km": 1390.5,
-      "tca_utc": "2026-06-12T00:20:41Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U 9k6 FSK",
+        "downlink_hz": 435225000,
+        "invert": false,
+        "mode": "FSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 1386.4,
+      "tca_utc": "2026-06-12T00:20:24Z"
     },
     {
-      "aos_azimuth_deg": 143.8,
+      "aos_azimuth_deg": 142.6,
       "aos_utc": "2026-06-12T00:20:24Z",
       "downlinks_hz": [
         145815000,
@@ -1051,9 +1601,9 @@
         145880000
       ],
       "duration_s": 429,
-      "los_azimuth_deg": 2.9,
+      "los_azimuth_deg": 1.8,
       "los_utc": "2026-06-12T00:27:33Z",
-      "max_elevation_deg": 43.0,
+      "max_elevation_deg": 43.4,
       "modes": [
         "BPSK",
         "USB",
@@ -1061,11 +1611,22 @@
       ],
       "name": "QB50P1",
       "norad_id": 40025,
-      "range_at_tca_km": 732.5,
-      "tca_utc": "2026-06-12T00:24:11Z"
+      "radio": {
+        "alive": true,
+        "description": "Linear Transponder",
+        "downlink_hz": 145935000,
+        "invert": true,
+        "mode": "USB",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transponder",
+        "uplink_hz": 435047000
+      },
+      "range_at_tca_km": 726.9,
+      "tca_utc": "2026-06-12T00:23:54Z"
     },
     {
-      "aos_azimuth_deg": 126.3,
+      "aos_azimuth_deg": 128.0,
       "aos_utc": "2026-06-12T00:34:44Z",
       "downlinks_hz": [
         437150000,
@@ -1073,7 +1634,7 @@
         435078000
       ],
       "duration_s": 542,
-      "los_azimuth_deg": 7.4,
+      "los_azimuth_deg": 9.1,
       "los_utc": "2026-06-12T00:43:47Z",
       "max_elevation_deg": 31.5,
       "modes": [
@@ -1082,11 +1643,22 @@
       ],
       "name": "LUSAT (LO-19)",
       "norad_id": 20442,
-      "range_at_tca_km": 1336.6,
-      "tca_utc": "2026-06-12T00:39:11Z"
+      "radio": {
+        "alive": true,
+        "description": "BPSK 1k2 Transceiver",
+        "downlink_hz": 437150000,
+        "invert": false,
+        "mode": "BPSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transceiver",
+        "uplink_hz": 145840000
+      },
+      "range_at_tca_km": 1337.6,
+      "tca_utc": "2026-06-12T00:39:24Z"
     },
     {
-      "aos_azimuth_deg": 160.8,
+      "aos_azimuth_deg": 160.9,
       "aos_utc": "2026-06-12T00:36:28Z",
       "downlinks_hz": [
         435100000,
@@ -1099,18 +1671,29 @@
       "duration_s": 1003,
       "los_azimuth_deg": 342.4,
       "los_utc": "2026-06-12T00:53:12Z",
-      "max_elevation_deg": 87.0,
+      "max_elevation_deg": 88.3,
       "modes": [
         "CW",
         "USB"
       ],
       "name": "OSCAR 7 (AO-7)",
       "norad_id": 7530,
-      "range_at_tca_km": 1455.6,
-      "tca_utc": "2026-06-12T00:44:41Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U/V (B) Lin",
+        "downlink_hz": 145925000,
+        "invert": true,
+        "mode": "USB",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transponder",
+        "uplink_hz": 432125000
+      },
+      "range_at_tca_km": 1454.6,
+      "tca_utc": "2026-06-12T00:44:54Z"
     },
     {
-      "aos_azimuth_deg": 340.3,
+      "aos_azimuth_deg": 341.0,
       "aos_utc": "2026-06-12T00:39:22Z",
       "downlinks_hz": [
         435605000,
@@ -1120,7 +1703,7 @@
         435660000
       ],
       "duration_s": 819,
-      "los_azimuth_deg": 200.0,
+      "los_azimuth_deg": 199.4,
       "los_utc": "2026-06-12T00:53:02Z",
       "max_elevation_deg": 47.4,
       "modes": [
@@ -1132,30 +1715,52 @@
       ],
       "name": "RS-44 & BREEZE-KM R/B",
       "norad_id": 44909,
-      "range_at_tca_km": 1513.2,
-      "tca_utc": "2026-06-12T00:46:11Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode V/U - Transponder",
+        "downlink_hz": 435610000,
+        "invert": true,
+        "mode": "USB",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transponder",
+        "uplink_hz": 145935000
+      },
+      "range_at_tca_km": 1512.6,
+      "tca_utc": "2026-06-12T00:46:24Z"
     },
     {
-      "aos_azimuth_deg": 216.9,
+      "aos_azimuth_deg": 216.5,
       "aos_utc": "2026-06-12T00:51:17Z",
       "downlinks_hz": [
         436795000,
         149025000
       ],
       "duration_s": 566,
-      "los_azimuth_deg": 28.3,
+      "los_azimuth_deg": 27.9,
       "los_utc": "2026-06-12T01:00:43Z",
-      "max_elevation_deg": 72.7,
+      "max_elevation_deg": 75.0,
       "modes": [
         "FM"
       ],
       "name": "SAUDISAT 1C (SO-50)",
       "norad_id": 27607,
-      "range_at_tca_km": 692.6,
-      "tca_utc": "2026-06-12T00:56:11Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode V/U FM Voice CTCSS 67.0 Hz",
+        "downlink_hz": 436795000,
+        "invert": false,
+        "mode": "FM",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transceiver",
+        "uplink_hz": 145850000
+      },
+      "range_at_tca_km": 684.7,
+      "tca_utc": "2026-06-12T00:55:54Z"
     },
     {
-      "aos_azimuth_deg": 184.4,
+      "aos_azimuth_deg": 185.1,
       "aos_utc": "2026-06-12T00:56:35Z",
       "downlinks_hz": [
         436847500,
@@ -1163,40 +1768,62 @@
         436848700
       ],
       "duration_s": 623,
-      "los_azimuth_deg": 335.0,
+      "los_azimuth_deg": 335.8,
       "los_utc": "2026-06-12T01:06:58Z",
-      "max_elevation_deg": 51.0,
+      "max_elevation_deg": 50.9,
       "modes": [
         "CW",
         "AFSK"
       ],
       "name": "CUBESAT XI-IV (CO-57)",
       "norad_id": 27848,
-      "range_at_tca_km": 1021.6,
-      "tca_utc": "2026-06-12T01:01:41Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U CW Beacon",
+        "downlink_hz": 436847500,
+        "invert": false,
+        "mode": "CW",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 1023.0,
+      "tca_utc": "2026-06-12T01:01:54Z"
     },
     {
-      "aos_azimuth_deg": 235.2,
+      "aos_azimuth_deg": 231.1,
       "aos_utc": "2026-06-12T01:10:16Z",
       "downlinks_hz": [
         435950000,
         2266000000
       ],
       "duration_s": 251,
-      "los_azimuth_deg": 298.9,
+      "los_azimuth_deg": 301.9,
       "los_utc": "2026-06-12T01:14:27Z",
-      "max_elevation_deg": 14.9,
+      "max_elevation_deg": 15.0,
       "modes": [
         "AFSK TUBiX10",
         "BPSK"
       ],
       "name": "SALSAT",
       "norad_id": 46495,
-      "range_at_tca_km": 1360.5,
-      "tca_utc": "2026-06-12T01:12:11Z"
+      "radio": {
+        "alive": true,
+        "description": "AFSK 1k2 TLM",
+        "downlink_hz": 435950000,
+        "invert": false,
+        "mode": "AFSK TUBiX10",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 1358.9,
+      "tca_utc": "2026-06-12T01:12:24Z"
     },
     {
-      "aos_azimuth_deg": 198.8,
+      "aos_azimuth_deg": 200.0,
       "aos_utc": "2026-06-12T01:17:08Z",
       "downlinks_hz": [
         437470000,
@@ -1204,20 +1831,31 @@
         436835820
       ],
       "duration_s": 576,
-      "los_azimuth_deg": 326.9,
+      "los_azimuth_deg": 325.4,
       "los_utc": "2026-06-12T01:26:44Z",
-      "max_elevation_deg": 33.5,
+      "max_elevation_deg": 33.7,
       "modes": [
         "AFSK",
         "CW"
       ],
       "name": "CUTE-1 (CO-55)",
       "norad_id": 27844,
-      "range_at_tca_km": 1329.2,
-      "tca_utc": "2026-06-12T01:21:41Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U TLM",
+        "downlink_hz": 437470000,
+        "invert": false,
+        "mode": "AFSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 1325.4,
+      "tca_utc": "2026-06-12T01:21:54Z"
     },
     {
-      "aos_azimuth_deg": 348.2,
+      "aos_azimuth_deg": 348.0,
       "aos_utc": "2026-06-12T01:17:27Z",
       "downlinks_hz": [
         435315700,
@@ -1226,9 +1864,9 @@
         435353000
       ],
       "duration_s": 1052,
-      "los_azimuth_deg": 185.1,
+      "los_azimuth_deg": 184.9,
       "los_utc": "2026-06-12T01:35:00Z",
-      "max_elevation_deg": 72.0,
+      "max_elevation_deg": 71.9,
       "modes": [
         "CW",
         "PSK",
@@ -1237,20 +1875,31 @@
       ],
       "name": "YUBILEINY (RS30)",
       "norad_id": 32953,
-      "range_at_tca_km": 1573.4,
-      "tca_utc": "2026-06-12T01:26:11Z"
+      "radio": {
+        "alive": true,
+        "description": "PE0SAT - CW Beacon",
+        "downlink_hz": 435315700,
+        "invert": false,
+        "mode": "CW",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 1574.2,
+      "tca_utc": "2026-06-12T01:26:24Z"
     },
     {
-      "aos_azimuth_deg": 33.1,
+      "aos_azimuth_deg": 31.3,
       "aos_utc": "2026-06-12T01:24:23Z",
       "downlinks_hz": [
         2284991000,
         145900000
       ],
       "duration_s": 441,
-      "los_azimuth_deg": 164.9,
+      "los_azimuth_deg": 163.0,
       "los_utc": "2026-06-12T01:31:44Z",
-      "max_elevation_deg": 34.9,
+      "max_elevation_deg": 34.7,
       "modes": [
         "FM",
         "CW",
@@ -1258,11 +1907,22 @@
       ],
       "name": "DIWATA-2B",
       "norad_id": 43678,
-      "range_at_tca_km": 913.9,
-      "tca_utc": "2026-06-12T01:28:11Z"
+      "radio": {
+        "alive": true,
+        "description": "FM VOICE",
+        "downlink_hz": 145900000,
+        "invert": false,
+        "mode": "FM",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transceiver",
+        "uplink_hz": 437500000
+      },
+      "range_at_tca_km": 917.1,
+      "tca_utc": "2026-06-12T01:27:54Z"
     },
     {
-      "aos_azimuth_deg": 2.3,
+      "aos_azimuth_deg": 1.6,
       "aos_utc": "2026-06-12T01:30:32Z",
       "downlinks_hz": [
         435352000,
@@ -1270,26 +1930,37 @@
         435353000
       ],
       "duration_s": 525,
-      "los_azimuth_deg": 211.5,
+      "los_azimuth_deg": 212.5,
       "los_utc": "2026-06-12T01:39:17Z",
-      "max_elevation_deg": 51.6,
+      "max_elevation_deg": 52.4,
       "modes": [
         "CW",
         "DOKA"
       ],
       "name": "MOZHAETS 4 (RS22)",
       "norad_id": 27939,
-      "range_at_tca_km": 818.0,
-      "tca_utc": "2026-06-12T01:35:11Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U CW Beacon",
+        "downlink_hz": 435352000,
+        "invert": false,
+        "mode": "CW",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 811.2,
+      "tca_utc": "2026-06-12T01:34:54Z"
     },
     {
-      "aos_azimuth_deg": 194.3,
+      "aos_azimuth_deg": 197.1,
       "aos_utc": "2026-06-12T01:32:52Z",
       "downlinks_hz": [
         437425000
       ],
       "duration_s": 211,
-      "los_azimuth_deg": 164.1,
+      "los_azimuth_deg": 166.9,
       "los_utc": "2026-06-12T01:36:23Z",
       "max_elevation_deg": 11.3,
       "modes": [
@@ -1297,29 +1968,51 @@
       ],
       "name": "SRMSAT",
       "norad_id": 37841,
-      "range_at_tca_km": 2361.6,
-      "tca_utc": "2026-06-12T01:34:41Z"
+      "radio": {
+        "alive": true,
+        "description": "CW Beacon",
+        "downlink_hz": 437425000,
+        "invert": false,
+        "mode": "CW",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 2363.6,
+      "tca_utc": "2026-06-12T01:34:24Z"
     },
     {
-      "aos_azimuth_deg": 355.0,
+      "aos_azimuth_deg": 353.9,
       "aos_utc": "2026-06-12T01:36:10Z",
       "downlinks_hz": [
         437568000
       ],
       "duration_s": 551,
-      "los_azimuth_deg": 227.0,
-      "los_utc": "2026-06-12T01:45:21Z",
+      "los_azimuth_deg": 228.5,
+      "los_utc": "2026-06-12T01:45:22Z",
       "max_elevation_deg": 35.2,
       "modes": [
         "FSK"
       ],
       "name": "STRAND-1",
       "norad_id": 39090,
-      "range_at_tca_km": 1219.9,
-      "tca_utc": "2026-06-12T01:40:41Z"
+      "radio": {
+        "alive": false,
+        "description": "UHF 9k6 FSK TLM",
+        "downlink_hz": 437568000,
+        "invert": false,
+        "mode": "FSK",
+        "pluto_tunable": true,
+        "status": "inactive",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 1219.7,
+      "tca_utc": "2026-06-12T01:40:54Z"
     },
     {
-      "aos_azimuth_deg": 253.7,
+      "aos_azimuth_deg": 257.0,
       "aos_utc": "2026-06-12T01:57:00Z",
       "downlinks_hz": [
         145815000,
@@ -1328,7 +2021,7 @@
         145880000
       ],
       "duration_s": 130,
-      "los_azimuth_deg": 277.4,
+      "los_azimuth_deg": 280.7,
       "los_utc": "2026-06-12T01:59:10Z",
       "max_elevation_deg": 11.0,
       "modes": [
@@ -1338,11 +2031,22 @@
       ],
       "name": "QB50P1",
       "norad_id": 40025,
-      "range_at_tca_km": 1679.2,
-      "tca_utc": "2026-06-12T01:58:11Z"
+      "radio": {
+        "alive": true,
+        "description": "Linear Transponder",
+        "downlink_hz": 145935000,
+        "invert": true,
+        "mode": "USB",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transponder",
+        "uplink_hz": 435047000
+      },
+      "range_at_tca_km": 1680.0,
+      "tca_utc": "2026-06-12T01:57:54Z"
     },
     {
-      "aos_azimuth_deg": 34.0,
+      "aos_azimuth_deg": 35.3,
       "aos_utc": "2026-06-12T02:04:32Z",
       "downlinks_hz": [
         435795000,
@@ -1350,7 +2054,7 @@
         435910000
       ],
       "duration_s": 584,
-      "los_azimuth_deg": 161.5,
+      "los_azimuth_deg": 160.0,
       "los_utc": "2026-06-12T02:14:17Z",
       "max_elevation_deg": 33.6,
       "modes": [
@@ -1360,11 +2064,22 @@
       ],
       "name": "JAS-2 (FO-29)",
       "norad_id": 24278,
-      "range_at_tca_km": 1358.4,
-      "tca_utc": "2026-06-12T02:09:11Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode V/U Linear Transponder",
+        "downlink_hz": 435800000,
+        "invert": true,
+        "mode": "USB",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transponder",
+        "uplink_hz": 145900000
+      },
+      "range_at_tca_km": 1361.2,
+      "tca_utc": "2026-06-12T02:09:24Z"
     },
     {
-      "aos_azimuth_deg": 204.8,
+      "aos_azimuth_deg": 206.3,
       "aos_utc": "2026-06-12T02:13:55Z",
       "downlinks_hz": [
         437150000,
@@ -1372,20 +2087,31 @@
         435078000
       ],
       "duration_s": 537,
-      "los_azimuth_deg": 322.4,
+      "los_azimuth_deg": 320.5,
       "los_utc": "2026-06-12T02:22:53Z",
-      "max_elevation_deg": 29.3,
+      "max_elevation_deg": 29.4,
       "modes": [
         "BPSK",
         "CW"
       ],
       "name": "LUSAT (LO-19)",
       "norad_id": 20442,
-      "range_at_tca_km": 1399.4,
-      "tca_utc": "2026-06-12T02:18:11Z"
+      "radio": {
+        "alive": true,
+        "description": "BPSK 1k2 Transceiver",
+        "downlink_hz": 437150000,
+        "invert": false,
+        "mode": "BPSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transceiver",
+        "uplink_hz": 145840000
+      },
+      "range_at_tca_km": 1396.9,
+      "tca_utc": "2026-06-12T02:18:24Z"
     },
     {
-      "aos_azimuth_deg": 4.6,
+      "aos_azimuth_deg": 4.1,
       "aos_utc": "2026-06-12T02:27:02Z",
       "downlinks_hz": [
         437252500,
@@ -1393,9 +2119,9 @@
         437250000
       ],
       "duration_s": 498,
-      "los_azimuth_deg": 204.6,
+      "los_azimuth_deg": 205.3,
       "los_utc": "2026-06-12T02:35:20Z",
-      "max_elevation_deg": 62.3,
+      "max_elevation_deg": 61.2,
       "modes": [
         "CW",
         "FM",
@@ -1403,11 +2129,22 @@
       ],
       "name": "GOMX-1",
       "norad_id": 39430,
-      "range_at_tca_km": 673.4,
-      "tca_utc": "2026-06-12T02:31:11Z"
+      "radio": {
+        "alive": true,
+        "description": "4k8 GMSK",
+        "downlink_hz": 437250000,
+        "invert": false,
+        "mode": "GMSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 678.7,
+      "tca_utc": "2026-06-12T02:30:54Z"
     },
     {
-      "aos_azimuth_deg": 232.4,
+      "aos_azimuth_deg": 233.7,
       "aos_utc": "2026-06-12T02:33:39Z",
       "downlinks_hz": [
         435100000,
@@ -1418,7 +2155,7 @@
         2304100000
       ],
       "duration_s": 581,
-      "los_azimuth_deg": 304.0,
+      "los_azimuth_deg": 302.2,
       "los_utc": "2026-06-12T02:43:20Z",
       "max_elevation_deg": 16.4,
       "modes": [
@@ -1427,18 +2164,29 @@
       ],
       "name": "OSCAR 7 (AO-7)",
       "norad_id": 7530,
-      "range_at_tca_km": 3089.0,
-      "tca_utc": "2026-06-12T02:38:41Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U/V (B) Lin",
+        "downlink_hz": 145925000,
+        "invert": true,
+        "mode": "USB",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transponder",
+        "uplink_hz": 432125000
+      },
+      "range_at_tca_km": 3088.2,
+      "tca_utc": "2026-06-12T02:38:24Z"
     },
     {
-      "aos_azimuth_deg": 301.9,
+      "aos_azimuth_deg": 304.5,
       "aos_utc": "2026-06-12T02:34:54Z",
       "downlinks_hz": [
         436795000,
         149025000
       ],
       "duration_s": 220,
-      "los_azimuth_deg": 339.8,
+      "los_azimuth_deg": 342.3,
       "los_utc": "2026-06-12T02:38:34Z",
       "max_elevation_deg": 12.0,
       "modes": [
@@ -1446,11 +2194,22 @@
       ],
       "name": "SAUDISAT 1C (SO-50)",
       "norad_id": 27607,
-      "range_at_tca_km": 1960.6,
-      "tca_utc": "2026-06-12T02:36:41Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode V/U FM Voice CTCSS 67.0 Hz",
+        "downlink_hz": 436795000,
+        "invert": false,
+        "mode": "FM",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transceiver",
+        "uplink_hz": 145850000
+      },
+      "range_at_tca_km": 1962.5,
+      "tca_utc": "2026-06-12T02:36:54Z"
     },
     {
-      "aos_azimuth_deg": 83.1,
+      "aos_azimuth_deg": 79.8,
       "aos_utc": "2026-06-12T02:46:01Z",
       "downlinks_hz": [
         435860000,
@@ -1460,7 +2219,7 @@
         435650000
       ],
       "duration_s": 148,
-      "los_azimuth_deg": 51.1,
+      "los_azimuth_deg": 47.8,
       "los_utc": "2026-06-12T02:48:30Z",
       "max_elevation_deg": 11.4,
       "modes": [
@@ -1470,11 +2229,22 @@
       ],
       "name": "MONITOR-2 (RS39S)",
       "norad_id": 57184,
-      "range_at_tca_km": 1638.6,
-      "tca_utc": "2026-06-12T02:47:11Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U - FSK9k6",
+        "downlink_hz": 435860000,
+        "invert": false,
+        "mode": "FSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 1639.3,
+      "tca_utc": "2026-06-12T02:47:24Z"
     },
     {
-      "aos_azimuth_deg": 189.1,
+      "aos_azimuth_deg": 187.3,
       "aos_utc": "2026-06-12T02:48:20Z",
       "downlinks_hz": [
         437200000,
@@ -1482,9 +2252,9 @@
         437225000
       ],
       "duration_s": 366,
-      "los_azimuth_deg": 332.7,
+      "los_azimuth_deg": 334.0,
       "los_utc": "2026-06-12T02:54:27Z",
-      "max_elevation_deg": 42.4,
+      "max_elevation_deg": 43.0,
       "modes": [
         "CW",
         "AFSK",
@@ -1494,20 +2264,31 @@
       ],
       "name": "LILACSAT-2",
       "norad_id": 40908,
-      "range_at_tca_km": 599.5,
-      "tca_utc": "2026-06-12T02:51:11Z"
+      "radio": {
+        "alive": true,
+        "description": "APRS Digipeater",
+        "downlink_hz": 144390000,
+        "invert": false,
+        "mode": "AFSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transceiver",
+        "uplink_hz": 144390000
+      },
+      "range_at_tca_km": 593.4,
+      "tca_utc": "2026-06-12T02:51:24Z"
     },
     {
-      "aos_azimuth_deg": 327.8,
+      "aos_azimuth_deg": 331.2,
       "aos_utc": "2026-06-12T03:00:13Z",
       "downlinks_hz": [
         2284991000,
         145900000
       ],
       "duration_s": 304,
-      "los_azimuth_deg": 255.4,
+      "los_azimuth_deg": 258.9,
       "los_utc": "2026-06-12T03:05:17Z",
-      "max_elevation_deg": 16.5,
+      "max_elevation_deg": 16.4,
       "modes": [
         "FM",
         "CW",
@@ -1515,29 +2296,51 @@
       ],
       "name": "DIWATA-2B",
       "norad_id": 43678,
-      "range_at_tca_km": 1478.1,
-      "tca_utc": "2026-06-12T03:02:41Z"
+      "radio": {
+        "alive": true,
+        "description": "FM VOICE",
+        "downlink_hz": 145900000,
+        "invert": false,
+        "mode": "FM",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transceiver",
+        "uplink_hz": 437500000
+      },
+      "range_at_tca_km": 1478.2,
+      "tca_utc": "2026-06-12T03:02:54Z"
     },
     {
-      "aos_azimuth_deg": 82.9,
+      "aos_azimuth_deg": 87.4,
       "aos_utc": "2026-06-12T03:14:49Z",
       "downlinks_hz": [
         437100000
       ],
       "duration_s": 156,
-      "los_azimuth_deg": 48.7,
+      "los_azimuth_deg": 45.3,
       "los_utc": "2026-06-12T03:17:26Z",
-      "max_elevation_deg": 11.7,
+      "max_elevation_deg": 11.6,
       "modes": [
         "GMSK USP"
       ],
       "name": "KUZGTU 1 (RS47S)",
       "norad_id": 57217,
-      "range_at_tca_km": 1536.3,
-      "tca_utc": "2026-06-12T03:16:11Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U - GMSK 4k8 (USP FEC) TLM",
+        "downlink_hz": 437100000,
+        "invert": false,
+        "mode": "GMSK USP",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 1539.5,
+      "tca_utc": "2026-06-12T03:15:54Z"
     },
     {
-      "aos_azimuth_deg": 15.7,
+      "aos_azimuth_deg": 16.2,
       "aos_utc": "2026-06-12T03:14:56Z",
       "downlinks_hz": [
         1616250000,
@@ -1545,20 +2348,31 @@
         435810000
       ],
       "duration_s": 355,
-      "los_azimuth_deg": 186.9,
+      "los_azimuth_deg": 186.3,
       "los_utc": "2026-06-12T03:20:52Z",
-      "max_elevation_deg": 67.3,
+      "max_elevation_deg": 73.8,
       "modes": [
         "BPSK",
         "USB"
       ],
       "name": "MESAT1",
       "norad_id": 60209,
-      "range_at_tca_km": 413.3,
-      "tca_utc": "2026-06-12T03:17:41Z"
+      "radio": {
+        "alive": true,
+        "description": "UHF TLM 1k2 BPSK",
+        "downlink_hz": 435800000,
+        "invert": false,
+        "mode": "BPSK",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 397.6,
+      "tca_utc": "2026-06-12T03:17:54Z"
     },
     {
-      "aos_azimuth_deg": 303.7,
+      "aos_azimuth_deg": 302.3,
       "aos_utc": "2026-06-12T03:18:37Z",
       "downlinks_hz": [
         435315700,
@@ -1567,7 +2381,7 @@
         435353000
       ],
       "duration_s": 323,
-      "los_azimuth_deg": 269.6,
+      "los_azimuth_deg": 268.2,
       "los_utc": "2026-06-12T03:24:00Z",
       "max_elevation_deg": 11.7,
       "modes": [
@@ -1578,76 +2392,120 @@
       ],
       "name": "YUBILEINY (RS30)",
       "norad_id": 32953,
-      "range_at_tca_km": 3531.7,
-      "tca_utc": "2026-06-12T03:21:11Z"
+      "radio": {
+        "alive": true,
+        "description": "PE0SAT - CW Beacon",
+        "downlink_hz": 435315700,
+        "invert": false,
+        "mode": "CW",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 3531.3,
+      "tca_utc": "2026-06-12T03:21:24Z"
     },
     {
-      "aos_azimuth_deg": 34.7,
+      "aos_azimuth_deg": 36.3,
       "aos_utc": "2026-06-12T03:18:39Z",
       "downlinks_hz": [
         145960000
       ],
       "duration_s": 460,
-      "los_azimuth_deg": 157.5,
+      "los_azimuth_deg": 155.4,
       "los_utc": "2026-06-12T03:26:19Z",
-      "max_elevation_deg": 29.9,
+      "max_elevation_deg": 30.0,
       "modes": [
         "DUV",
         "FM"
       ],
       "name": "RADFXSAT (FOX-1B)",
       "norad_id": 43017,
-      "range_at_tca_km": 1121.1,
-      "tca_utc": "2026-06-12T03:22:41Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U/V FM Voice CTCSS 67.0Hz",
+        "downlink_hz": 145960000,
+        "invert": false,
+        "mode": "FM",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transceiver",
+        "uplink_hz": 435250000
+      },
+      "range_at_tca_km": 1116.5,
+      "tca_utc": "2026-06-12T03:22:24Z"
     },
     {
-      "aos_azimuth_deg": 105.4,
+      "aos_azimuth_deg": 109.2,
       "aos_utc": "2026-06-12T03:22:18Z",
       "downlinks_hz": [
         436080000
       ],
       "duration_s": 281,
-      "los_azimuth_deg": 31.5,
+      "los_azimuth_deg": 28.7,
       "los_utc": "2026-06-12T03:27:00Z",
-      "max_elevation_deg": 16.9,
+      "max_elevation_deg": 16.8,
       "modes": [
         "GMSK USP"
       ],
       "name": "MONITOR-4 (RS57S)",
       "norad_id": 57182,
-      "range_at_tca_km": 1286.0,
-      "tca_utc": "2026-06-12T03:24:41Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U - GMSK 4k8 (USP FEC) TLM",
+        "downlink_hz": 436080000,
+        "invert": false,
+        "mode": "GMSK USP",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 1290.4,
+      "tca_utc": "2026-06-12T03:24:54Z"
     },
     {
-      "aos_azimuth_deg": 135.7,
+      "aos_azimuth_deg": 137.8,
       "aos_utc": "2026-06-12T03:23:14Z",
       "downlinks_hz": [
         436550000
       ],
       "duration_s": 409,
-      "los_azimuth_deg": 9.3,
+      "los_azimuth_deg": 7.8,
       "los_utc": "2026-06-12T03:30:03Z",
-      "max_elevation_deg": 34.6,
+      "max_elevation_deg": 34.2,
       "modes": [
         "LoRa",
         "FSK"
       ],
       "name": "POLYTECH-UNIVERSE 3 (R*)",
       "norad_id": 57191,
-      "range_at_tca_km": 845.6,
-      "tca_utc": "2026-06-12T03:26:41Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U - LoRa 62.5k",
+        "downlink_hz": 436550000,
+        "invert": false,
+        "mode": "LoRa",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 852.5,
+      "tca_utc": "2026-06-12T03:26:54Z"
     },
     {
-      "aos_azimuth_deg": 112.5,
+      "aos_azimuth_deg": 109.6,
       "aos_utc": "2026-06-12T03:25:25Z",
       "downlinks_hz": [
         145840000,
         145855000
       ],
       "duration_s": 300,
-      "los_azimuth_deg": 26.4,
+      "los_azimuth_deg": 23.8,
       "los_utc": "2026-06-12T03:30:25Z",
-      "max_elevation_deg": 18.7,
+      "max_elevation_deg": 18.8,
       "modes": [
         "BPSK",
         "USB",
@@ -1655,28 +2513,50 @@
       ],
       "name": "JY1SAT (JO-97)",
       "norad_id": 43803,
-      "range_at_tca_km": 1182.4,
-      "tca_utc": "2026-06-12T03:27:41Z"
+      "radio": {
+        "alive": true,
+        "description": "U/V SSB Transponder",
+        "downlink_hz": 145855000,
+        "invert": true,
+        "mode": "USB",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transponder",
+        "uplink_hz": 435100000
+      },
+      "range_at_tca_km": 1178.2,
+      "tca_utc": "2026-06-12T03:27:54Z"
     },
     {
-      "aos_azimuth_deg": 105.2,
+      "aos_azimuth_deg": 109.2,
       "aos_utc": "2026-06-12T03:32:42Z",
       "downlinks_hz": [
         436570000
       ],
       "duration_s": 283,
-      "los_azimuth_deg": 29.5,
+      "los_azimuth_deg": 26.7,
       "los_utc": "2026-06-12T03:37:25Z",
-      "max_elevation_deg": 17.3,
+      "max_elevation_deg": 17.2,
       "modes": [
         "GMSK USP"
       ],
       "name": "CUBESX-HSE 3 (RS42S)",
       "norad_id": 57178,
-      "range_at_tca_km": 1246.4,
-      "tca_utc": "2026-06-12T03:35:11Z"
+      "radio": {
+        "alive": true,
+        "description": "Mode U - GMSK 4k8 (USP FEC) TLM",
+        "downlink_hz": 436570000,
+        "invert": false,
+        "mode": "GMSK USP",
+        "pluto_tunable": true,
+        "status": "active",
+        "type": "Transmitter",
+        "uplink_hz": null
+      },
+      "range_at_tca_km": 1247.1,
+      "tca_utc": "2026-06-12T03:34:54Z"
     }
   ],
-  "start_utc": "2026-06-11T20:25:41Z",
+  "start_utc": "2026-06-11T20:36:54Z",
   "version": 1
 }

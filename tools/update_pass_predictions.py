@@ -22,6 +22,8 @@ except ImportError as exc:  # pragma: no cover - user-facing dependency guard
 EARTH_RADIUS_KM = 6378.137
 EARTH_FLATTENING = 1.0 / 298.257223563
 SECONDS_PER_DAY = 86400.0
+PLUTO_MIN_HZ = 70_000_000
+PLUTO_MAX_HZ = 6_000_000_000
 
 
 def utc_now() -> dt.datetime:
@@ -138,6 +140,48 @@ def unique_downlinks(satellite: dict[str, Any]) -> list[int]:
     return values
 
 
+def is_pluto_tunable(hz: Any) -> bool:
+    return isinstance(hz, int) and PLUTO_MIN_HZ <= hz <= PLUTO_MAX_HZ
+
+
+def transmitter_score(transmitter: dict[str, Any]) -> tuple[int, int, int, int]:
+    downlink = transmitter.get("downlink_hz")
+    alive = transmitter.get("alive") is True
+    active = str(transmitter.get("status", "")).lower() == "active"
+    tunable = is_pluto_tunable(downlink)
+    has_uplink = isinstance(transmitter.get("uplink_hz"), int)
+    uhf_vhf = isinstance(downlink, int) and 100_000_000 <= downlink <= 500_000_000
+    return (
+        0 if tunable else 1,
+        0 if alive or active else 1,
+        0 if has_uplink else 1,
+        0 if uhf_vhf else 1,
+    )
+
+
+def primary_radio_target(satellite: dict[str, Any]) -> dict[str, Any] | None:
+    transmitters = [
+        tx for tx in satellite.get("transmitters", [])
+        if isinstance(tx.get("downlink_hz"), int)
+    ]
+    if not transmitters:
+        return None
+
+    tx = sorted(transmitters, key=transmitter_score)[0]
+    downlink = tx.get("downlink_hz")
+    return {
+        "downlink_hz": downlink,
+        "uplink_hz": tx.get("uplink_hz"),
+        "mode": tx.get("mode"),
+        "description": tx.get("description"),
+        "type": tx.get("type"),
+        "status": tx.get("status"),
+        "alive": tx.get("alive"),
+        "invert": tx.get("invert"),
+        "pluto_tunable": is_pluto_tunable(downlink),
+    }
+
+
 def refine_crossing(
     satrec: Satrec,
     lat: float,
@@ -244,6 +288,7 @@ def predict_satellite_passes(
 
 
 def format_pass(satellite: dict[str, Any], row: dict[str, Any], duration_s: int) -> dict[str, Any]:
+    radio = primary_radio_target(satellite)
     return {
         "norad_id": satellite.get("norad_id"),
         "name": satellite.get("name"),
@@ -257,6 +302,7 @@ def format_pass(satellite: dict[str, Any], row: dict[str, Any], duration_s: int)
         "range_at_tca_km": round(float(row["range_at_tca_km"]), 1),
         "downlinks_hz": unique_downlinks(satellite)[:6],
         "modes": satellite.get("modes", [])[:8],
+        "radio": radio,
     }
 
 
