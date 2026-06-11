@@ -333,16 +333,6 @@ static void send_satellites(int fd, const struct app_config *cfg)
     send_json_file_or_default(fd, path, fallback);
 }
 
-static void send_passes(int fd)
-{
-    send_text(fd, 200, "OK", "application/json; charset=utf-8",
-              "{"
-              "\"ok\":true,"
-              "\"passes\":[],"
-              "\"message\":\"Pass prediction engine is not implemented yet.\""
-              "}\n");
-}
-
 static void handle_request(int fd, const struct app_config *cfg, const char *method, const char *path)
 {
     char file_path[PATH_BUF_SIZE];
@@ -366,7 +356,9 @@ static void handle_request(int fd, const struct app_config *cfg, const char *met
     } else if (strcmp(path, "/api/satellites") == 0) {
         send_satellites(fd, cfg);
     } else if (strcmp(path, "/api/passes") == 0) {
-        send_passes(fd);
+        join_path(file_path, sizeof(file_path), cfg->data_dir, "passes.json");
+        send_json_file_or_default(fd, file_path,
+                                  "{\"version\":1,\"passes\":[],\"message\":\"Pass predictions have not been generated yet.\"}\n");
     } else {
         send_text(fd, 404, "Not Found", "application/json; charset=utf-8",
                   "{\"ok\":false,\"error\":\"not found\"}\n");

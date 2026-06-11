@@ -47,9 +47,10 @@ From MSYS2 UCRT64 or another shell with Python 3:
 
 ```bash
 python3 tools/update_satellite_catalog.py
+python3 tools/update_pass_predictions.py
 ./tools/deploy_web_only.sh
 ```
 
-The updater builds `data/satellites.json` from CelesTrak amateur TLE data and matching SatNOGS transmitter metadata.
+The catalog updater builds `data/satellites.json` from CelesTrak amateur TLE data and matching SatNOGS transmitter metadata. The pass updater builds `data/passes.json` from the local catalog and observer configuration.
 
 Pass prediction, TLE refresh, satellite filtering, Doppler planning, and Pluto radio control are the next implementation layers.

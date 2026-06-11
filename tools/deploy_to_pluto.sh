@@ -20,8 +20,9 @@ WEB_HTML="$ROOT_DIR/web/index.html"
 OBSERVER_CONFIG="$ROOT_DIR/config/observer.example.json"
 REPOSITORIES="$ROOT_DIR/data/repositories.json"
 SATELLITES="$ROOT_DIR/data/satellites.json"
+PASSES="$ROOT_DIR/data/passes.json"
 
-for required in "$BIN" "$RUNTIME" "$WEB_HTML" "$OBSERVER_CONFIG" "$REPOSITORIES" "$SATELLITES"; do
+for required in "$BIN" "$RUNTIME" "$WEB_HTML" "$OBSERVER_CONFIG" "$REPOSITORIES" "$SATELLITES" "$PASSES"; do
   if [[ ! -f "$required" ]]; then
     echo "Missing required deploy file: $required"
     exit 1
@@ -75,6 +76,9 @@ echo "SD data: ${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}"
 "${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
   "$SATELLITES" "${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}/data/satellites.json.tmp"
 
+"${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
+  "$PASSES" "${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}/data/passes.json.tmp"
+
 "${SSHPASS[@]}" ssh "${SSH_OPTS[@]}" "${PLUTO_USER}@${PLUTO_IP}" "
   set -e
   chmod +x '${DEPLOY_DIR}/pluto_sat_tracker.tmp' '${DEPLOY_DIR}/run_tracker.sh.tmp'
@@ -84,6 +88,7 @@ echo "SD data: ${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}"
   mv '${DEPLOY_DIR}/config/observer.json.tmp' '${DEPLOY_DIR}/config/observer.json'
   mv '${SD_ROOT}/data/repositories.json.tmp' '${SD_ROOT}/data/repositories.json'
   mv '${SD_ROOT}/data/satellites.json.tmp' '${SD_ROOT}/data/satellites.json'
+  mv '${SD_ROOT}/data/passes.json.tmp' '${SD_ROOT}/data/passes.json'
   sync
   echo '== Remote files =='
   ls -lh '${DEPLOY_DIR}/pluto_sat_tracker' \
@@ -91,7 +96,8 @@ echo "SD data: ${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}"
          '${DEPLOY_DIR}/web/index.html' \
          '${DEPLOY_DIR}/config/observer.json' \
          '${SD_ROOT}/data/repositories.json' \
-         '${SD_ROOT}/data/satellites.json'
+         '${SD_ROOT}/data/satellites.json' \
+         '${SD_ROOT}/data/passes.json'
 "
 
 echo

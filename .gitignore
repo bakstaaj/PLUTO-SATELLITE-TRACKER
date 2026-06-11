@@ -10,3 +10,4 @@ downloads/
 cache/
 test_output/
 __pycache__/
+.python-deps/

@@ -17,8 +17,9 @@ SD_ROOT="${PLUTO_SD_ROOT:-/media/mmcblk0p1/pluto_sat_tracker}"
 WEB_HTML="$ROOT_DIR/web/index.html"
 REPOSITORIES="$ROOT_DIR/data/repositories.json"
 SATELLITES="$ROOT_DIR/data/satellites.json"
+PASSES="$ROOT_DIR/data/passes.json"
 
-for required in "$WEB_HTML" "$REPOSITORIES" "$SATELLITES"; do
+for required in "$WEB_HTML" "$REPOSITORIES" "$SATELLITES" "$PASSES"; do
   if [[ ! -f "$required" ]]; then
     echo "Missing required runtime asset: $required"
     exit 1
@@ -50,16 +51,21 @@ echo "== Copying runtime assets to Pluto+ =="
 "${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
   "$SATELLITES" "${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}/data/satellites.json.tmp"
 
+"${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
+  "$PASSES" "${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}/data/passes.json.tmp"
+
 "${SSHPASS[@]}" ssh "${SSH_OPTS[@]}" "${PLUTO_USER}@${PLUTO_IP}" "
   set -e
   mv '${DEPLOY_DIR}/web/index.html.tmp' '${DEPLOY_DIR}/web/index.html'
   mv '${SD_ROOT}/data/repositories.json.tmp' '${SD_ROOT}/data/repositories.json'
   mv '${SD_ROOT}/data/satellites.json.tmp' '${SD_ROOT}/data/satellites.json'
+  mv '${SD_ROOT}/data/passes.json.tmp' '${SD_ROOT}/data/passes.json'
   sync
   echo '== Remote runtime assets =='
   wc -c '${DEPLOY_DIR}/web/index.html' \
         '${SD_ROOT}/data/repositories.json' \
-        '${SD_ROOT}/data/satellites.json'
+        '${SD_ROOT}/data/satellites.json' \
+        '${SD_ROOT}/data/passes.json'
 "
 
 echo

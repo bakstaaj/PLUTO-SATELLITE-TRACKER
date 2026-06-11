@@ -120,6 +120,24 @@
       white-space: nowrap;
     }
 
+    .pass-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .pass-row {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr 1fr;
+      gap: 8px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 14px;
+    }
+
+    .pass-row strong {
+      display: block;
+    }
+
     @media (max-width: 760px) {
       main {
         grid-template-columns: 1fr;
@@ -148,7 +166,7 @@
 
     <section>
       <h2>Next Passes</h2>
-      <div id="passes" class="empty">Pass prediction will appear here after the orbit engine is added.</div>
+      <div id="passes" class="empty">Loading passes...</div>
     </section>
 
     <section>
@@ -214,11 +232,49 @@
       return rows.slice(0, 4);
     }
 
+    function formatTime(iso) {
+      if (!iso) return "";
+      return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    }
+
+    function formatDuration(seconds) {
+      const minutes = Math.round(Number(seconds || 0) / 60);
+      return `${minutes} min`;
+    }
+
+    function renderPasses(payload) {
+      const node = document.getElementById("passes");
+      const passes = payload.passes || [];
+      if (!passes.length) {
+        node.className = "empty";
+        node.textContent = payload.message || "No upcoming passes in the prediction window.";
+        return;
+      }
+
+      node.className = "pass-list";
+      node.innerHTML = "";
+      for (const pass of passes.slice(0, 12)) {
+        const row = document.createElement("div");
+        row.className = "pass-row";
+        const downlink = (pass.downlinks_hz || [])[0];
+        row.innerHTML = `<div><strong></strong><span></span></div><div></div><div></div>`;
+        row.children[0].querySelector("strong").textContent = pass.name || "";
+        row.children[0].querySelector("span").textContent =
+          downlink ? `${formatHz(downlink)} ${((pass.modes || [])[0] || "")}` : ((pass.modes || [])[0] || "");
+        row.children[1].textContent =
+          `${formatTime(pass.aos_utc)}-${formatTime(pass.los_utc)} (${formatDuration(pass.duration_s)})`;
+        row.children[2].textContent =
+          `Max ${pass.max_elevation_deg} deg, az ${pass.aos_azimuth_deg}-${pass.los_azimuth_deg}`;
+        node.appendChild(row);
+      }
+    }
+
     async function refresh() {
-      const [status, config, catalog] = await Promise.all([
+      const [status, config, catalog, passes] = await Promise.all([
         getJson("/api/status"),
         getJson("/api/config"),
-        getJson("/api/satellites")
+        getJson("/api/satellites"),
+        getJson("/api/passes")
       ]);
 
       document.getElementById("status").textContent = status.ok ? "Backend online" : "Backend warning";
@@ -236,6 +292,8 @@
         ["Config", status.config_dir],
         ["Data", status.data_dir]
       ]);
+
+      renderPasses(passes);
 
       const tbody = document.getElementById("satellites");
       const satellites = catalog.satellites || [];
