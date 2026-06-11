@@ -14,6 +14,7 @@
 #include <time.h>
 #include <ctype.h>
 #include <unistd.h>
+#include <limits.h>
 
 #define APP_VERSION "0.1.0"
 #define DEFAULT_BIND_ADDR "127.0.0.1"
@@ -419,6 +420,113 @@ static void json_escape(char *dst, size_t dst_size, const char *src)
     dst[out] = '\0';
 }
 
+static long long days_from_civil(int year, unsigned month, unsigned day)
+{
+    int era;
+    unsigned yoe;
+    unsigned doy;
+    unsigned doe;
+
+    year -= month <= 2;
+    era = (year >= 0 ? year : year - 399) / 400;
+    yoe = (unsigned)(year - era * 400);
+    doy = (153 * (month > 2 ? month - 3 : month + 9) + 2) / 5 + day - 1;
+    doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return (long long)era * 146097 + (long long)doe - 719468;
+}
+
+static int parse_iso_utc_epoch(const char *value, long long *out)
+{
+    int year;
+    unsigned month;
+    unsigned day;
+    unsigned hour;
+    unsigned minute;
+    unsigned second;
+    long long days;
+
+    if (!value || !out) {
+        return 0;
+    }
+
+    if (sscanf(value, "%4d-%2u-%2uT%2u:%2u:%2uZ", &year, &month, &day, &hour, &minute, &second) != 6) {
+        return 0;
+    }
+    if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 23 || minute > 59 || second > 60) {
+        return 0;
+    }
+
+    days = days_from_civil(year, month, day);
+    *out = days * 86400LL + (long long)hour * 3600LL + (long long)minute * 60LL + (long long)second;
+    return 1;
+}
+
+static int json_string_value(const char *json, const char *key, char *out, size_t out_size)
+{
+    char pattern[128];
+    const char *p;
+    const char *start;
+    size_t i = 0;
+
+    if (!json || !key || !out || out_size == 0) {
+        return 0;
+    }
+
+    snprintf(pattern, sizeof(pattern), "\"%s\"", key);
+    p = strstr(json, pattern);
+    if (!p) {
+        return 0;
+    }
+    p = strchr(p + strlen(pattern), ':');
+    if (!p) {
+        return 0;
+    }
+    p++;
+    while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') {
+        p++;
+    }
+    if (*p != '"') {
+        return 0;
+    }
+    start = ++p;
+
+    while (*p && *p != '"' && i + 1 < out_size) {
+        if (*p == '\\' && p[1]) {
+            p++;
+        }
+        out[i++] = *p++;
+    }
+    out[i] = '\0';
+    return p > start;
+}
+
+static int json_long_long_after(const char *json, const char *key, long long *out)
+{
+    char pattern[128];
+    const char *p;
+
+    if (!json || !key || !out) {
+        return 0;
+    }
+
+    snprintf(pattern, sizeof(pattern), "\"%s\"", key);
+    p = strstr(json, pattern);
+    if (!p) {
+        return 0;
+    }
+    p = strchr(p + strlen(pattern), ':');
+    if (!p) {
+        return 0;
+    }
+    p++;
+    while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') {
+        p++;
+    }
+    errno = 0;
+    *out = strtoll(p, NULL, 10);
+    return errno == 0;
+}
+
 static void send_radio_plan(int fd, const struct app_config *cfg, const char *query)
 {
     char name[256] = "";
@@ -682,6 +790,194 @@ static void send_radio_track_plan(int fd, const struct app_config *cfg, const ch
     send_text(fd, 200, "OK", "application/json; charset=utf-8", response);
 }
 
+static int find_nearest_track_point(
+    const char *plan_json,
+    long long now_epoch,
+    long long *rx_hz,
+    char *point_time,
+    size_t point_time_size,
+    int *point_index)
+{
+    const char *p = plan_json;
+    long long best_delta = LLONG_MAX;
+    int index = 0;
+    int found = 0;
+
+    while ((p = strstr(p, "\"time_utc\"")) != NULL) {
+        char time_value[64] = "";
+        const char *object_start = p;
+        const char *time_start;
+        const char *next_point;
+        long long point_epoch;
+        long long point_rx_hz;
+        long long delta;
+
+        while (object_start > plan_json && *object_start != '{') {
+            object_start--;
+        }
+        time_start = strchr(p, ':');
+        if (!time_start) {
+            break;
+        }
+        time_start++;
+        while (*time_start == ' ' || *time_start == '\t' || *time_start == '\r' || *time_start == '\n') {
+            time_start++;
+        }
+        if (*time_start != '"') {
+            p += 10;
+            continue;
+        }
+        time_start++;
+        snprintf(time_value, sizeof(time_value), "%.63s", time_start);
+        if (strchr(time_value, '"')) {
+            *strchr(time_value, '"') = '\0';
+        }
+
+        next_point = strstr(time_start, "\"time_utc\"");
+        if (!json_long_long_after(object_start, "rx_hz", &point_rx_hz)) {
+            p = next_point ? next_point : time_start + strlen(time_start);
+            index++;
+            continue;
+        }
+        if (!parse_iso_utc_epoch(time_value, &point_epoch)) {
+            p = next_point ? next_point : time_start + strlen(time_start);
+            index++;
+            continue;
+        }
+
+        delta = point_epoch >= now_epoch ? point_epoch - now_epoch : now_epoch - point_epoch;
+        if (!found || delta < best_delta) {
+            found = 1;
+            best_delta = delta;
+            *rx_hz = point_rx_hz;
+            *point_index = index;
+            snprintf(point_time, point_time_size, "%s", time_value);
+        }
+
+        p = next_point ? next_point : time_start + strlen(time_start);
+        index++;
+    }
+
+    return found;
+}
+
+static int write_track_state(
+    const struct app_config *cfg,
+    const char *state,
+    const char *name,
+    int point_index,
+    const char *point_time,
+    long long rx_hz,
+    const char *lo_path,
+    const char *message)
+{
+    char path[PATH_BUF_SIZE];
+    char tmp_path[PATH_BUF_SIZE + 8];
+    char name_json[512];
+    char message_json[512];
+    FILE *f;
+    time_t now = time(NULL);
+
+    json_escape(name_json, sizeof(name_json), name ? name : "");
+    json_escape(message_json, sizeof(message_json), message ? message : "");
+
+    join_path(path, sizeof(path), cfg->data_dir, "radio_track_state.json");
+    snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
+    f = fopen(tmp_path, "wb");
+    if (!f) {
+        return 0;
+    }
+
+    fprintf(f,
+            "{\n"
+            "  \"ok\": true,\n"
+            "  \"state\": \"%s\",\n"
+            "  \"updated_epoch\": %ld,\n"
+            "  \"name\": \"%s\",\n"
+            "  \"point_index\": %d,\n"
+            "  \"point_time_utc\": \"%s\",\n"
+            "  \"rx_hz\": %lld,\n"
+            "  \"lo_path\": \"%s\",\n"
+            "  \"message\": \"%s\"\n"
+            "}\n",
+            state,
+            (long)now,
+            name_json,
+            point_index,
+            point_time ? point_time : "",
+            rx_hz,
+            lo_path ? lo_path : "",
+            message_json);
+    fclose(f);
+
+    if (rename(tmp_path, path) != 0) {
+        unlink(tmp_path);
+        return 0;
+    }
+    return 1;
+}
+
+static void send_radio_track_step(int fd, const struct app_config *cfg, const char *state)
+{
+    char path[PATH_BUF_SIZE];
+    char *plan = NULL;
+    size_t plan_len = 0;
+    char name[256] = "";
+    char name_json[512];
+    char point_time[64] = "";
+    char lo_path[PATH_BUF_SIZE] = "";
+    char response[1024];
+    long long rx_hz = 0;
+    int point_index = -1;
+    time_t now = time(NULL);
+
+    join_path(path, sizeof(path), cfg->data_dir, "radio_track.json");
+    if (read_file_to_string(path, &plan, &plan_len) != 0) {
+        send_text(fd, 404, "Not Found", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"no Doppler track plan has been stored\"}\n");
+        return;
+    }
+    (void)plan_len;
+
+    json_string_value(plan, "name", name, sizeof(name));
+    if (!find_nearest_track_point(plan, (long long)now, &rx_hz, point_time, sizeof(point_time), &point_index)) {
+        free(plan);
+        send_text(fd, 400, "Bad Request", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"track plan does not contain usable Doppler points\"}\n");
+        return;
+    }
+    free(plan);
+
+    if (rx_hz < PLUTO_MIN_HZ || rx_hz > PLUTO_MAX_HZ || !write_rx_lo_frequency(rx_hz, lo_path, sizeof(lo_path))) {
+        send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"could not tune RX LO for Doppler track point\"}\n");
+        return;
+    }
+
+    if (!write_track_state(cfg, state, name, point_index, point_time, rx_hz, lo_path, "nearest Doppler point tuned")) {
+        send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"could not write Doppler track state\"}\n");
+        return;
+    }
+
+    json_escape(name_json, sizeof(name_json), name);
+    snprintf(response, sizeof(response),
+             "{\"ok\":true,\"state\":\"%s\",\"name\":\"%s\",\"point_index\":%d,\"point_time_utc\":\"%s\",\"rx_hz\":%lld,\"lo_path\":\"%s\"}\n",
+             state, name_json, point_index, point_time, rx_hz, lo_path);
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", response);
+}
+
+static void send_radio_track_stop(int fd, const struct app_config *cfg)
+{
+    if (!write_track_state(cfg, "stopped", "", -1, "", 0, "", "Doppler tracking stopped")) {
+        send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"could not write Doppler track state\"}\n");
+        return;
+    }
+    send_text(fd, 200, "OK", "application/json; charset=utf-8",
+              "{\"ok\":true,\"state\":\"stopped\"}\n");
+}
+
 static void send_radio_tune(int fd, const struct app_config *cfg, const char *query)
 {
     char name[256] = "";
@@ -826,6 +1122,16 @@ static void handle_request(
         join_path(file_path, sizeof(file_path), cfg->data_dir, "radio_track.json");
         send_json_file_or_default(fd, file_path,
                                   "{\"ok\":true,\"state\":\"idle\",\"message\":\"No Doppler track planned.\"}\n");
+    } else if (strcmp(path, "/api/radio/track/state") == 0) {
+        join_path(file_path, sizeof(file_path), cfg->data_dir, "radio_track_state.json");
+        send_json_file_or_default(fd, file_path,
+                                  "{\"ok\":true,\"state\":\"idle\",\"message\":\"Doppler tracking has not started.\"}\n");
+    } else if (strcmp(path, "/api/radio/track/start") == 0) {
+        send_radio_track_step(fd, cfg, "active");
+    } else if (strcmp(path, "/api/radio/track/step") == 0) {
+        send_radio_track_step(fd, cfg, "active");
+    } else if (strcmp(path, "/api/radio/track/stop") == 0) {
+        send_radio_track_stop(fd, cfg);
     } else if (strcmp(path, "/api/radio/hardware") == 0) {
         send_radio_hardware(fd);
     } else if (strcmp(path, "/api/radio/plan") == 0) {

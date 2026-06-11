@@ -428,10 +428,11 @@
     }
 
     async function refreshRadioStatus() {
-      const [status, hardware, track] = await Promise.all([
+      const [status, hardware, track, trackState] = await Promise.all([
         getJson("/api/radio/status"),
         getJson("/api/radio/hardware"),
-        getJson("/api/radio/track/status")
+        getJson("/api/radio/track/status"),
+        getJson("/api/radio/track/state")
       ]);
       const entries = [
         ["State", status.state || "idle"]
@@ -442,6 +443,9 @@
       if (status.mode) entries.push(["Mode", status.mode]);
       if (track.state && track.state !== "idle") entries.push(["Track", track.name || track.state]);
       if (track.point_count) entries.push(["Track points", track.point_count]);
+      if (trackState.state && trackState.state !== "idle") entries.push(["Tracking", trackState.state]);
+      if (trackState.rx_hz) entries.push(["Track RX", formatHz(trackState.rx_hz)]);
+      if (trackState.point_time_utc) entries.push(["Track point", formatTime(trackState.point_time_utc)]);
       entries.push(...radioHardwareEntries(hardware));
       setDl("radioStatus", entries);
     }
@@ -546,6 +550,25 @@
       }
     }
 
+    async function controlDopplerTrack(action, button) {
+      button.disabled = true;
+      const originalText = button.textContent;
+      button.textContent = action === "stop" ? "Stopping..." : "Tuning...";
+      try {
+        await getJson(`/api/radio/track/${action}`);
+        button.textContent = action === "stop" ? "Stopped" : "Tuned";
+        await refreshRadioStatus();
+      } catch (error) {
+        button.textContent = "Failed";
+        throw error;
+      } finally {
+        setTimeout(() => {
+          button.disabled = false;
+          button.textContent = originalText;
+        }, 1200);
+      }
+    }
+
     function renderPassDetail(pass) {
       const node = document.getElementById("passDetail");
       if (!pass) {
@@ -597,6 +620,9 @@
             <button id="planRadioButton" type="button">Plan Radio Target</button>
             <button id="tuneRadioButton" type="button">Tune Receiver</button>
             <button id="planDopplerButton" type="button">Plan Doppler Track</button>
+            <button id="startDopplerButton" type="button">Start Track</button>
+            <button id="stepDopplerButton" type="button">Step Now</button>
+            <button id="stopDopplerButton" type="button">Stop Track</button>
           </div>
           <div class="full-width">
             <h3>Doppler Preview</h3>
@@ -653,6 +679,20 @@
         });
       });
 
+      for (const [id, action] of [
+        ["startDopplerButton", "start"],
+        ["stepDopplerButton", "step"],
+        ["stopDopplerButton", "stop"]
+      ]) {
+        const trackButton = node.querySelector(`#${id}`);
+        trackButton.disabled = id !== "stopDopplerButton" && (!pass.doppler_plan || !(pass.doppler_plan.points || []).length);
+        trackButton.addEventListener("click", () => {
+          controlDopplerTrack(action, trackButton).catch((error) => {
+            document.getElementById("status").textContent = error.message;
+          });
+        });
+      }
+
       node.querySelector("#dopplerPreview").innerHTML = renderDopplerRows(pass.doppler_plan);
     }
 
@@ -700,14 +740,15 @@
     }
 
     async function refresh() {
-      const [status, config, catalog, passes, radioStatus, radioHardware, radioTrack] = await Promise.all([
+      const [status, config, catalog, passes, radioStatus, radioHardware, radioTrack, radioTrackState] = await Promise.all([
         getJson("/api/status"),
         getJson("/api/config"),
         getJson("/api/satellites"),
         getJson("/api/passes"),
         getJson("/api/radio/status"),
         getJson("/api/radio/hardware"),
-        getJson("/api/radio/track/status")
+        getJson("/api/radio/track/status"),
+        getJson("/api/radio/track/state")
       ]);
 
       document.getElementById("status").textContent = status.ok ? "Backend online" : "Backend warning";
@@ -734,6 +775,9 @@
         ["LO path", radioStatus.lo_path || "-"],
         ["Track", radioTrack.state && radioTrack.state !== "idle" ? (radioTrack.name || radioTrack.state) : "-"],
         ["Track points", radioTrack.point_count || "-"],
+        ["Tracking", radioTrackState.state || "-"],
+        ["Track RX", radioTrackState.rx_hz ? formatHz(radioTrackState.rx_hz) : "-"],
+        ["Track point", radioTrackState.point_time_utc ? formatTime(radioTrackState.point_time_utc) : "-"],
         ...radioHardwareEntries(radioHardware)
       ]);
 
