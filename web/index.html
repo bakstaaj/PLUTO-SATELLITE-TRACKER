@@ -337,8 +337,20 @@
       return `${prefix} ${formatHz(downlink)} ${mode}`.trim();
     }
 
+    function radioHardwareEntries(hardware) {
+      return [
+        ["Radio profile", hardware.iio_device_name || "-"],
+        ["RX LO", hardware.current_rx_lo_hz ? formatHz(hardware.current_rx_lo_hz) : "-"],
+        ["RX LO path", hardware.rx_lo_path || "-"],
+        ["App range", `${formatHz(hardware.software_min_hz)}-${formatHz(hardware.software_max_hz)}`]
+      ];
+    }
+
     async function refreshRadioStatus() {
-      const status = await getJson("/api/radio/status");
+      const [status, hardware] = await Promise.all([
+        getJson("/api/radio/status"),
+        getJson("/api/radio/hardware")
+      ]);
       const entries = [
         ["State", status.state || "idle"]
       ];
@@ -346,6 +358,7 @@
       if (status.downlink_hz) entries.push(["Downlink", formatHz(status.downlink_hz)]);
       if (status.uplink_hz) entries.push(["Uplink", formatHz(status.uplink_hz)]);
       if (status.mode) entries.push(["Mode", status.mode]);
+      entries.push(...radioHardwareEntries(hardware));
       setDl("radioStatus", entries);
     }
 
@@ -552,12 +565,13 @@
     }
 
     async function refresh() {
-      const [status, config, catalog, passes, radioStatus] = await Promise.all([
+      const [status, config, catalog, passes, radioStatus, radioHardware] = await Promise.all([
         getJson("/api/status"),
         getJson("/api/config"),
         getJson("/api/satellites"),
         getJson("/api/passes"),
-        getJson("/api/radio/status")
+        getJson("/api/radio/status"),
+        getJson("/api/radio/hardware")
       ]);
 
       document.getElementById("status").textContent = status.ok ? "Backend online" : "Backend warning";
@@ -581,7 +595,8 @@
         ["Target", radioStatus.name || "-"],
         ["Downlink", radioStatus.downlink_hz ? formatHz(radioStatus.downlink_hz) : "-"],
         ["Mode", radioStatus.mode || "-"],
-        ["LO path", radioStatus.lo_path || "-"]
+        ["LO path", radioStatus.lo_path || "-"],
+        ...radioHardwareEntries(radioHardware)
       ]);
 
       renderPasses(passes);

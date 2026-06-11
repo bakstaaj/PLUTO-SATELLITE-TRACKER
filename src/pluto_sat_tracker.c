@@ -523,6 +523,34 @@ static int parse_frequency_hz(const char *value, long long *out)
     return 1;
 }
 
+static int read_first_line(const char *path, char *out, size_t out_size)
+{
+    FILE *f;
+    size_t len;
+
+    if (!path || !out || out_size == 0) {
+        return 0;
+    }
+
+    f = fopen(path, "rb");
+    if (!f) {
+        return 0;
+    }
+
+    if (!fgets(out, (int)out_size, f)) {
+        fclose(f);
+        return 0;
+    }
+    fclose(f);
+
+    len = strlen(out);
+    while (len > 0 && (out[len - 1] == '\n' || out[len - 1] == '\r')) {
+        out[--len] = '\0';
+    }
+
+    return 1;
+}
+
 static int write_rx_lo_frequency(long long frequency_hz, char *path_used, size_t path_used_size)
 {
     const char *paths[] = {
@@ -547,6 +575,71 @@ static int write_rx_lo_frequency(long long frequency_hz, char *path_used, size_t
     }
 
     return 0;
+}
+
+static void send_radio_hardware(int fd)
+{
+    const char *paths[] = {
+        "/sys/bus/iio/devices/iio:device1/out_altvoltage0_RX_LO_frequency",
+        "/sys/bus/iio/devices/iio:device0/out_altvoltage0_RX_LO_frequency",
+        "/sys/bus/iio/devices/iio:device2/out_altvoltage0_RX_LO_frequency",
+        "/sys/kernel/debug/iio/iio:device1/out_altvoltage0_RX_LO_frequency",
+        "/sys/kernel/debug/iio/iio:device0/out_altvoltage0_RX_LO_frequency",
+    };
+    char rx_path[PATH_BUF_SIZE] = "";
+    char device_dir[PATH_BUF_SIZE] = "";
+    char name_path[PATH_BUF_SIZE] = "";
+    char available_path[PATH_BUF_SIZE] = "";
+    char device_name[256] = "";
+    char current[128] = "";
+    char available[512] = "";
+    char device_name_json[512];
+    char available_json[1024];
+    char body[2048];
+    size_t i;
+
+    for (i = 0; i < sizeof(paths) / sizeof(paths[0]); i++) {
+        if (access(paths[i], W_OK) == 0 || access(paths[i], R_OK) == 0) {
+            snprintf(rx_path, sizeof(rx_path), "%s", paths[i]);
+            break;
+        }
+    }
+
+    if (rx_path[0]) {
+        char *slash;
+
+        snprintf(device_dir, sizeof(device_dir), "%s", rx_path);
+        slash = strrchr(device_dir, '/');
+        if (slash) {
+            *slash = '\0';
+            snprintf(name_path, sizeof(name_path), "%s/name", device_dir);
+            snprintf(available_path, sizeof(available_path), "%s_available", rx_path);
+            read_first_line(name_path, device_name, sizeof(device_name));
+            read_first_line(rx_path, current, sizeof(current));
+            read_first_line(available_path, available, sizeof(available));
+        }
+    }
+
+    json_escape(device_name_json, sizeof(device_name_json), device_name);
+    json_escape(available_json, sizeof(available_json), available);
+
+    snprintf(body, sizeof(body),
+             "{"
+             "\"ok\":true,"
+             "\"software_min_hz\":%lld,"
+             "\"software_max_hz\":%lld,"
+             "\"rx_lo_path\":\"%s\","
+             "\"iio_device_name\":\"%s\","
+             "\"current_rx_lo_hz\":%s,"
+             "\"frequency_available\":\"%s\""
+             "}\n",
+             PLUTO_MIN_HZ,
+             PLUTO_MAX_HZ,
+             rx_path,
+             device_name_json,
+             current[0] ? current : "null",
+             available_json);
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
 }
 
 static void send_radio_tune(int fd, const struct app_config *cfg, const char *query)
@@ -673,6 +766,8 @@ static void handle_request(int fd, const struct app_config *cfg, const char *met
         join_path(file_path, sizeof(file_path), cfg->data_dir, "radio_target.json");
         send_json_file_or_default(fd, file_path,
                                   "{\"ok\":true,\"state\":\"idle\",\"message\":\"No radio target planned.\"}\n");
+    } else if (strcmp(path, "/api/radio/hardware") == 0) {
+        send_radio_hardware(fd);
     } else if (strcmp(path, "/api/radio/plan") == 0) {
         send_radio_plan(fd, cfg, query);
     } else if (strcmp(path, "/api/radio/tune") == 0) {

@@ -31,6 +31,19 @@ http://192.168.3.1:8080/SatelliteTracker/
 
 Use `192.168.2.1` instead if you are connected over Pluto USB Ethernet.
 
+## Enable Startup on Pluto Boot
+
+After deploying the runtime, install the boot-start hook:
+
+```bash
+./tools/install_autostart.sh
+```
+
+The installer writes `/mnt/jffs2/autorun.sh`, which persists on the Pluto JFFS2
+partition and launches `/mnt/jffs2/pluto_sat_tracker/run_tracker.sh -- --net`.
+If an unrelated autorun script already exists, it is backed up as
+`/mnt/jffs2/autorun.sh.before-pluto-sat-tracker`.
+
 ## Current Scope
 
 The first repo milestone provides:
