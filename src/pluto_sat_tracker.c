@@ -24,6 +24,8 @@
 #define DEFAULT_CONFIG_DIR "config"
 #define REQ_BUF_SIZE 4096
 #define PATH_BUF_SIZE 1024
+#define PLUTO_MIN_HZ 70000000LL
+#define PLUTO_MAX_HZ 6000000000LL
 
 static volatile sig_atomic_t g_running = 1;
 
@@ -499,6 +501,148 @@ static void send_radio_plan(int fd, const struct app_config *cfg, const char *qu
     send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
 }
 
+static int parse_frequency_hz(const char *value, long long *out)
+{
+    char *end = NULL;
+    long long parsed;
+
+    if (!value || !*value) {
+        return 0;
+    }
+
+    errno = 0;
+    parsed = strtoll(value, &end, 10);
+    if (errno != 0 || !end || *end != '\0') {
+        return 0;
+    }
+    if (parsed < PLUTO_MIN_HZ || parsed > PLUTO_MAX_HZ) {
+        return 0;
+    }
+
+    *out = parsed;
+    return 1;
+}
+
+static int write_rx_lo_frequency(long long frequency_hz, char *path_used, size_t path_used_size)
+{
+    const char *paths[] = {
+        "/sys/bus/iio/devices/iio:device1/out_altvoltage0_RX_LO_frequency",
+        "/sys/bus/iio/devices/iio:device0/out_altvoltage0_RX_LO_frequency",
+        "/sys/bus/iio/devices/iio:device2/out_altvoltage0_RX_LO_frequency",
+        "/sys/kernel/debug/iio/iio:device1/out_altvoltage0_RX_LO_frequency",
+        "/sys/kernel/debug/iio/iio:device0/out_altvoltage0_RX_LO_frequency",
+    };
+    size_t i;
+
+    for (i = 0; i < sizeof(paths) / sizeof(paths[0]); i++) {
+        FILE *f = fopen(paths[i], "wb");
+        if (!f) {
+            continue;
+        }
+        fprintf(f, "%lld\n", frequency_hz);
+        if (fclose(f) == 0) {
+            snprintf(path_used, path_used_size, "%s", paths[i]);
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static void send_radio_tune(int fd, const struct app_config *cfg, const char *query)
+{
+    char name[256] = "";
+    char norad[64] = "";
+    char aos[128] = "";
+    char downlink[64] = "";
+    char uplink[64] = "";
+    char mode[128] = "";
+    char description[512] = "";
+    char name_json[512];
+    char mode_json[256];
+    char description_json[1024];
+    char lo_path[PATH_BUF_SIZE] = "";
+    char path[PATH_BUF_SIZE];
+    char tmp_path[PATH_BUF_SIZE + 8];
+    char body[2048];
+    long long frequency_hz;
+    FILE *f;
+    time_t now = time(NULL);
+
+    query_param(query, "name", name, sizeof(name));
+    query_param(query, "norad", norad, sizeof(norad));
+    query_param(query, "aos", aos, sizeof(aos));
+    query_param(query, "downlink", downlink, sizeof(downlink));
+    query_param(query, "uplink", uplink, sizeof(uplink));
+    query_param(query, "mode", mode, sizeof(mode));
+    query_param(query, "description", description, sizeof(description));
+
+    if (!name[0] || !norad[0] || !parse_frequency_hz(downlink, &frequency_hz)) {
+        send_text(fd, 400, "Bad Request", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"valid name, norad, and Pluto-range downlink are required\"}\n");
+        return;
+    }
+
+    if (!write_rx_lo_frequency(frequency_hz, lo_path, sizeof(lo_path))) {
+        send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"could not write AD9361 RX LO frequency; frequency may be outside the active Pluto radio profile\"}\n");
+        return;
+    }
+
+    json_escape(name_json, sizeof(name_json), name);
+    json_escape(mode_json, sizeof(mode_json), mode);
+    json_escape(description_json, sizeof(description_json), description);
+
+    join_path(path, sizeof(path), cfg->data_dir, "radio_target.json");
+    snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
+
+    f = fopen(tmp_path, "wb");
+    if (!f) {
+        send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"could not write tuned target state\"}\n");
+        return;
+    }
+
+    fprintf(f,
+            "{\n"
+            "  \"ok\": true,\n"
+            "  \"planned_epoch\": %ld,\n"
+            "  \"tuned_epoch\": %ld,\n"
+            "  \"name\": \"%s\",\n"
+            "  \"norad_id\": %s,\n"
+            "  \"aos_utc\": \"%s\",\n"
+            "  \"downlink_hz\": %lld,\n"
+            "  \"uplink_hz\": %s,\n"
+            "  \"mode\": \"%s\",\n"
+            "  \"description\": \"%s\",\n"
+            "  \"lo_path\": \"%s\",\n"
+            "  \"state\": \"tuned\"\n"
+            "}\n",
+            (long)now,
+            (long)now,
+            name_json,
+            norad,
+            aos,
+            frequency_hz,
+            uplink[0] ? uplink : "null",
+            mode_json,
+            description_json,
+            lo_path);
+    fclose(f);
+
+    if (rename(tmp_path, path) != 0) {
+        unlink(tmp_path);
+        send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"could not publish tuned target state\"}\n");
+        return;
+    }
+
+    snprintf(body, sizeof(body),
+             "{\"ok\":true,\"state\":\"tuned\",\"name\":\"%s\",\"norad_id\":%s,\"downlink_hz\":%lld,\"lo_path\":\"%s\"}\n",
+             name_json, norad, frequency_hz, lo_path);
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
+}
+
 static void handle_request(int fd, const struct app_config *cfg, const char *method, const char *path, const char *query)
 {
     char file_path[PATH_BUF_SIZE];
@@ -531,6 +675,8 @@ static void handle_request(int fd, const struct app_config *cfg, const char *met
                                   "{\"ok\":true,\"state\":\"idle\",\"message\":\"No radio target planned.\"}\n");
     } else if (strcmp(path, "/api/radio/plan") == 0) {
         send_radio_plan(fd, cfg, query);
+    } else if (strcmp(path, "/api/radio/tune") == 0) {
+        send_radio_tune(fd, cfg, query);
     } else {
         send_text(fd, 404, "Not Found", "application/json; charset=utf-8",
                   "{\"ok\":false,\"error\":\"not found\"}\n");

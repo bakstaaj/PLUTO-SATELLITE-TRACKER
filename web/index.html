@@ -381,6 +381,38 @@
       }
     }
 
+    async function tuneRadioTarget(pass, button) {
+      const radio = pass.radio || {};
+      const downlink = radio.downlink_hz || (pass.downlinks_hz || [])[0];
+      if (!downlink) return;
+
+      const params = new URLSearchParams({
+        name: pass.name || "",
+        norad: String(pass.norad_id || ""),
+        aos: pass.aos_utc || "",
+        downlink: String(downlink),
+        mode: radio.mode || (pass.modes || [])[0] || "",
+        description: radio.description || ""
+      });
+      if (radio.uplink_hz) params.set("uplink", String(radio.uplink_hz));
+
+      button.disabled = true;
+      button.textContent = "Tuning...";
+      try {
+        await getJson(`/api/radio/tune?${params.toString()}`);
+        button.textContent = "Tuned";
+        await refreshRadioStatus();
+      } catch (error) {
+        button.textContent = "Tune failed";
+        throw error;
+      } finally {
+        setTimeout(() => {
+          button.disabled = false;
+          button.textContent = "Tune Receiver";
+        }, 1200);
+      }
+    }
+
     function renderPassDetail(pass) {
       const node = document.getElementById("passDetail");
       if (!pass) {
@@ -430,6 +462,7 @@
               <dt>Description</dt><dd></dd>
             </dl>
             <button id="planRadioButton" type="button">Plan Radio Target</button>
+            <button id="tuneRadioButton" type="button">Tune Receiver</button>
           </div>
         </div>
       `;
@@ -462,6 +495,14 @@
       button.disabled = !radio.downlink_hz;
       button.addEventListener("click", () => {
         planRadioTarget(pass, button).catch((error) => {
+          document.getElementById("status").textContent = error.message;
+        });
+      });
+
+      const tuneButton = node.querySelector("#tuneRadioButton");
+      tuneButton.disabled = !radio.downlink_hz || radio.pluto_tunable === false;
+      tuneButton.addEventListener("click", () => {
+        tuneRadioTarget(pass, tuneButton).catch((error) => {
           document.getElementById("status").textContent = error.message;
         });
       });
@@ -539,7 +580,8 @@
         ["State", radioStatus.state || "idle"],
         ["Target", radioStatus.name || "-"],
         ["Downlink", radioStatus.downlink_hz ? formatHz(radioStatus.downlink_hz) : "-"],
-        ["Mode", radioStatus.mode || "-"]
+        ["Mode", radioStatus.mode || "-"],
+        ["LO path", radioStatus.lo_path || "-"]
       ]);
 
       renderPasses(passes);
