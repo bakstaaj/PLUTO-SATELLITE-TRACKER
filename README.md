@@ -41,4 +41,15 @@ The first repo milestone provides:
 - SD-card data repository layout.
 - Cross-build, deploy, web-only deploy, run, and stop scripts.
 
+## Update Satellite Catalog
+
+From MSYS2 UCRT64 or another shell with Python 3:
+
+```bash
+python3 tools/update_satellite_catalog.py
+./tools/deploy_web_only.sh
+```
+
+The updater builds `data/satellites.json` from CelesTrak amateur TLE data and matching SatNOGS transmitter metadata.
+
 Pass prediction, TLE refresh, satellite filtering, Doppler planning, and Pluto radio control are the next implementation layers.

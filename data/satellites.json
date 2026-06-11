@@ -1,9 +1,4518 @@
 {
-  "version": 1,
-  "updated_utc": null,
-  "satellites": [],
-  "notes": [
-    "This file is the local SD-card catalog seed.",
-    "TLE refresh and amateur beacon/repeater metadata import will be added next."
-  ]
+  "metadata": {
+    "satellite_count": 93,
+    "satellites_with_transmitters": 93,
+    "transmitter_count": 324
+  },
+  "satellites": [
+    {
+      "modes": [
+        "DVB-S2",
+        "GFSK"
+      ],
+      "name": "239ALFEROV (RS61S)",
+      "norad_id": 64881,
+      "tle": {
+        "line1": "1 64881U 25155F   26162.60492969  .00013687  00000+0  43406-3 0  9991",
+        "line2": "2 64881  97.4544 131.8213 0007249 177.1686 182.9598 15.32791043 79956"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "description": "Mode X - DVB-S2",
+          "downlink_hz": 10473350000,
+          "invert": false,
+          "mode": "DVB-S2",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - GFSK9k6 - AX.25 Beacon and Telemetry (Geoscan framing)",
+          "downlink_hz": 436270000,
+          "invert": false,
+          "mode": "GFSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "BPSK",
+        "AFSK"
+      ],
+      "name": "ALTAIR (RS65S)",
+      "norad_id": 61779,
+      "tle": {
+        "line1": "1 61779U 24199AW  26162.57807838  .00010705  00000+0  29803-3 0  9995",
+        "line2": "2 61779  97.3045  31.9666 0011635 333.7214  26.3439 15.36921924136256"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 4800.0,
+          "description": "Mode U - BPSK (DOKA) - 4k8",
+          "downlink_hz": 435615000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 4800.0,
+          "description": "Mode U - BPSK (DOKA) - 4k8",
+          "downlink_hz": 435715000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "Mode U - Transmitter",
+          "downlink_hz": 435215000,
+          "invert": false,
+          "mode": "AFSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "SSTV",
+        "GMSK USP"
+      ],
+      "name": "ARCTICSAT 1 (RS74S)",
+      "norad_id": 61762,
+      "tle": {
+        "line1": "1 61762U 24199AD  26162.51282498  .01934965  23538-5  12655-2 0  9997",
+        "line2": "2 61762  97.2842  46.4180 0009493 212.9334 147.1363 16.17145326137213"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "description": "Mode U - Robot 36 SSTV",
+          "downlink_hz": 435890000,
+          "invert": false,
+          "mode": "SSTV",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - GMSK 2k4 (USP) TLM",
+          "downlink_hz": 435890000,
+          "invert": false,
+          "mode": "GMSK USP",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 19200.0,
+          "description": "Mode U - GMSK 19k2 (USP) TLM",
+          "downlink_hz": 435890000,
+          "invert": false,
+          "mode": "GMSK USP",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "QPSK",
+        "FM",
+        "BPSK"
+      ],
+      "name": "ASRTU-1 (AO-123)",
+      "norad_id": 61781,
+      "tle": {
+        "line1": "1 61781U 24199AY  26162.62625165  .00007237  00000+0  21093-3 0  9994",
+        "line2": "2 61781  97.3015  31.3477 0012865 335.9422  24.1219 15.35596437133076"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 1000000.0,
+          "description": "Image download",
+          "downlink_hz": 10460000000,
+          "invert": false,
+          "mode": "QPSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode V/U - FM Transceiver",
+          "downlink_hz": 435400000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transceiver",
+          "uplink_hz": 145850000
+        },
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - Telemetry",
+          "downlink_hz": 435400000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - SSDV",
+          "downlink_hz": 436210000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "FM",
+        "GMSK"
+      ],
+      "name": "BEESAT-1",
+      "norad_id": 35933,
+      "tle": {
+        "line1": "1 35933U 09051C   26162.22265768  .00000660  00000+0  14239-3 0  9996",
+        "line2": "2 35933  98.3971  69.6549 0003964 240.4948 119.5857 14.61710634888311"
+      },
+      "transmitters": [
+        {
+          "alive": false,
+          "baud": 0.0,
+          "description": "CW Beacon (F2A)",
+          "downlink_hz": 435950000,
+          "invert": false,
+          "mode": "FM",
+          "status": "inactive",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 4800.0,
+          "description": "TLM Mobitex GMSK",
+          "downlink_hz": 435950000,
+          "invert": false,
+          "mode": "GMSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 4800.0,
+          "description": "Digipeater (Mobitex, idle mode: 10 sec interval)",
+          "downlink_hz": 435950000,
+          "invert": false,
+          "mode": "GMSK",
+          "status": "active",
+          "type": "Transceiver",
+          "uplink_hz": 435950000
+        }
+      ]
+    },
+    {
+      "modes": [
+        "FMN",
+        "CW"
+      ],
+      "name": "CAS-2T & KS-1Q",
+      "norad_id": 41847,
+      "tle": {
+        "line1": "1 41847U 16066G   26162.49190674  .00001549  00000+0  22435-3 0  9997",
+        "line2": "2 41847  98.3821 238.2932 0342601 146.7057 215.6206 14.44675580503972"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "description": "FM Transponder",
+          "downlink_hz": 435615000,
+          "invert": false,
+          "mode": "FMN",
+          "status": "active",
+          "type": "Transceiver",
+          "uplink_hz": 145925000
+        },
+        {
+          "alive": true,
+          "description": "CW Telemetry",
+          "downlink_hz": 435710000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "DVB-S2",
+        "CW",
+        "GFSK"
+      ],
+      "name": "COLIBRI-S (RS67S)",
+      "norad_id": 61746,
+      "tle": {
+        "line1": "1 61746U 24199M   26162.63055539  .00021375  00000+0  41716-3 0  9991",
+        "line2": "2 61746  97.3008  36.4356 0006363 306.0613  54.0048 15.47495504136552"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 1000000.0,
+          "description": "Mode X - DVB-S2",
+          "downlink_hz": 10475000000,
+          "invert": false,
+          "mode": "DVB-S2",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode U - CW Beacon",
+          "downlink_hz": 436835000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - GFSK9k6 - AX.25 Beacon and Telemetry (Geoscan framing)",
+          "downlink_hz": 436835000,
+          "invert": false,
+          "mode": "GFSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "AFSK",
+        "FSK"
+      ],
+      "name": "CUBEBUG-2 (LO-74)",
+      "norad_id": 39440,
+      "tle": {
+        "line1": "1 39440U 13066AA  26162.30229726  .00003136  00000+0  29203-3 0  9995",
+        "line2": "2 39440  97.8900 111.2555 0058932  48.0727 312.5496 14.93713369676117"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "UHF 1K2 AFSK Telemetry",
+          "downlink_hz": 437445000,
+          "invert": false,
+          "mode": "AFSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - FSK9k6 - AX.25 TLM",
+          "downlink_hz": 437445000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "CW",
+        "AFSK"
+      ],
+      "name": "CUBESAT XI-IV (CO-57)",
+      "norad_id": 27848,
+      "tle": {
+        "line1": "1 27848U 03031J   26162.54345884  .00000221  00000+0  11637-3 0  9999",
+        "line2": "2 27848  98.6768 170.8906 0008680 214.5229 145.5387 14.23617902190573"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 0.0,
+          "description": "Mode U CW Beacon",
+          "downlink_hz": 436847500,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "Mode U AFSK TLM",
+          "downlink_hz": 437490000,
+          "invert": false,
+          "mode": "AFSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 15.0,
+          "description": "PE0SAT - CW Beacon",
+          "downlink_hz": 436848700,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "CW",
+        "AFSK"
+      ],
+      "name": "CUBESAT XI-V",
+      "norad_id": 28895,
+      "tle": {
+        "line1": "1 28895U 05043F   26162.35534873  .00001156  00000+0  18968-3 0  9996",
+        "line2": "2 28895  98.2977 317.8549 0013290 220.0353 139.9875 14.72615440100897"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 0.0,
+          "description": "Mode U CW BEACON",
+          "downlink_hz": 437463100,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": false,
+          "baud": 1200.0,
+          "description": "Mode U TLM",
+          "downlink_hz": 437345000,
+          "invert": false,
+          "mode": "AFSK",
+          "status": "inactive",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "GMSK USP"
+      ],
+      "name": "CUBESX-HSE 3 (RS42S)",
+      "norad_id": 57178,
+      "tle": {
+        "line1": "1 57178U 23091N   26162.61888246  .00012440  00000+0  41588-3 0  9992",
+        "line2": "2 57178  97.5100 228.1359 0012139 111.7791 248.4743 15.31072798163572"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 4800.0,
+          "description": "Mode U - GMSK 4k8 (USP FEC) TLM",
+          "downlink_hz": 436570000,
+          "invert": false,
+          "mode": "GMSK USP",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "AFSK",
+        "CW"
+      ],
+      "name": "CUTE-1 (CO-55)",
+      "norad_id": 27844,
+      "tle": {
+        "line1": "1 27844U 03031E   26162.55782411  .00000255  00000+0  12921-3 0  9991",
+        "line2": "2 27844  98.6735 171.1873 0009139 194.6488 165.4428 14.24332340190876"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "Mode U TLM",
+          "downlink_hz": 437470000,
+          "invert": false,
+          "mode": "AFSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 0.0,
+          "description": "Mode U TLM",
+          "downlink_hz": 436837500,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "PE0SAT - CW Beacon",
+          "downlink_hz": 436835820,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "CW",
+        "AFSK",
+        "GMSK"
+      ],
+      "name": "CUTE-1.7+APD II (CO-65)",
+      "norad_id": 32785,
+      "tle": {
+        "line1": "1 32785U 08021C   26162.61398193  .00004987  00000+0  31586-3 0  9996",
+        "line2": "2 32785  97.8272 143.9165 0010295  55.6986 304.5215 15.09401750984358"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 19.0,
+          "description": "Mode U TLM 1",
+          "downlink_hz": 437275000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "Mode U TLM 2",
+          "downlink_hz": 437475000,
+          "invert": false,
+          "mode": "AFSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "PE0SAT - CW Beacon",
+          "downlink_hz": 437274600,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode L/U Digipeater",
+          "downlink_hz": 437475000,
+          "invert": false,
+          "mode": "GMSK",
+          "status": "active",
+          "type": "Transceiver",
+          "uplink_hz": 1267600000
+        }
+      ]
+    },
+    {
+      "modes": [
+        "FM",
+        "CW",
+        "AFSK"
+      ],
+      "name": "DIWATA-2B",
+      "norad_id": 43678,
+      "tle": {
+        "line1": "1 43678U 18084H   26162.63474390  .00002338  00000+0  19093-3 0  9992",
+        "line2": "2 43678  98.1180 358.6022 0012190 188.2186 171.8839 15.00426100415387"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "description": "Mode S",
+          "downlink_hz": 2284991000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "FM VOICE",
+          "downlink_hz": 145900000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transceiver",
+          "uplink_hz": 437500000
+        },
+        {
+          "alive": true,
+          "description": "CW Beacon",
+          "downlink_hz": 145900000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": false,
+          "baud": 1200.0,
+          "description": "AFSK1k2",
+          "downlink_hz": 145900000,
+          "invert": false,
+          "mode": "AFSK",
+          "status": "inactive",
+          "type": "Transceiver",
+          "uplink_hz": 437500000
+        }
+      ]
+    },
+    {
+      "modes": [
+        "CW",
+        "BPSK"
+      ],
+      "name": "DUCHIFAT-1",
+      "norad_id": 40021,
+      "tle": {
+        "line1": "1 40021U 14033M   26162.13545657  .00093384  00000+0  10061-2 0  9997",
+        "line2": "2 40021  98.0470 220.4508 0004090 126.2071 233.9565 15.63383077654809"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 15.0,
+          "description": "CW TLM beacon callsign 4X4HSL",
+          "downlink_hz": 145980000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "BPSK TLM 1k2 callsign 4X4HSL",
+          "downlink_hz": 145980000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "PE0SAT - 1k2 BPSK TLM",
+          "downlink_hz": 145981400,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "BPSK",
+        "CW",
+        "FM",
+        "USB",
+        "OFDM"
+      ],
+      "name": "ES'HAIL 2",
+      "norad_id": 43700,
+      "tle": {
+        "line1": "1 43700U 18090A   26162.55701274  .00000161  00000+0  00000+0 0  9996",
+        "line2": "2 43700   0.0171 319.2547 0001873 163.3216   3.6824  1.00274346 27624"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 400.0,
+          "description": "BPSK400 Upper Beacon",
+          "downlink_hz": 10489795000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transponder"
+        },
+        {
+          "alive": false,
+          "description": "CW Lower Beacon",
+          "downlink_hz": 10489550000,
+          "invert": false,
+          "mode": "CW",
+          "status": "inactive",
+          "type": "Transponder"
+        },
+        {
+          "alive": false,
+          "description": "CW Only Transpoder",
+          "downlink_hz": 10489555000,
+          "invert": false,
+          "mode": "CW",
+          "status": "inactive",
+          "type": "Transponder",
+          "uplink_hz": 2400055000
+        },
+        {
+          "alive": false,
+          "description": "Narrowband digimodes(500Hz max BW)",
+          "downlink_hz": 10489600000,
+          "invert": false,
+          "mode": "FM",
+          "status": "inactive",
+          "type": "Transponder",
+          "uplink_hz": 2400100000
+        },
+        {
+          "alive": false,
+          "description": "digimodes(2700Hz max BW)",
+          "downlink_hz": 10489620000,
+          "invert": false,
+          "mode": "FM",
+          "status": "inactive",
+          "type": "Transponder",
+          "uplink_hz": 2400120000
+        },
+        {
+          "alive": false,
+          "description": "Mixed modes(2700Hz max BW)",
+          "downlink_hz": 10489640000,
+          "invert": false,
+          "mode": "FM",
+          "status": "inactive",
+          "type": "Transponder",
+          "uplink_hz": 2400140000
+        },
+        {
+          "alive": false,
+          "description": "SSB Only Transpoder",
+          "downlink_hz": 10489690000,
+          "invert": false,
+          "mode": "FM",
+          "status": "inactive",
+          "type": "Transponder",
+          "uplink_hz": 2400190000
+        },
+        {
+          "alive": true,
+          "description": "CW Only Transpoder",
+          "downlink_hz": 10489505000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transponder",
+          "uplink_hz": 2400005000
+        },
+        {
+          "alive": true,
+          "description": "Narrowband digimodes(500Hz max BW)",
+          "downlink_hz": 10489540000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transponder",
+          "uplink_hz": 2400040000
+        },
+        {
+          "alive": true,
+          "description": "digimodes(2700Hz max BW)",
+          "downlink_hz": 10489580000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transponder",
+          "uplink_hz": 2400080000
+        },
+        {
+          "alive": true,
+          "description": "SSB Only Transpoder",
+          "downlink_hz": 10489650000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transponder",
+          "uplink_hz": 2400150000
+        },
+        {
+          "alive": true,
+          "description": "SSB Only Transpoder",
+          "downlink_hz": 10489755000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transponder",
+          "uplink_hz": 2400255000
+        },
+        {
+          "alive": true,
+          "baud": 400.0,
+          "description": "BPSK400 Middle Beacon",
+          "downlink_hz": 10489745000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transponder"
+        },
+        {
+          "alive": true,
+          "description": "Mixed modes(2700Hz max BW)",
+          "downlink_hz": 10489850000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transponder",
+          "uplink_hz": 2400350000
+        },
+        {
+          "alive": true,
+          "description": "CW Experimental Beacon",
+          "downlink_hz": 10489995000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transponder"
+        },
+        {
+          "alive": true,
+          "baud": 400.0,
+          "description": "BPSK400 Middle Beacon",
+          "downlink_hz": 10489745000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transponder"
+        },
+        {
+          "alive": false,
+          "baud": 400.0,
+          "description": "BPSK400 Lower Beacon",
+          "downlink_hz": 10489550000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "inactive",
+          "type": "Transponder"
+        },
+        {
+          "alive": true,
+          "description": "Experimental Beacon",
+          "downlink_hz": 10489995000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transponder"
+        },
+        {
+          "alive": false,
+          "description": "CW Upper Beacon",
+          "downlink_hz": 10489795000,
+          "invert": false,
+          "mode": "CW",
+          "status": "inactive",
+          "type": "Transponder"
+        },
+        {
+          "alive": true,
+          "description": "International Emergency Frequency",
+          "downlink_hz": 10489860000,
+          "invert": false,
+          "mode": "USB",
+          "status": "active",
+          "type": "Transceiver",
+          "uplink_hz": 2400360000
+        },
+        {
+          "alive": true,
+          "description": "IS0GRB Winlink Server",
+          "downlink_hz": 10489635000,
+          "invert": false,
+          "mode": "OFDM",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "IS0GRB Winlink Server",
+          "downlink_hz": 10489635000,
+          "invert": false,
+          "mode": "OFDM",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 11.0,
+          "description": "CW Lower Beacon",
+          "downlink_hz": 10489503000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "FM",
+        "AFSK",
+        "GMSK"
+      ],
+      "name": "EYESAT A (AO-27)",
+      "norad_id": 22825,
+      "tle": {
+        "line1": "1 22825U 93061C   26162.47588678  .00000067  00000+0  42624-4 0  9992",
+        "line2": "2 22825  98.6881 229.8913 0009454 114.5060 245.7110 14.30940682706183"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "description": "Mode V/U FM",
+          "downlink_hz": 436795000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transceiver",
+          "uplink_hz": 145850000
+        },
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "Mode U AFSK Beacon",
+          "downlink_hz": 436795000,
+          "invert": false,
+          "mode": "AFSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 400000.0,
+          "description": "Mode S",
+          "downlink_hz": 2218000000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - GMSK9k6",
+          "downlink_hz": 436797000,
+          "invert": false,
+          "mode": "GMSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "FM",
+        "DUV"
+      ],
+      "name": "FOX-1A (AO-85)",
+      "norad_id": 40967,
+      "tle": {
+        "line1": "1 40967U 15058D   26162.58409521  .00002335  00000+0  21601-3 0  9991",
+        "line2": "2 40967  64.7757 296.3951 0130114  58.7822 302.5964 14.90942957112734"
+      },
+      "transmitters": [
+        {
+          "alive": false,
+          "description": "FM Transponder",
+          "downlink_hz": 145980000,
+          "invert": false,
+          "mode": "FM",
+          "status": "inactive",
+          "type": "Transceiver",
+          "uplink_hz": 435180000
+        },
+        {
+          "alive": false,
+          "description": "FM Transponder (current)",
+          "downlink_hz": 145978500,
+          "invert": false,
+          "mode": "FM",
+          "status": "inactive",
+          "type": "Transceiver",
+          "uplink_hz": 435172000
+        },
+        {
+          "alive": false,
+          "baud": 200.0,
+          "description": "DUV TLM",
+          "downlink_hz": 145978500,
+          "invert": false,
+          "mode": "DUV",
+          "status": "inactive",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "DUV",
+        "AFSK",
+        "FM"
+      ],
+      "name": "FOX-1CLIFF (AO-95)",
+      "norad_id": 43770,
+      "tle": {
+        "line1": "1 43770U 18099N   26162.11310128  .00010727  00000+0  41211-3 0  9990",
+        "line2": "2 43770  97.4393 222.3819 0008613  20.0469 340.1107 15.26583130412292"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 200.0,
+          "description": "DUV TLM",
+          "downlink_hz": 145920000,
+          "invert": false,
+          "mode": "DUV",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "AFSK9k6 digital data",
+          "downlink_hz": 145920000,
+          "invert": false,
+          "mode": "AFSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": false,
+          "description": "U/V FM",
+          "downlink_hz": 145920000,
+          "invert": false,
+          "mode": "FM",
+          "status": "inactive",
+          "type": "Transceiver",
+          "uplink_hz": 435300000
+        },
+        {
+          "alive": false,
+          "description": "L/V FM",
+          "downlink_hz": 145920000,
+          "invert": false,
+          "mode": "FM",
+          "status": "inactive",
+          "type": "Transceiver",
+          "uplink_hz": 1267300000
+        }
+      ]
+    },
+    {
+      "modes": [
+        "USB",
+        "CW",
+        "BPSK"
+      ],
+      "name": "FUNCUBE-1 (AO-73)",
+      "norad_id": 39444,
+      "tle": {
+        "line1": "1 39444U 13066AE  26162.55441071  .00005554  00000+0  34659-3 0  9992",
+        "line2": "2 39444  97.8262 133.8825 0035144 220.5848 139.2760 15.09420113678810"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 0.0,
+          "description": "Mode U/V Linear",
+          "downlink_hz": 145950000,
+          "invert": true,
+          "mode": "USB",
+          "status": "active",
+          "type": "Transponder",
+          "uplink_hz": 435130000
+        },
+        {
+          "alive": true,
+          "description": "CW Beacon",
+          "downlink_hz": 145815000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "BPSK Telemetry",
+          "downlink_hz": 145935000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "GFSK"
+      ],
+      "name": "GEOSCAN 1 (RS92S1)",
+      "norad_id": 64880,
+      "tle": {
+        "line1": "1 64880U 25155E   26162.62740248  .00009736  00000+0  33102-3 0  9990",
+        "line2": "2 64880  97.4543 131.3011 0007551 180.4484 179.6751 15.30634689 79925"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - GFSK9k6 - AX.25 Beacon and Ham Payload (Geoscan framing)",
+          "downlink_hz": 435970000,
+          "invert": false,
+          "mode": "GFSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "GFSK"
+      ],
+      "name": "GEOSCAN 2 (RS92S2)",
+      "norad_id": 64890,
+      "tle": {
+        "line1": "1 64890U 25155Q   26162.62207072  .00009757  00000+0  32898-3 0  9998",
+        "line2": "2 64890  97.4542 131.4461 0007410 166.6043 193.5396 15.30906006 79932"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - GFSK9k6 - AX.25 Beacon and Ham Payload (Geoscan framing)",
+          "downlink_hz": 436160000,
+          "invert": false,
+          "mode": "GFSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "GFSK"
+      ],
+      "name": "GEOSCAN 3 (RS92S3)",
+      "norad_id": 64893,
+      "tle": {
+        "line1": "1 64893U 25155T   26162.58779706  .00017301  00000+0  50773-3 0  9990",
+        "line2": "2 64893  97.4529 132.3999 0005891 178.3474 181.7789 15.35210532 79993"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - GFSK9k6 - AX.25 Beacon and Ham Payload (Geoscan framing)",
+          "downlink_hz": 435740000,
+          "invert": false,
+          "mode": "GFSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "GFSK"
+      ],
+      "name": "GEOSCAN 4 (RS92S4)",
+      "norad_id": 64892,
+      "tle": {
+        "line1": "1 64892U 25155S   26162.57985978  .00013632  00000+0  42615-3 0  9997",
+        "line2": "2 64892  97.4540 131.9782 0005982 180.6150 179.5086 15.33260297 79961"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - GFSK9k6 - AX.25 Beacon and Ham Payload (Geoscan framing)",
+          "downlink_hz": 435335000,
+          "invert": false,
+          "mode": "GFSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "GFSK"
+      ],
+      "name": "GEOSCAN 5 (RS92S5)",
+      "norad_id": 64891,
+      "tle": {
+        "line1": "1 64891U 25155R   26162.59511177  .00013513  00000+0  42447-3 0  9995",
+        "line2": "2 64891  97.4536 131.9467 0005938 180.3950 179.7288 15.33109486 79969"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - GFSK9k6 - AX.25 Beacon and Ham Payload (Geoscan framing)",
+          "downlink_hz": 436660000,
+          "invert": false,
+          "mode": "GFSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "GFSK"
+      ],
+      "name": "GEOSCAN 6 (RS92S6)",
+      "norad_id": 64879,
+      "tle": {
+        "line1": "1 64879U 25155D   26162.62280503  .00009233  00000+0  31981-3 0  9996",
+        "line2": "2 64879  97.4547 131.1533 0007596 180.8724 179.2504 15.30047938 79910"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - GFSK9k6 - AX.25 Beacon and Ham Payload (Geoscan framing)",
+          "downlink_hz": 436940000,
+          "invert": false,
+          "mode": "GFSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "CW",
+        "FM",
+        "GMSK"
+      ],
+      "name": "GOMX-1",
+      "norad_id": 39430,
+      "tle": {
+        "line1": "1 39430U 13066Q   26162.60226681  .00001957  00000+0  29765-3 0  9996",
+        "line2": "2 39430  97.6494   3.4179 0130176  95.2729 266.3347 14.69439770669097"
+      },
+      "transmitters": [
+        {
+          "alive": false,
+          "description": "PE0SAT - CW Beacon",
+          "downlink_hz": 437252500,
+          "invert": false,
+          "mode": "CW",
+          "status": "inactive",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode X (8MHz)",
+          "downlink_hz": 8198000000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 4800.0,
+          "description": "4k8 GMSK",
+          "downlink_hz": 437250000,
+          "invert": false,
+          "mode": "GMSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "GMSK",
+        "AFSK"
+      ],
+      "name": "GREENCUBE (IO-117)",
+      "norad_id": 53109,
+      "tle": {
+        "line1": "1 53109U 22080E   26152.46502029 -.00000003  00000+0  00000+0 0  9996",
+        "line2": "2 53109  70.1435 303.7143 0008869 293.3663  66.6064  6.42583280 91055"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 2400.0,
+          "description": "Mode U TLM 2k4 GMSK AX25",
+          "downlink_hz": 436750000,
+          "invert": false,
+          "mode": "GMSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": false,
+          "baud": 9600.0,
+          "description": "Mode U TLM 9k6 GMSK AX25",
+          "downlink_hz": 436750000,
+          "invert": false,
+          "mode": "GMSK",
+          "status": "inactive",
+          "type": "Transmitter"
+        },
+        {
+          "alive": false,
+          "baud": 1200.0,
+          "description": "Mode U TLM 1k2 AFSK AX25",
+          "downlink_hz": 436750000,
+          "invert": false,
+          "mode": "AFSK",
+          "status": "inactive",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "FSK"
+      ],
+      "name": "HORS 3 (RS81S)",
+      "norad_id": 61753,
+      "tle": {
+        "line1": "1 61753U 24199U   26162.61890464  .00034401  00000+0  52082-3 0  9993",
+        "line2": "2 61753  97.2992  38.3507 0003916 312.7003  47.3921 15.54587599136692"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 38400.0,
+          "description": "Mode U - FSK38k4",
+          "downlink_hz": 435650000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 38400.0,
+          "description": "Mode U - Telemetry",
+          "downlink_hz": 435200000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "FSK"
+      ],
+      "name": "HORS 4 (RS82S)",
+      "norad_id": 61754,
+      "tle": {
+        "line1": "1 61754U 24199V   26162.59606452  .00046046  00000+0  58730-3 0  9997",
+        "line2": "2 61754  97.2940  39.4932 0003017 297.0688  63.0261 15.59165300136774"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 38400.0,
+          "description": "Mode U - FSK38k4",
+          "downlink_hz": 435700000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "GMSK USP",
+        "DVB-S2"
+      ],
+      "name": "HYPERVIEW 1G (RS66S)",
+      "norad_id": 61772,
+      "tle": {
+        "line1": "1 61772U 24199AP  26162.59907788  .00121518  00000+0  83249-3 0  9994",
+        "line2": "2 61772  97.2896  42.0416 0002618 250.8791 109.2191 15.74379761133798"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 2400.0,
+          "description": "Mode U - GMSK2k4 USP",
+          "downlink_hz": 436540000,
+          "invert": false,
+          "mode": "GMSK USP",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 2400.0,
+          "description": "Mode U - GMSK2k4 USP",
+          "downlink_hz": 436600000,
+          "invert": false,
+          "mode": "GMSK USP",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode X - DVB-S2",
+          "downlink_hz": 10465000000,
+          "invert": false,
+          "mode": "DVB-S2",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "GFSK"
+      ],
+      "name": "INNOSAT 16 (RS92S7)",
+      "norad_id": 64878,
+      "tle": {
+        "line1": "1 64878U 25155C   26162.62304753  .00005050  00000+0  20264-3 0  9994",
+        "line2": "2 64878  97.4555 129.7686 0009866 195.2389 164.8553 15.25397996 79829"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - GFSK9k6 - AX.25 Beacon and Ham Payload (Geoscan framing)",
+          "downlink_hz": 435830000,
+          "invert": false,
+          "mode": "GFSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "GFSK"
+      ],
+      "name": "INNOSAT 3 (RS92S0)",
+      "norad_id": 64894,
+      "tle": {
+        "line1": "1 64894U 25155U   26162.60812527  .00035570  00000+0  79433-3 0  9995",
+        "line2": "2 64894  97.4477 133.9717 0005554 164.8683 195.2732 15.43438229 80106"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - GFSK9k6 - AX.25 Beacon and Ham Payload (Geoscan framing)",
+          "downlink_hz": 436436000,
+          "invert": false,
+          "mode": "GFSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "AFSK",
+        "FM",
+        "SSTV",
+        "FMN",
+        "CW",
+        "QPSK",
+        "FSK",
+        "PSK",
+        "BPSK",
+        "AM",
+        "GMSK",
+        "DVB-S2"
+      ],
+      "name": "ISS (ZARYA)",
+      "norad_id": 25544,
+      "tle": {
+        "line1": "1 25544U 98067A   26162.51298015  .00008593  00000+0  16294-3 0  9997",
+        "line2": "2 25544  51.6332 328.1749 0005119 173.4651 186.6405 15.49175527570872"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "Mode V APRS",
+          "downlink_hz": 145825000,
+          "invert": false,
+          "mode": "AFSK",
+          "status": "active",
+          "type": "Transceiver",
+          "uplink_hz": 145825000
+        },
+        {
+          "alive": true,
+          "description": "Mode V/V FM (crew R2+3)",
+          "downlink_hz": 145800000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transceiver",
+          "uplink_hz": 144490000
+        },
+        {
+          "alive": true,
+          "description": "Mode V/V FM (crew R1)",
+          "downlink_hz": 145800000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transceiver",
+          "uplink_hz": 145200000
+        },
+        {
+          "alive": false,
+          "description": "TEMP Off-Frequency SSTV",
+          "downlink_hz": 145480000,
+          "invert": false,
+          "mode": "SSTV",
+          "status": "inactive",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "VHF-1 Soyuz Communication - FMN",
+          "downlink_hz": 143625000,
+          "invert": false,
+          "mode": "FMN",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "VHF-2 Soyuz Communication - FMN",
+          "downlink_hz": 130167000,
+          "invert": false,
+          "mode": "FMN",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": false,
+          "description": "Tomsk-TPU-120",
+          "downlink_hz": 437023000,
+          "invert": false,
+          "mode": "FM",
+          "status": "inactive",
+          "type": "Transmitter"
+        },
+        {
+          "alive": false,
+          "description": "Tanusha FM",
+          "downlink_hz": 437050000,
+          "invert": false,
+          "mode": "FM",
+          "status": "inactive",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Soyuz / Orlan space suit",
+          "downlink_hz": 121750000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mystery transmitter 137.6257MHz",
+          "downlink_hz": 137625700,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "ISS CCSDS Data 1",
+          "downlink_hz": 2265000000,
+          "invert": false,
+          "mode": "QPSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": false,
+          "baud": 1200.0,
+          "description": "Mode V/V APRS",
+          "downlink_hz": 145825000,
+          "invert": false,
+          "mode": "AFSK",
+          "status": "inactive",
+          "type": "Transceiver",
+          "uplink_hz": 145825000
+        },
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "IORS Telemetry",
+          "downlink_hz": 437800000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 656.0,
+          "description": "ICARUS Animal-Tracker Experiment",
+          "downlink_hz": 468100000,
+          "invert": false,
+          "mode": "PSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": false,
+          "description": "UHF School Contact Downlink (Backup During SSTV event)",
+          "downlink_hz": 437525000,
+          "invert": false,
+          "mode": "FM",
+          "status": "inactive",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Control Module \"Zarya\"",
+          "downlink_hz": 632000000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Service Module \"Zvezda\" (Upper side band)",
+          "downlink_hz": 630128000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode U - Possibly Voice",
+          "downlink_hz": 435400000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Suit 1",
+          "downlink_hz": 121100000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Suit 2",
+          "downlink_hz": 121275000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": false,
+          "description": "Mode U/V FM Voice",
+          "downlink_hz": 145800000,
+          "invert": false,
+          "mode": "FM",
+          "status": "inactive",
+          "type": "Transceiver",
+          "uplink_hz": 437800000
+        },
+        {
+          "alive": false,
+          "baud": 1200.0,
+          "description": "Mode U APRS Digi",
+          "downlink_hz": 437550000,
+          "invert": false,
+          "mode": "AFSK",
+          "status": "inactive",
+          "type": "Transceiver",
+          "uplink_hz": 437550000
+        },
+        {
+          "alive": true,
+          "baud": 695.0,
+          "description": "EMU Alt",
+          "downlink_hz": 417100000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode S1",
+          "downlink_hz": 2425000000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode S2",
+          "downlink_hz": 2375000000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "EVA/WVS",
+          "downlink_hz": 400575000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Rassvet",
+          "downlink_hz": 637500000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 1536.0,
+          "description": "CUCU (SpaceX COTS UHF Communication Unit)",
+          "downlink_hz": 400500000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "SpaceX Dragon Wideband Telemetry",
+          "downlink_hz": 2205500000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "SpaceX Dragon narrowband telemetry",
+          "downlink_hz": 2216000000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "SpaceX Falcon Wideband Telemetry",
+          "downlink_hz": 2213500000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Suit 3",
+          "downlink_hz": 139208000,
+          "invert": false,
+          "mode": "FMN",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "CW Soyuz-TM and Progress M1 beacon",
+          "downlink_hz": 922750000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Soyuz-TM and Progress M-1 TLM",
+          "downlink_hz": 166000000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Regul",
+          "downlink_hz": 922763000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "TORU S1",
+          "downlink_hz": 2860000000,
+          "invert": false,
+          "mode": "AM",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Toru S2",
+          "downlink_hz": 2725000000,
+          "invert": false,
+          "mode": "AM",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Kvant",
+          "downlink_hz": 768975000,
+          "invert": false,
+          "mode": "FMN",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Falcon 9 CCSDS 2272.5",
+          "downlink_hz": 2272500000,
+          "invert": false,
+          "mode": "GMSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Falcon 9 CCSDS 2232.5",
+          "downlink_hz": 2232500000,
+          "invert": false,
+          "mode": "GMSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "EMU (695000)",
+          "downlink_hz": 414200000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode U - SSTV",
+          "downlink_hz": 437800000,
+          "invert": false,
+          "mode": "SSTV",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode S - HamTV DVB-S",
+          "downlink_hz": 2395000000,
+          "invert": false,
+          "mode": "DVB-S2",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": false,
+          "description": "Mode PD120 FRAM2 Ham ISS simulation",
+          "downlink_hz": 437550000,
+          "invert": false,
+          "mode": "SSTV",
+          "status": "inactive",
+          "type": "Transmitter"
+        },
+        {
+          "alive": false,
+          "description": "Mode U - Imaging",
+          "downlink_hz": 437800000,
+          "invert": false,
+          "mode": "SSTV",
+          "status": "inactive",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode V/U FM - Voice Repeater CTCSS 67.0 Hz",
+          "downlink_hz": 437800000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transceiver",
+          "uplink_hz": 145990000
+        },
+        {
+          "alive": true,
+          "baud": 0.0,
+          "description": "Mode V Imaging",
+          "downlink_hz": 145800000,
+          "invert": false,
+          "mode": "SSTV",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "Mode U APRS test",
+          "downlink_hz": 437825000,
+          "invert": false,
+          "mode": "AFSK",
+          "status": "active",
+          "type": "Transceiver",
+          "uplink_hz": 437825000
+        },
+        {
+          "alive": true,
+          "description": "Mode U - SSTV - Robot-36",
+          "downlink_hz": 437550000,
+          "invert": false,
+          "mode": "SSTV",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "BPSK"
+      ],
+      "name": "ITAMSAT (IO-26)",
+      "norad_id": 22826,
+      "tle": {
+        "line1": "1 22826U 93061D   26162.45700271  .00000069  00000+0  42795-4 0  9997",
+        "line2": "2 22826  98.6828 229.7893 0010069  99.8969 260.3351 14.31367413706498"
+      },
+      "transmitters": [
+        {
+          "alive": false,
+          "baud": 1200.0,
+          "description": "Mode JD",
+          "downlink_hz": 437822000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "inactive",
+          "type": "Transmitter"
+        },
+        {
+          "alive": false,
+          "baud": 1200.0,
+          "description": "1k2 BPSK TLM",
+          "downlink_hz": 435860000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "inactive",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "BPSK CW carrier",
+          "downlink_hz": 435772000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "BPSK"
+      ],
+      "name": "ITASAT",
+      "norad_id": 43786,
+      "tle": {
+        "line1": "1 43786U 18099AE  26162.62003040  .00006626  00000+0  31931-3 0  9996",
+        "line2": "2 43786  97.4034 214.2428 0012724  19.8194 340.3532 15.18987728412067"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "BPSK1k2 AX.25 TLM",
+          "downlink_hz": 145860000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 14400.0,
+          "description": "BPSK14k4",
+          "downlink_hz": 2400150000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "GFSK",
+        "CW"
+      ],
+      "name": "ITUPSAT1",
+      "norad_id": 35935,
+      "tle": {
+        "line1": "1 35935U 09051E   26162.20832687  .00000614  00000+0  13683-3 0  9997",
+        "line2": "2 35935  98.4055  68.8386 0006131 256.4621 103.5895 14.60431670887864"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 19200.0,
+          "description": "GFSK Telemetry",
+          "downlink_hz": 437325000,
+          "invert": false,
+          "mode": "GFSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 0.0,
+          "description": "CW Beacon",
+          "downlink_hz": 437325000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 19200.0,
+          "description": "GMSK Telemetry Drifted",
+          "downlink_hz": 437322500,
+          "invert": false,
+          "mode": "GFSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "CW",
+        "USB",
+        "FM"
+      ],
+      "name": "JAS-2 (FO-29)",
+      "norad_id": 24278,
+      "tle": {
+        "line1": "1 24278U 96046B   26162.54420304  .00000014  00000+0  46335-4 0  9996",
+        "line2": "2 24278  98.5245  12.1894 0350826 111.0367 252.8667 13.53273928472402"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 12.0,
+          "description": "Mode U CW Beacon",
+          "downlink_hz": 435795000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode V/U Linear Transponder",
+          "downlink_hz": 435800000,
+          "invert": true,
+          "mode": "USB",
+          "status": "active",
+          "type": "Transponder",
+          "uplink_hz": 145900000
+        },
+        {
+          "alive": true,
+          "description": "Mode U Digitalker",
+          "downlink_hz": 435910000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "CW",
+        "FSK"
+      ],
+      "name": "JUGNU",
+      "norad_id": 37839,
+      "tle": {
+        "line1": "1 37839U 11058B   26161.86742604  .00000399  00000+0  68784-4 0  9995",
+        "line2": "2 37839  19.9621 346.8221 0018563   6.6957  22.8320 14.13775053758139"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 0.0,
+          "description": "CW Beacon",
+          "downlink_hz": 437275000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 2400.0,
+          "description": "TLM",
+          "downlink_hz": 437505000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "BPSK",
+        "USB",
+        "CW"
+      ],
+      "name": "JY1SAT (JO-97)",
+      "norad_id": 43803,
+      "tle": {
+        "line1": "1 43803U 18099AX  26162.41903211  .00013576  00000+0  42176-3 0  9997",
+        "line2": "2 43803  97.4135 225.2337 0004120 290.5933  69.4867 15.33467542412749"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "BPSK1k2 TLM",
+          "downlink_hz": 145840000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "U/V SSB Transponder",
+          "downlink_hz": 145855000,
+          "invert": true,
+          "mode": "USB",
+          "status": "active",
+          "type": "Transponder",
+          "uplink_hz": 435100000
+        },
+        {
+          "alive": true,
+          "description": "U/V CW Transponder",
+          "downlink_hz": 145855000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transponder",
+          "uplink_hz": 435100000
+        }
+      ]
+    },
+    {
+      "modes": [
+        "CW",
+        "AFSK"
+      ],
+      "name": "KKS-1 (KISEKI)",
+      "norad_id": 33499,
+      "tle": {
+        "line1": "1 33499U 09002H   26162.58941596  .00001162  00000+0  14947-3 0  9990",
+        "line2": "2 33499  98.1193  84.9429 0006837 317.1888  42.8792 14.83109845935368"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 15.0,
+          "description": "CW Beacon",
+          "downlink_hz": 437385000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "Mode U MSG",
+          "downlink_hz": 437445000,
+          "invert": false,
+          "mode": "AFSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "FSK"
+      ],
+      "name": "KNACKSAT-2",
+      "norad_id": 67683,
+      "tle": {
+        "line1": "1 67683U 98067XZ  26162.00743511  .00045581  00000+0  56748-3 0  9993",
+        "line2": "2 67683  51.6304 325.5501 0009943 187.9343 172.1494 15.59412992 19311"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode V/V - FSK9k6 - Digipeater - AX.25 G3RUH",
+          "downlink_hz": 145825000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "active",
+          "type": "Transceiver",
+          "uplink_hz": 145825000
+        },
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - FSK9k6 - AX.25 G3RUH -TLM",
+          "downlink_hz": 400630000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "GMSK USP"
+      ],
+      "name": "KUZGTU 1 (RS47S)",
+      "norad_id": 57217,
+      "tle": {
+        "line1": "1 57217U 23091AV  26162.60507682  .00011790  00000+0  41091-3 0  9993",
+        "line2": "2 57217  97.5072 227.0284 0012340 115.2102 245.0419 15.29733293163527"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 4800.0,
+          "description": "Mode U - GMSK 4k8 (USP FEC) TLM",
+          "downlink_hz": 437100000,
+          "invert": false,
+          "mode": "GMSK USP",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "CW",
+        "AFSK",
+        "GFSK",
+        "BPSK",
+        "FM"
+      ],
+      "name": "LILACSAT-2",
+      "norad_id": 40908,
+      "tle": {
+        "line1": "1 40908U 15049K   26162.59609958  .00015666  00000+0  26876-3 0  9993",
+        "line2": "2 40908  97.4657 199.2254 0005275 272.1556  87.9091 15.51260411594884"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "description": "CW Beacon",
+          "downlink_hz": 437200000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "APRS Digipeater",
+          "downlink_hz": 144390000,
+          "invert": false,
+          "mode": "AFSK",
+          "status": "active",
+          "type": "Transceiver",
+          "uplink_hz": 144390000
+        },
+        {
+          "alive": true,
+          "baud": 4800.0,
+          "description": "GFSK Telemetry",
+          "downlink_hz": 437225000,
+          "invert": false,
+          "mode": "GFSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "BPSK Telemetry",
+          "downlink_hz": 437200000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": false,
+          "description": "FM Transponder",
+          "downlink_hz": 437200000,
+          "invert": false,
+          "mode": "FM",
+          "status": "inactive",
+          "type": "Transceiver",
+          "uplink_hz": 144350000
+        }
+      ]
+    },
+    {
+      "modes": [
+        "BPSK",
+        "CW"
+      ],
+      "name": "LUSAT (LO-19)",
+      "norad_id": 20442,
+      "tle": {
+        "line1": "1 20442U 90005G   26162.53069413  .00000105  00000+0  54261-4 0  9991",
+        "line2": "2 20442  98.8852 184.1803 0010820 218.5501 141.4911 14.34121495901580"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "BPSK 1k2 Transceiver",
+          "downlink_hz": 437150000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transceiver",
+          "uplink_hz": 145840000
+        },
+        {
+          "alive": true,
+          "baud": 0.0,
+          "description": "Mode U TLM",
+          "downlink_hz": 437125000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Carrier",
+          "downlink_hz": 435078000,
+          "invert": false,
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "BPSK",
+        "USB"
+      ],
+      "name": "MESAT1",
+      "norad_id": 60209,
+      "tle": {
+        "line1": "1 60209U 24125G   26162.60005231  .00050616  00000+0  56470-3 0  9997",
+        "line2": "2 60209  97.2312  19.9579 0009060 224.7831 135.2697 15.62604296108693"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 2320000.0,
+          "description": "GlobalStar EyeStar 2M32G1D",
+          "downlink_hz": 1616250000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "UHF TLM 1k2 BPSK",
+          "downlink_hz": 435800000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": false,
+          "description": "Mode V/U - SSB - Transponder",
+          "downlink_hz": 435810000,
+          "invert": true,
+          "mode": "USB",
+          "status": "inactive",
+          "type": "Transponder",
+          "uplink_hz": 145910000
+        }
+      ]
+    },
+    {
+      "modes": [
+        "FSK",
+        "AFSK",
+        "DOKA"
+      ],
+      "name": "MONITOR-2 (RS39S)",
+      "norad_id": 57184,
+      "tle": {
+        "line1": "1 57184U 23091U   26162.58115858  .00004896  00000+0  23781-3 0  9998",
+        "line2": "2 57184  97.5080 220.9002 0012550 128.2177 232.0190 15.18857983163105"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - FSK9k6",
+          "downlink_hz": 435860000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "Mode U AFSK 1k2",
+          "downlink_hz": 435815000,
+          "invert": false,
+          "mode": "AFSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - DOKA 9k6",
+          "downlink_hz": 435915000,
+          "invert": false,
+          "mode": "DOKA",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - DOKA 9k6",
+          "downlink_hz": 435000000,
+          "invert": false,
+          "mode": "DOKA",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "Mode U - AFSK 1k2",
+          "downlink_hz": 435650000,
+          "invert": false,
+          "mode": "AFSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "GMSK USP",
+        "SSTV"
+      ],
+      "name": "MONITOR-3 (RS58S)",
+      "norad_id": 57180,
+      "tle": {
+        "line1": "1 57180U 23091Q   26162.56563794  .00009831  00000+0  36467-3 0  9997",
+        "line2": "2 57180  97.5092 225.9705 0013110 118.1147 242.1419 15.27727927163433"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 4800.0,
+          "description": "Mode U - GMSK 4k8 (USP FEC) TLM",
+          "downlink_hz": 435290000,
+          "invert": false,
+          "mode": "GMSK USP",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode U - Robot 36 SSTV",
+          "downlink_hz": 435290000,
+          "invert": false,
+          "mode": "SSTV",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - GMSK 9k6 (USP FEC)",
+          "downlink_hz": 435290000,
+          "invert": false,
+          "mode": "GMSK USP",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "GMSK USP"
+      ],
+      "name": "MONITOR-4 (RS57S)",
+      "norad_id": 57182,
+      "tle": {
+        "line1": "1 57182U 23091S   26162.61050625  .00009246  00000+0  34221-3 0  9995",
+        "line2": "2 57182  97.5085 225.9867 0013088 118.2806 241.9756 15.27819052163446"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 4800.0,
+          "description": "Mode U - GMSK 4k8 (USP FEC) TLM",
+          "downlink_hz": 436080000,
+          "invert": false,
+          "mode": "GMSK USP",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 2400.0,
+          "description": "Mode U - GMSK 2k4 (USP FEC) TLM",
+          "downlink_hz": 436080000,
+          "invert": false,
+          "mode": "GMSK USP",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - GMSK 9k6 (USP FEC)",
+          "downlink_hz": 436080000,
+          "invert": false,
+          "mode": "GMSK USP",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "CW",
+        "DOKA"
+      ],
+      "name": "MOZHAETS 4 (RS22)",
+      "norad_id": 27939,
+      "tle": {
+        "line1": "1 27939U 03042A   26162.64905005  .00001068  00000+0  17278-3 0  9997",
+        "line2": "2 27939  98.3474 346.8520 0010038 289.4379 160.3055 14.73458673214734"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 0.0,
+          "description": "Mode U CW Beacon",
+          "downlink_hz": 435352000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "PE0SAT - CW Beacon",
+          "downlink_hz": 435352800,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "Mode U FM Doka",
+          "downlink_hz": 435353000,
+          "invert": false,
+          "mode": "DOKA",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "AFSK"
+      ],
+      "name": "O/OREOS (USA 219)",
+      "norad_id": 37224,
+      "tle": {
+        "line1": "1 37224U 10062C   26162.50369234  .00002078  00000+0  20189-3 0  9995",
+        "line2": "2 37224  71.9708  93.2127 0012427  75.4673 284.7875 14.93720190115794"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "AFSK Beacon",
+          "downlink_hz": 437305000,
+          "invert": false,
+          "mode": "AFSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "FM",
+        "AFSK"
+      ],
+      "name": "OOV-CUBE (TUBSAT-30)",
+      "norad_id": 60240,
+      "tle": {
+        "line1": "1 60240U 24128F   26162.59923855  .00001977  00000+0  15980-3 0  9991",
+        "line2": "2 60240  61.9950 245.0577 0045327 132.4986 227.9949 15.02751187105272"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "description": "Mode S - Transmitter",
+          "downlink_hz": 2263000000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "Mode U - AFSK1k2",
+          "downlink_hz": 435950000,
+          "invert": false,
+          "mode": "AFSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "CW",
+        "USB"
+      ],
+      "name": "OSCAR 7 (AO-7)",
+      "norad_id": 7530,
+      "tle": {
+        "line1": "1 07530U 74089B   26162.57255253 -.00000028  00000+0  11348-3 0  9994",
+        "line2": "2 07530 101.9901 175.7606 0012512 140.5736 350.4172 12.53697991359817"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 0.0,
+          "description": "Mode U TLM Beacon",
+          "downlink_hz": 435100000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 0.0,
+          "description": "Mode U/V (B) TLM Beacon",
+          "downlink_hz": 145977500,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode V/A (A) Lin SSB",
+          "downlink_hz": 29400000,
+          "invert": false,
+          "mode": "USB",
+          "status": "active",
+          "type": "Transponder",
+          "uplink_hz": 145850000
+        },
+        {
+          "alive": true,
+          "baud": 0.0,
+          "description": "Mode V/A (A) Lin CW",
+          "downlink_hz": 29400000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transponder",
+          "uplink_hz": 145850000
+        },
+        {
+          "alive": true,
+          "baud": 0.0,
+          "description": "Mode U/V (B) Lin",
+          "downlink_hz": 145925000,
+          "invert": true,
+          "mode": "USB",
+          "status": "active",
+          "type": "Transponder",
+          "uplink_hz": 432125000
+        },
+        {
+          "alive": true,
+          "description": "Mode V/A (A) TLM Beacon",
+          "downlink_hz": 29502000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "13 cm Beacon (40mW)",
+          "downlink_hz": 2304100000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "AFSK"
+      ],
+      "name": "PCSAT (NO-44)",
+      "norad_id": 26931,
+      "tle": {
+        "line1": "1 26931U 01043C   26162.57168052  .00000071  00000+0  57447-4 0  9998",
+        "line2": "2 26931  67.0509 258.7958 0006101 264.4159  95.6247 14.31954128289643"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "Mode V/V APRS AFSK",
+          "downlink_hz": 145825000,
+          "invert": true,
+          "mode": "AFSK",
+          "status": "active",
+          "type": "Transceiver",
+          "uplink_hz": 145825000
+        },
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "PE0SAT - 1k2 AFSK APRS",
+          "downlink_hz": 145826800,
+          "invert": false,
+          "mode": "AFSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "Mode V - R2 Backup APRS 1K2",
+          "downlink_hz": 144390000,
+          "invert": false,
+          "mode": "AFSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "CW",
+        "LSB"
+      ],
+      "name": "PHASE 3B (AO-10)",
+      "norad_id": 14129,
+      "tle": {
+        "line1": "1 14129U 83058B   26158.17238870 -.00000194  00000+0  00000+0 0  9992",
+        "line2": "2 14129  25.9048 221.2242 6014266 112.9115 319.2048  2.05872980295281"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "description": "Engineering Beacon",
+          "downlink_hz": 145987000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Beacon (unmodulated carrier)",
+          "downlink_hz": 145810000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": false,
+          "description": "Mode-B Transponder",
+          "downlink_hz": 145825000,
+          "invert": true,
+          "mode": "LSB",
+          "status": "inactive",
+          "type": "Transponder",
+          "uplink_hz": 435030000
+        }
+      ]
+    },
+    {
+      "modes": [
+        "LoRa",
+        "FSK"
+      ],
+      "name": "POLYTECH-UNIVERSE 3 (R*)",
+      "norad_id": 57191,
+      "tle": {
+        "line1": "1 57191U 23091AB  26162.60910059  .00004651  00000+0  22442-3 0  9997",
+        "line2": "2 57191  97.5055 220.4325 0016539 144.6551 215.5783 15.19059773163103"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 62500.0,
+          "description": "Mode U - LoRa 62.5k",
+          "downlink_hz": 436550000,
+          "invert": false,
+          "mode": "LoRa",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 38400.0,
+          "description": "[Experiment] LoRa (62.5 kHz bandwidth) (as FSK)",
+          "downlink_hz": 436550000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "BPSK",
+        "USB",
+        "CW"
+      ],
+      "name": "QB50P1",
+      "norad_id": 40025,
+      "tle": {
+        "line1": "1 40025U 14033R   26162.54789999  .00007133  00000+0  35252-3 0  9992",
+        "line2": "2 40025  98.0966 173.2987 0007301 237.3952 122.6576 15.18175616652171"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "BPSK Telemetry",
+          "downlink_hz": 145815000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "PE0SAT - 1k2 BPSK TLM",
+          "downlink_hz": 145813660,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Linear Transponder",
+          "downlink_hz": 145935000,
+          "invert": true,
+          "mode": "USB",
+          "status": "active",
+          "type": "Transponder",
+          "uplink_hz": 435047000
+        },
+        {
+          "alive": true,
+          "baud": 15.0,
+          "description": "CW Beacon",
+          "downlink_hz": 145880000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "DUV",
+        "FM"
+      ],
+      "name": "RADFXSAT (FOX-1B)",
+      "norad_id": 43017,
+      "tle": {
+        "line1": "1 43017U 17073E   26162.58534501  .00008698  00000+0  38005-3 0  9990",
+        "line2": "2 43017  97.4718  29.9151 0150450 348.6412  11.1435 15.12626564464549"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 200.0,
+          "description": "DUV TLM",
+          "downlink_hz": 145960000,
+          "invert": false,
+          "mode": "DUV",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode U/V FM Voice CTCSS 67.0Hz",
+          "downlink_hz": 145960000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transceiver",
+          "uplink_hz": 435250000
+        }
+      ]
+    },
+    {
+      "modes": [
+        "USB",
+        "CW"
+      ],
+      "name": "RADIO ROSTO (RS15)",
+      "norad_id": 23439,
+      "tle": {
+        "line1": "1 23439U 94085A   26162.61725759 -.00000047  00000+0 -12786-3 0  9995",
+        "line2": "2 23439  64.8187 312.2244 0155772   4.9062 355.3347 11.27583612295274"
+      },
+      "transmitters": [
+        {
+          "alive": false,
+          "description": "V/T (Mode A) Transponder",
+          "downlink_hz": 29354000,
+          "invert": false,
+          "mode": "USB",
+          "status": "inactive",
+          "type": "Transponder",
+          "uplink_hz": 145858000
+        },
+        {
+          "alive": true,
+          "baud": 0.0,
+          "description": "Mode T TLM 1",
+          "downlink_hz": 29352500,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": false,
+          "description": "Mode T TLM 2",
+          "downlink_hz": 29398700,
+          "invert": false,
+          "mode": "CW",
+          "status": "inactive",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "CW",
+        "FSK",
+        "USB",
+        "DOKA",
+        "BPSK"
+      ],
+      "name": "RS-44 & BREEZE-KM R/B",
+      "norad_id": 44909,
+      "tle": {
+        "line1": "1 44909U 19096E   26162.61066808  .00000028  00000+0  60927-4 0  9990",
+        "line2": "2 44909  82.5217 343.4113 0217927 157.1662 203.9312 12.79748751301632"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "description": "Mode U - Beacon",
+          "downlink_hz": 435605000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode U",
+          "downlink_hz": 435315000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode V/U - Transponder",
+          "downlink_hz": 435610000,
+          "invert": true,
+          "mode": "USB",
+          "status": "active",
+          "type": "Transponder",
+          "uplink_hz": 145935000
+        },
+        {
+          "alive": true,
+          "baud": 4800.0,
+          "description": "Doka-B",
+          "downlink_hz": 435215000,
+          "invert": false,
+          "mode": "DOKA",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 19200.0,
+          "description": "Mode U Audio",
+          "downlink_hz": 435660000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "CW",
+        "SSTV",
+        "QPSK",
+        "GFSK"
+      ],
+      "name": "RTU MIREA 1 (RS51S)",
+      "norad_id": 61785,
+      "tle": {
+        "line1": "1 61785U 24199BC  26162.63457607  .00053301  00000+0  64566-3 0  9998",
+        "line2": "2 61785  97.2953  39.1968 0005522 298.0744  61.9955 15.60483499133605"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "description": "Mode U - CW Beacon",
+          "downlink_hz": 436200000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": false,
+          "description": "Mode U - SSTV",
+          "downlink_hz": 436200000,
+          "invert": false,
+          "mode": "SSTV",
+          "status": "inactive",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 1000000.0,
+          "description": "Mode X - DVB-S2",
+          "downlink_hz": 10473000000,
+          "invert": false,
+          "mode": "QPSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - GFSK9k6 - AX.25 Beacon and Telemetry (Geoscan framing)",
+          "downlink_hz": 436200000,
+          "invert": false,
+          "mode": "GFSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "AFSK TUBiX10",
+        "BPSK"
+      ],
+      "name": "SALSAT",
+      "norad_id": 46495,
+      "tle": {
+        "line1": "1 46495U 20068K   26162.58556221  .00006923  00000+0  24314-3 0  9991",
+        "line2": "2 46495  97.8849 165.3093 0008525 331.4069  28.6701 15.29719030314502"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "AFSK 1k2 TLM",
+          "downlink_hz": 435950000,
+          "invert": false,
+          "mode": "AFSK TUBiX10",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "BPSK",
+          "downlink_hz": 2266000000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "FSK"
+      ],
+      "name": "SAMSAT-IONOSPHERE (RS7*)",
+      "norad_id": 61784,
+      "tle": {
+        "line1": "1 61784U 24199BB  26162.59796638  .00042844  00000+0  58945-3 0  9996",
+        "line2": "2 61784  97.2962  38.3559 0006048 306.0953  53.9742 15.57138226136695"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "FSK1k2 - AX.25 Beacon",
+          "downlink_hz": 437400000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "FM"
+      ],
+      "name": "SAUDISAT 1C (SO-50)",
+      "norad_id": 27607,
+      "tle": {
+        "line1": "1 27607U 02058C   26162.55839360  .00000916  00000+0  12536-3 0  9998",
+        "line2": "2 27607  64.5506 146.4007 0075403 263.5157  95.7360 14.83034770263626"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 0.0,
+          "description": "Mode V/U FM Voice CTCSS 67.0 Hz",
+          "downlink_hz": 436795000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transceiver",
+          "uplink_hz": 145850000
+        },
+        {
+          "alive": true,
+          "baud": 44000.0,
+          "description": "Mode V TLM",
+          "downlink_hz": 149025000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "FMN",
+        "CW",
+        "AFSK",
+        "SSTV"
+      ],
+      "name": "SEEDS II (CO-66)",
+      "norad_id": 32791,
+      "tle": {
+        "line1": "1 32791U 08021J   26162.25964504  .00015274  00000+0  48820-3 0  9998",
+        "line2": "2 32791  97.7517 159.8749 0001967  23.1856 336.9473 15.32546772986382"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 0.0,
+          "description": "Mode U Digi",
+          "downlink_hz": 437485000,
+          "invert": false,
+          "mode": "FMN",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "PE0SAT - CW Beacon",
+          "downlink_hz": 437485700,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "Mode U TLM",
+          "downlink_hz": 437485000,
+          "invert": false,
+          "mode": "AFSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 18.0,
+          "description": "CW",
+          "downlink_hz": 437485000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode U SSTV",
+          "downlink_hz": 437485000,
+          "invert": false,
+          "mode": "SSTV",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "GMSK USP"
+      ],
+      "name": "SIT-2086",
+      "norad_id": 61764,
+      "tle": {
+        "line1": "1 61764U 24199AF  26162.59038330  .00034146  00000+0  55336-3 0  9999",
+        "line2": "2 61764  97.2948  38.8176 0004357 282.3912  77.6854 15.52701713133561"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 2400.0,
+          "description": "Mode U - GMSK2k4 USP",
+          "downlink_hz": 401030000,
+          "invert": false,
+          "mode": "GMSK USP",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "CW",
+        "GMSK",
+        "SSTV",
+        "AFSK",
+        "QPSK"
+      ],
+      "name": "SONATE-2",
+      "norad_id": 59112,
+      "tle": {
+        "line1": "1 59112U 24043Q   26162.35976318  .00032247  00000+0  42602-3 0  9994",
+        "line2": "2 59112  97.5520 312.4010 0006796 215.3687 144.7119 15.58280489126982"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "description": "Mode V - CW",
+          "downlink_hz": 145840000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - GMSK9k6 - AX.25 G3RUH - Telemetry",
+          "downlink_hz": 437025000,
+          "invert": false,
+          "mode": "GMSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode V - SSTV - Martin M1 SSTV",
+          "downlink_hz": 145880000,
+          "invert": false,
+          "mode": "SSTV",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "Mode V/V - APRS digipeater",
+          "downlink_hz": 145825000,
+          "invert": false,
+          "mode": "AFSK",
+          "status": "active",
+          "type": "Transceiver",
+          "uplink_hz": 145825000
+        },
+        {
+          "alive": true,
+          "baud": 2048000.0,
+          "description": "Mode S - QPSK 2.048 Msps - CCSDS 131.0-B Convolutional code k=7, r=0.5, randomizer on",
+          "downlink_hz": 2267700000,
+          "invert": false,
+          "mode": "QPSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "CW"
+      ],
+      "name": "SRMSAT",
+      "norad_id": 37841,
+      "tle": {
+        "line1": "1 37841U 11058D   26162.51581193  .00000355  00000+0  48954-4 0  9994",
+        "line2": "2 37841  19.9715  93.7945 0011909 141.4141  27.1536 14.11574372757019"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "description": "CW Beacon",
+          "downlink_hz": 437425000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "FSK"
+      ],
+      "name": "STRAND-1",
+      "norad_id": 39090,
+      "tle": {
+        "line1": "1 39090U 13009E   26162.48626012  .00000258  00000+0  10129-3 0  9990",
+        "line2": "2 39090  98.3921 342.8611 0007503 244.6927 115.3483 14.37160014696248"
+      },
+      "transmitters": [
+        {
+          "alive": false,
+          "baud": 9600.0,
+          "description": "UHF 9k6 FSK TLM",
+          "downlink_hz": 437568000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "inactive",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "GMSK USP",
+        "GMSK"
+      ],
+      "name": "SVYATOBOR 1 (RS60S)",
+      "norad_id": 57187,
+      "tle": {
+        "line1": "1 57187U 23091X   26162.61883659  .00008095  00000+0  31225-3 0  9993",
+        "line2": "2 57187  97.5097 226.4050 0010915 111.0802 249.1605 15.26519253163461"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 2400.0,
+          "description": "Mode U - GMSK 2k4 (USP FEC) TLM",
+          "downlink_hz": 437875000,
+          "invert": false,
+          "mode": "GMSK USP",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 4800.0,
+          "description": "Mode U - GMSK 4k8 (USP FEC) TLM",
+          "downlink_hz": 437875000,
+          "invert": false,
+          "mode": "GMSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "CW",
+        "AFSK",
+        "BPSK"
+      ],
+      "name": "SWISSCUBE",
+      "norad_id": 35932,
+      "tle": {
+        "line1": "1 35932U 09051B   26162.21632553  .00000804  00000+0  16844-3 0  9998",
+        "line2": "2 35932  98.4041  70.0006 0005629 224.4191 135.6559 14.62470076888283"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 0.0,
+          "description": "CW Beacon",
+          "downlink_hz": 437505000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "FSK 1k2 Beacon",
+          "downlink_hz": 437505000,
+          "invert": false,
+          "mode": "AFSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "PE0SAT - CW Beacon",
+          "downlink_hz": 437500700,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "PE0SAT - 1k2 BPSK AFSK Tones",
+          "downlink_hz": 437500000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "FSK"
+      ],
+      "name": "TECHSAT 1B (GO-32)",
+      "norad_id": 25397,
+      "tle": {
+        "line1": "1 25397U 98043D   26162.58543430  .00000048  00000+0  41012-4 0  9992",
+        "line2": "2 25397  99.0065 155.2028 0000733 176.4907 183.6276 14.24427354450533"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U 9k6 FSK",
+          "downlink_hz": 435225000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U 9k6 FSK",
+          "downlink_hz": 435325000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": false,
+          "baud": 9600.0,
+          "description": "Mode V/U APRS,BBS 9K6 FSK",
+          "downlink_hz": 435225000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "inactive",
+          "type": "Transceiver",
+          "uplink_hz": 145930000
+        },
+        {
+          "alive": false,
+          "baud": 9600.0,
+          "description": "Mode V/U APRS 9K6 FSK",
+          "downlink_hz": 435225000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "inactive",
+          "type": "Transceiver",
+          "uplink_hz": 145850000
+        },
+        {
+          "alive": false,
+          "baud": 9600.0,
+          "description": "Mode V/U BBS 9k6 FSK",
+          "downlink_hz": 435225000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "inactive",
+          "type": "Transceiver",
+          "uplink_hz": 145890000
+        },
+        {
+          "alive": false,
+          "baud": 9600.0,
+          "description": "Mode L/U 9K6 FSK",
+          "downlink_hz": 435225000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "inactive",
+          "type": "Transceiver",
+          "uplink_hz": 1269900000
+        },
+        {
+          "alive": false,
+          "baud": 9600.0,
+          "description": "Mode L/U 9K6 FSK",
+          "downlink_hz": 435225000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "inactive",
+          "type": "Transceiver",
+          "uplink_hz": 1269800000
+        },
+        {
+          "alive": false,
+          "baud": 9600.0,
+          "description": "Mode L/U 9K6 FSK",
+          "downlink_hz": 435225000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "inactive",
+          "type": "Transceiver",
+          "uplink_hz": 1269700000
+        }
+      ]
+    },
+    {
+      "modes": [
+        "BPSK",
+        "FM"
+      ],
+      "name": "TEVEL2-1",
+      "norad_id": 63217,
+      "tle": {
+        "line1": "1 63217U 25052H   26162.63338451  .00016584  00000+0  51094-3 0  9998",
+        "line2": "2 63217  97.3895  58.5815 0004483 123.9647 236.2022 15.33683699 69246"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - BPSK9k6 G3RUH - Beacon",
+          "downlink_hz": 436400000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode V/U - FM Transponder",
+          "downlink_hz": 436400000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transceiver",
+          "uplink_hz": 145970000
+        }
+      ]
+    },
+    {
+      "modes": [
+        "BPSK",
+        "FM"
+      ],
+      "name": "TEVEL2-2",
+      "norad_id": 63219,
+      "tle": {
+        "line1": "1 63219U 25052K   26162.63372872  .00016607  00000+0  51153-3 0  9997",
+        "line2": "2 63219  97.3892  58.5842 0004437 124.7997 235.3664 15.33691849 69249"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - BPSK9k6 G3RUH",
+          "downlink_hz": 436400000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode V/U - FM Transponder - Beacon",
+          "downlink_hz": 436400000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transceiver",
+          "uplink_hz": 145970000
+        }
+      ]
+    },
+    {
+      "modes": [
+        "BPSK",
+        "FM"
+      ],
+      "name": "TEVEL2-3",
+      "norad_id": 63218,
+      "tle": {
+        "line1": "1 63218U 25052J   26162.62822595  .00016887  00000+0  51936-3 0  9996",
+        "line2": "2 63218  97.3891  58.5978 0004480 124.2952 235.8715 15.33736393 69247"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - BPSK9k6 G3RUH - Beacon",
+          "downlink_hz": 436400000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode V/U - FM Transponder",
+          "downlink_hz": 436400000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transceiver",
+          "uplink_hz": 145970000
+        }
+      ]
+    },
+    {
+      "modes": [
+        "BPSK",
+        "FM"
+      ],
+      "name": "TEVEL2-4",
+      "norad_id": 63213,
+      "tle": {
+        "line1": "1 63213U 25052D   26162.18292589  .00015571  00000+0  46925-3 0  9997",
+        "line2": "2 63213  97.3916  58.5659 0004699 114.3674 245.8060 15.34397986 69199"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - BPSK9k6 G3RUH - Beacon",
+          "downlink_hz": 436400000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode V/U - FM Transponder",
+          "downlink_hz": 436400000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transceiver",
+          "uplink_hz": 145970000
+        }
+      ]
+    },
+    {
+      "modes": [
+        "BPSK",
+        "FM"
+      ],
+      "name": "TEVEL2-5",
+      "norad_id": 63214,
+      "tle": {
+        "line1": "1 63214U 25052E   26162.20275645  .00015444  00000+0  46795-3 0  9999",
+        "line2": "2 63214  97.3918  58.5347 0004587 115.8505 244.3212 15.34228834 69199"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - BPSK9k6 G3RUH - Beacon",
+          "downlink_hz": 436400000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode V/U - FM Transponder",
+          "downlink_hz": 436400000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transceiver",
+          "uplink_hz": 145970000
+        }
+      ]
+    },
+    {
+      "modes": [
+        "BPSK",
+        "FM"
+      ],
+      "name": "TEVEL2-6",
+      "norad_id": 63215,
+      "tle": {
+        "line1": "1 63215U 25052F   26162.21494849  .00015699  00000+0  47618-3 0  9997",
+        "line2": "2 63215  97.3920  58.5314 0004506 115.9282 244.2426 15.34192620 69190"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - BPSK9k6 G3RUH - Beacon",
+          "downlink_hz": 436400000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode V/U - FM Transponder",
+          "downlink_hz": 436400000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transceiver",
+          "uplink_hz": 145970000
+        }
+      ]
+    },
+    {
+      "modes": [
+        "BPSK",
+        "FM"
+      ],
+      "name": "TEVEL2-7",
+      "norad_id": 63238,
+      "tle": {
+        "line1": "1 63238U 25052AE  26161.99043871  .00014830  00000+0  49055-3 0  9994",
+        "line2": "2 63238  97.3955  57.2476 0007322 148.6596 211.5083 15.31416691 69075"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - BPSK9k6 G3RUH - Beacon",
+          "downlink_hz": 436400000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode V/U - FM Transponder",
+          "downlink_hz": 436400000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transceiver",
+          "uplink_hz": 145970000
+        }
+      ]
+    },
+    {
+      "modes": [
+        "BPSK",
+        "FM"
+      ],
+      "name": "TEVEL2-8",
+      "norad_id": 63239,
+      "tle": {
+        "line1": "1 63239U 25052AF  26162.45601756  .00013401  00000+0  44363-3 0  9999",
+        "line2": "2 63239  97.3954  57.6893 0007387 147.9653 212.2039 15.31412987 69140"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - BPSK9k6 G3RUH",
+          "downlink_hz": 436400000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode V/U - FM Transponder - Beacon",
+          "downlink_hz": 436400000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transceiver",
+          "uplink_hz": 145970000
+        }
+      ]
+    },
+    {
+      "modes": [
+        "BPSK",
+        "FM"
+      ],
+      "name": "TEVEL2-9",
+      "norad_id": 63237,
+      "tle": {
+        "line1": "1 63237U 25052AD  26162.60400314  .00015538  00000+0  50886-3 0  9991",
+        "line2": "2 63237  97.3954  57.9412 0007282 146.0799 214.0909 15.31727154 69177"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - BPSK9k6 G3RUH - Beacon",
+          "downlink_hz": 436400000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode V/U - FM Transponder",
+          "downlink_hz": 436400000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transceiver",
+          "uplink_hz": 145970000
+        }
+      ]
+    },
+    {
+      "modes": [
+        "CW",
+        "GMSK",
+        "USB",
+        "FM"
+      ],
+      "name": "TIANYAN 01",
+      "norad_id": 44881,
+      "tle": {
+        "line1": "1 44881U 19093C   26162.59241333  .00000206  00000+0  29312-4 0  9992",
+        "line2": "2 44881  97.7532 234.9609 0014991 103.3135 256.9754 14.86509128350586"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "description": "Mode V CW TLM",
+          "downlink_hz": 145910000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 4800.0,
+          "description": "Mode V GMSK4k8 AX.25 TLM",
+          "downlink_hz": 145890000,
+          "invert": false,
+          "mode": "GMSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode U/V Linear Transponder",
+          "downlink_hz": 145915000,
+          "invert": true,
+          "mode": "USB",
+          "status": "active",
+          "type": "Transponder",
+          "uplink_hz": 435270000
+        },
+        {
+          "alive": true,
+          "description": "Transmitter 401.545-401.555",
+          "downlink_hz": 401550000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "S-band telemetry",
+          "downlink_hz": 2278328000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "FSK",
+        "GMSK USP",
+        "BPSK",
+        "SSTV",
+        "CW"
+      ],
+      "name": "UMKA 1 (RS40S)",
+      "norad_id": 57172,
+      "tle": {
+        "line1": "1 57172U 23091G   26162.56693393  .00005903  00000+0  27061-3 0  9993",
+        "line2": "2 57172  97.5058 221.2856 0014010 135.2420 224.9948 15.20752735163158"
+      },
+      "transmitters": [
+        {
+          "alive": false,
+          "baud": 4800.0,
+          "description": "Mode U - GMSK 4k8 (G3RUH) TLM",
+          "downlink_hz": 435825000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "inactive",
+          "type": "Transmitter"
+        },
+        {
+          "alive": false,
+          "baud": 2400.0,
+          "description": "Mode U - GMSK 2k4 (G3RUH) TLM",
+          "downlink_hz": 437625000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "inactive",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - GMSK 9k6 (USP) TLM",
+          "downlink_hz": 437625000,
+          "invert": false,
+          "mode": "GMSK USP",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": false,
+          "baud": 2400.0,
+          "description": "Mode U - GMSK 2k4 (USP) TLM",
+          "downlink_hz": 437625000,
+          "invert": false,
+          "mode": "GMSK USP",
+          "status": "inactive",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode S - BPSK 2Mbps TLM",
+          "downlink_hz": 2402400000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode U - SSTV",
+          "downlink_hz": 437625000,
+          "invert": false,
+          "mode": "SSTV",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 4800.0,
+          "description": "Mode U - GMSK 4k8 (USP) TLM",
+          "downlink_hz": 437625000,
+          "invert": false,
+          "mode": "GMSK USP",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode U - CW",
+          "downlink_hz": 437625000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "FSK"
+      ],
+      "name": "UNISAT-6",
+      "norad_id": 40012,
+      "tle": {
+        "line1": "1 40012U 14033C   26162.41830894  .00002346  00000+0  25525-3 0  9998",
+        "line2": "2 40012  97.7868 315.2326 0046407  87.7879 272.8650 14.88214275645303"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "9k6 FSK TLM",
+          "downlink_hz": 437421500,
+          "invert": false,
+          "mode": "FSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "AFSK",
+        "PSK",
+        "FM"
+      ],
+      "name": "UOSAT 2 (UO-11)",
+      "norad_id": 14781,
+      "tle": {
+        "line1": "1 14781U 84021B   26162.44901040  .00001163  00000+0  12403-3 0  9998",
+        "line2": "2 14781  97.8055 128.0879 0007099 191.8106 168.2947 14.90768900256276"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "1k2 AFSK TLM",
+          "downlink_hz": 145825000,
+          "invert": false,
+          "mode": "AFSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": false,
+          "baud": 1200.0,
+          "description": "1k2 AFSK Payload",
+          "downlink_hz": 435025000,
+          "invert": false,
+          "mode": "AFSK",
+          "status": "inactive",
+          "type": "Transmitter"
+        },
+        {
+          "alive": false,
+          "baud": 4800.0,
+          "description": "4k8 PSK Payload",
+          "downlink_hz": 435025000,
+          "invert": false,
+          "mode": "PSK",
+          "status": "inactive",
+          "type": "Transmitter"
+        },
+        {
+          "alive": false,
+          "description": "FM Beacon",
+          "downlink_hz": 2401500000,
+          "invert": false,
+          "mode": "FM",
+          "status": "inactive",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "GMSK USP",
+        "SSTV"
+      ],
+      "name": "UTMN 2 (RS27S)",
+      "norad_id": 57203,
+      "tle": {
+        "line1": "1 57203U 23091AP  26162.57419844  .00012120  00000+0  39520-3 0  9998",
+        "line2": "2 57203  97.5095 229.7177 0009467 100.4479 259.7829 15.31913208163689"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 4800.0,
+          "description": "Mode U - GMSK 4k8 (USP FEC) TLM",
+          "downlink_hz": 436125000,
+          "invert": false,
+          "mode": "GMSK USP",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 2400.0,
+          "description": "Mode U - GMSK 2k4 (USP FEC) TLM",
+          "downlink_hz": 436125000,
+          "invert": false,
+          "mode": "GMSK USP",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - GMSK 9k6 (USP FEC) TLM",
+          "downlink_hz": 435680000,
+          "invert": false,
+          "mode": "GMSK USP",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "Mode U - Robot 36 SSTV",
+          "downlink_hz": 436125000,
+          "invert": false,
+          "mode": "SSTV",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "FSK"
+      ],
+      "name": "UWE-3",
+      "norad_id": 39446,
+      "tle": {
+        "line1": "1 39446U 13066AG  26162.40047069  .00003579  00000+0  30929-3 0  9998",
+        "line2": "2 39446  97.8684 118.4353 0048487 340.4805  19.4558 14.96977019676712"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "PE0SAT - 9k6 FSK TLM",
+          "downlink_hz": 437384000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Transmitter",
+          "downlink_hz": 436395000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "9k6 FSK TLM",
+          "downlink_hz": 437385000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "FSK"
+      ],
+      "name": "UWE-4",
+      "norad_id": 43880,
+      "tle": {
+        "line1": "1 43880U 18111E   26162.06603225  .00030336  00000+0  62723-3 0  9993",
+        "line2": "2 43880  97.5852  90.1763 0006666   7.8986 352.2366 15.45743461409830"
+      },
+      "transmitters": [
+        {
+          "alive": false,
+          "baud": 9600.0,
+          "description": "FSK9k6 AX.25 TLM - 16K0F2D",
+          "downlink_hz": 437385000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "inactive",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "Mode U - FSK 9600 AX.25",
+          "downlink_hz": 435600000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "GMSK USP",
+        "SSTV"
+      ],
+      "name": "VIZARD-METEO (RS38S)",
+      "norad_id": 57189,
+      "tle": {
+        "line1": "1 57189U 23091Z   26162.60998090  .00016228  00000+0  46662-3 0  9998",
+        "line2": "2 57189  97.5099 231.9837 0008561  94.3546 265.8675 15.35847716163832"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 2400.0,
+          "description": "Mode U - GMSK 2k4 (USP FEC) TLM",
+          "downlink_hz": 437825000,
+          "invert": false,
+          "mode": "GMSK USP",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "SSTV - Robot 72",
+          "downlink_hz": 437825000,
+          "invert": false,
+          "mode": "SSTV",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "CW",
+        "FM",
+        "FMN",
+        "AFSK"
+      ],
+      "name": "XIWANG-1 (HOPE-1)",
+      "norad_id": 36122,
+      "tle": {
+        "line1": "1 36122U 09072B   26162.61994775  .00000062  00000+0  27801-3 0  9995",
+        "line2": "2 36122 100.4019 116.5407 0006818 245.3430 114.6973 13.16438940792276"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 15.0,
+          "description": "CW Beacon",
+          "downlink_hz": 435791000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 0.0,
+          "description": "Mode V/U FM",
+          "downlink_hz": 435675000,
+          "invert": true,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transceiver",
+          "uplink_hz": 145825000
+        },
+        {
+          "alive": false,
+          "baud": 0.0,
+          "description": "Mode V/U Linear",
+          "downlink_hz": 435715000,
+          "invert": true,
+          "mode": "FMN",
+          "status": "inactive",
+          "type": "Transponder",
+          "uplink_hz": 145925000
+        },
+        {
+          "alive": false,
+          "baud": 1200.0,
+          "description": "Mode V/U BBS AFSK",
+          "downlink_hz": 435675000,
+          "invert": false,
+          "mode": "AFSK",
+          "status": "inactive",
+          "type": "Transceiver",
+          "uplink_hz": 145825000
+        }
+      ]
+    },
+    {
+      "modes": [
+        "CW",
+        "GMSK",
+        "BPSK",
+        "USB"
+      ],
+      "name": "XW-3 (CAS-9)",
+      "norad_id": 50466,
+      "tle": {
+        "line1": "1 50466U 21131B   26162.63990505  .00000427  00000+0  14539-3 0  9990",
+        "line2": "2 50466  98.4973 255.0596 0005294 109.3206 250.8556 14.41352663234315"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 22.0,
+          "description": "Mode U - Telemetry",
+          "downlink_hz": 435575000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 4800.0,
+          "description": "Mode U - GMSK4k8 AX.25 Telemetry",
+          "downlink_hz": 435725000,
+          "invert": false,
+          "mode": "GMSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 19200.0,
+          "description": "Mode U Audio",
+          "downlink_hz": 435180000,
+          "invert": false,
+          "mode": "BPSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": false,
+          "description": "Mode V/U - Transponder",
+          "downlink_hz": 435165000,
+          "invert": true,
+          "mode": "USB",
+          "status": "inactive",
+          "type": "Transponder",
+          "uplink_hz": 145855000
+        }
+      ]
+    },
+    {
+      "modes": [
+        "CW",
+        "PSK",
+        "DOKA",
+        "FM"
+      ],
+      "name": "YUBILEINY (RS30)",
+      "norad_id": 32953,
+      "tle": {
+        "line1": "1 32953U 08025A   26162.62595572  .00000010  00000+0 -20386-5 0  9990",
+        "line2": "2 32953  82.5049 358.9006 0019083 326.4437  33.5433 12.43178834819003"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "description": "PE0SAT - CW Beacon",
+          "downlink_hz": 435315700,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 2500.0,
+          "description": "Telemetry Beacon 1 Beacon",
+          "downlink_hz": 435215000,
+          "invert": false,
+          "mode": "PSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 2500.0,
+          "description": "Telemetry Beacon 2 Beacon",
+          "downlink_hz": 435315000,
+          "invert": false,
+          "mode": "DOKA",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "description": "435.353",
+          "downlink_hz": 435353000,
+          "invert": false,
+          "mode": "FM",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    },
+    {
+      "modes": [
+        "FSK",
+        "CW"
+      ],
+      "name": "ZACUBE-1 (TSHEPISOSAT)",
+      "norad_id": 39417,
+      "tle": {
+        "line1": "1 39417U 13066B   26162.47489694  .00002775  00000+0  21784-3 0  9993",
+        "line2": "2 39417  97.8085 124.7807 0040210 267.7109  91.9510 15.01152948679879"
+      },
+      "transmitters": [
+        {
+          "alive": true,
+          "baud": 1200.0,
+          "description": "FSK1k2 TLM",
+          "downlink_hz": 437356000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 9600.0,
+          "description": "FSK9K6 TLM",
+          "downlink_hz": 437356000,
+          "invert": false,
+          "mode": "FSK",
+          "status": "active",
+          "type": "Transmitter"
+        },
+        {
+          "alive": true,
+          "baud": 22.0,
+          "description": "14.099 MHz CW Beacon",
+          "downlink_hz": 14099000,
+          "invert": false,
+          "mode": "CW",
+          "status": "active",
+          "type": "Transmitter"
+        }
+      ]
+    }
+  ],
+  "sources": {
+    "celestrak_amateur_tle": "https://celestrak.org/NORAD/elements/gp.php?GROUP=amateur&FORMAT=tle",
+    "satnogs_transmitters": "https://db.satnogs.org/api/transmitters/"
+  },
+  "updated_utc": "2026-06-11T20:04:58Z",
+  "version": 1
 }

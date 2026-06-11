@@ -110,6 +110,16 @@
       text-align: center;
     }
 
+    .meta {
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 10px;
+    }
+
+    .freq {
+      white-space: nowrap;
+    }
+
     @media (max-width: 760px) {
       main {
         grid-template-columns: 1fr;
@@ -150,16 +160,18 @@
 
     <section>
       <h2>Satellite Catalog</h2>
+      <div id="catalogMeta" class="meta">Loading catalog...</div>
       <table>
         <thead>
           <tr>
             <th>Name</th>
             <th>NORAD</th>
+            <th>Downlinks</th>
             <th>Modes</th>
           </tr>
         </thead>
         <tbody id="satellites">
-          <tr><td colspan="3" class="empty">Loading...</td></tr>
+          <tr><td colspan="4" class="empty">Loading...</td></tr>
         </tbody>
       </table>
     </section>
@@ -182,6 +194,24 @@
         dd.textContent = value ?? "";
         node.append(dt, dd);
       }
+    }
+
+    function formatHz(hz) {
+      if (!Number.isFinite(Number(hz))) return "";
+      return `${(Number(hz) / 1000000).toFixed(3)} MHz`;
+    }
+
+    function summarizeDownlinks(sat) {
+      const seen = new Set();
+      const rows = [];
+      for (const tx of sat.transmitters || []) {
+        if (!tx.downlink_hz) continue;
+        const label = formatHz(tx.downlink_hz);
+        if (seen.has(label)) continue;
+        seen.add(label);
+        rows.push(label);
+      }
+      return rows.slice(0, 4);
     }
 
     async function refresh() {
@@ -209,18 +239,26 @@
 
       const tbody = document.getElementById("satellites");
       const satellites = catalog.satellites || [];
+      const meta = catalog.metadata || {};
+      document.getElementById("catalogMeta").textContent =
+        `${meta.satellite_count ?? satellites.length} satellites, ` +
+        `${meta.satellites_with_transmitters ?? 0} with transmitter metadata` +
+        (catalog.updated_utc ? `, updated ${catalog.updated_utc}` : "");
+
       if (!satellites.length) {
-        tbody.innerHTML = '<tr><td colspan="3" class="empty">Catalog is ready for TLE and repeater metadata import.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="4" class="empty">Catalog is ready for TLE and repeater metadata import.</td></tr>';
         return;
       }
 
       tbody.innerHTML = "";
       for (const sat of satellites) {
         const tr = document.createElement("tr");
-        tr.innerHTML = `<td></td><td></td><td></td>`;
+        const downlinks = summarizeDownlinks(sat);
+        tr.innerHTML = `<td></td><td></td><td class="freq"></td><td></td>`;
         tr.children[0].textContent = sat.name || "";
         tr.children[1].textContent = sat.norad_id || "";
-        tr.children[2].textContent = (sat.modes || []).join(", ");
+        tr.children[2].textContent = downlinks.length ? downlinks.join(", ") : "-";
+        tr.children[3].textContent = (sat.modes || []).join(", ") || "-";
         tbody.appendChild(tr);
       }
     }
