@@ -185,6 +185,22 @@
       grid-column: 1 / -1;
     }
 
+    .doppler-table {
+      margin-top: 8px;
+      font-size: 12px;
+    }
+
+    .doppler-table th,
+    .doppler-table td {
+      padding: 5px 6px;
+    }
+
+    .doppler-note {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
     button {
       border: 1px solid var(--accent);
       border-radius: 6px;
@@ -337,6 +353,61 @@
       return `${prefix} ${formatHz(downlink)} ${mode}`.trim();
     }
 
+    function formatOffsetHz(value) {
+      if (!Number.isFinite(value)) return "-";
+      const rounded = Math.round(value);
+      return `${rounded >= 0 ? "+" : ""}${rounded} Hz`;
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function renderDopplerRows(plan) {
+      const points = (plan && plan.points) || [];
+      if (!points.length) {
+        return `<p class="doppler-note">No Doppler schedule for this pass.</p>`;
+      }
+
+      const maxRows = 10;
+      const stride = Math.max(1, Math.ceil(points.length / maxRows));
+      const rows = points
+        .filter((_, index) => index % stride === 0 || index === points.length - 1)
+        .map((point) => `
+          <tr>
+            <td>${escapeHtml(formatTime(point.time_utc))}</td>
+            <td>${escapeHtml(`${point.elevation_deg} deg`)}</td>
+            <td>${escapeHtml(formatHz(point.rx_hz))}</td>
+            <td>${escapeHtml(formatOffsetHz(point.rx_offset_hz))}</td>
+            <td>${escapeHtml(point.tx_hz ? formatHz(point.tx_hz) : "-")}</td>
+            <td>${escapeHtml(point.tx_offset_hz !== undefined ? formatOffsetHz(point.tx_offset_hz) : "-")}</td>
+          </tr>
+        `)
+        .join("");
+
+      return `
+        <table class="doppler-table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>El</th>
+              <th>RX tune</th>
+              <th>RX offset</th>
+              <th>TX tune</th>
+              <th>TX offset</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <p class="doppler-note">Range-rate model. Positive range rate means the satellite is moving away.</p>
+      `;
+    }
+
     function radioHardwareEntries(hardware) {
       return [
         ["Radio profile", hardware.iio_device_name || "-"],
@@ -477,6 +548,10 @@
             <button id="planRadioButton" type="button">Plan Radio Target</button>
             <button id="tuneRadioButton" type="button">Tune Receiver</button>
           </div>
+          <div class="full-width">
+            <h3>Doppler Preview</h3>
+            <div id="dopplerPreview"></div>
+          </div>
         </div>
       `;
 
@@ -519,6 +594,8 @@
           document.getElementById("status").textContent = error.message;
         });
       });
+
+      node.querySelector("#dopplerPreview").innerHTML = renderDopplerRows(pass.doppler_plan);
     }
 
     function renderPasses(payload) {

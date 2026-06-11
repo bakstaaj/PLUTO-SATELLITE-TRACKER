@@ -24,6 +24,7 @@ EARTH_FLATTENING = 1.0 / 298.257223563
 SECONDS_PER_DAY = 86400.0
 PLUTO_MIN_HZ = 70_000_000
 PLUTO_MAX_HZ = 6_000_000_000
+SPEED_OF_LIGHT_KM_S = 299_792.458
 
 
 def utc_now() -> dt.datetime:
@@ -182,6 +183,54 @@ def primary_radio_target(satellite: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
+def build_doppler_plan(samples: list[dict[str, Any]], radio: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not samples or not radio:
+        return None
+
+    downlink = radio.get("downlink_hz")
+    uplink = radio.get("uplink_hz")
+    if not isinstance(downlink, int):
+        return None
+
+    points: list[dict[str, Any]] = []
+    for index, sample in enumerate(samples):
+        if len(samples) == 1:
+            range_rate_km_s = 0.0
+        elif index == 0:
+            dt_s = (samples[1]["time"] - sample["time"]).total_seconds()
+            range_rate_km_s = (samples[1]["range_km"] - sample["range_km"]) / dt_s
+        elif index == len(samples) - 1:
+            dt_s = (sample["time"] - samples[index - 1]["time"]).total_seconds()
+            range_rate_km_s = (sample["range_km"] - samples[index - 1]["range_km"]) / dt_s
+        else:
+            dt_s = (samples[index + 1]["time"] - samples[index - 1]["time"]).total_seconds()
+            range_rate_km_s = (samples[index + 1]["range_km"] - samples[index - 1]["range_km"]) / dt_s
+
+        rx_hz = round(downlink * (1.0 - range_rate_km_s / SPEED_OF_LIGHT_KM_S))
+        point: dict[str, Any] = {
+            "time_utc": iso_utc(sample["time"]),
+            "azimuth_deg": round(float(sample["azimuth_deg"]), 1),
+            "elevation_deg": round(float(sample["elevation_deg"]), 1),
+            "range_km": round(float(sample["range_km"]), 1),
+            "range_rate_km_s": round(range_rate_km_s, 4),
+            "rx_hz": int(rx_hz),
+            "rx_offset_hz": int(rx_hz - downlink),
+        }
+        if isinstance(uplink, int):
+            tx_hz = round(uplink * (1.0 + range_rate_km_s / SPEED_OF_LIGHT_KM_S))
+            point["tx_hz"] = int(tx_hz)
+            point["tx_offset_hz"] = int(tx_hz - uplink)
+        points.append(point)
+
+    return {
+        "model": "range-rate",
+        "range_rate_sign": "positive_when_satellite_recedes",
+        "downlink_hz": downlink,
+        "uplink_hz": uplink if isinstance(uplink, int) else None,
+        "points": points,
+    }
+
+
 def refine_crossing(
     satrec: Satrec,
     lat: float,
@@ -253,12 +302,21 @@ def predict_satellite_passes(
                 "aos_azimuth_deg": az,
                 "los_azimuth_deg": az,
                 "range_at_tca_km": range_km,
+                "samples": [],
             }
             in_pass = True
 
         if visible and in_pass and current is not None:
             current["los_utc"] = when
             current["los_azimuth_deg"] = az
+            current["samples"].append(
+                {
+                    "time": when,
+                    "azimuth_deg": az,
+                    "elevation_deg": el,
+                    "range_km": range_km,
+                }
+            )
             if el > float(current["max_elevation_deg"]):
                 current["max_elevation_deg"] = el
                 current["tca_utc"] = when
@@ -289,6 +347,7 @@ def predict_satellite_passes(
 
 def format_pass(satellite: dict[str, Any], row: dict[str, Any], duration_s: int) -> dict[str, Any]:
     radio = primary_radio_target(satellite)
+    doppler_plan = build_doppler_plan(row.get("samples", []), radio)
     return {
         "norad_id": satellite.get("norad_id"),
         "name": satellite.get("name"),
@@ -303,6 +362,7 @@ def format_pass(satellite: dict[str, Any], row: dict[str, Any], duration_s: int)
         "downlinks_hz": unique_downlinks(satellite)[:6],
         "modes": satellite.get("modes", [])[:8],
         "radio": radio,
+        "doppler_plan": doppler_plan,
     }
 
 
