@@ -185,6 +185,22 @@
       grid-column: 1 / -1;
     }
 
+    button {
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      background: var(--accent);
+      color: #fff;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 650;
+      padding: 8px 10px;
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+    }
+
     @media (max-width: 760px) {
       main {
         grid-template-columns: 1fr;
@@ -225,6 +241,13 @@
       <h2>Storage</h2>
       <dl id="storage">
         <dt>Data</dt><dd>Loading...</dd>
+      </dl>
+    </section>
+
+    <section>
+      <h2>Radio Plan</h2>
+      <dl id="radioStatus">
+        <dt>State</dt><dd>Loading...</dd>
       </dl>
     </section>
 
@@ -314,6 +337,50 @@
       return `${prefix} ${formatHz(downlink)} ${mode}`.trim();
     }
 
+    async function refreshRadioStatus() {
+      const status = await getJson("/api/radio/status");
+      const entries = [
+        ["State", status.state || "idle"]
+      ];
+      if (status.name) entries.push(["Target", status.name]);
+      if (status.downlink_hz) entries.push(["Downlink", formatHz(status.downlink_hz)]);
+      if (status.uplink_hz) entries.push(["Uplink", formatHz(status.uplink_hz)]);
+      if (status.mode) entries.push(["Mode", status.mode]);
+      setDl("radioStatus", entries);
+    }
+
+    async function planRadioTarget(pass, button) {
+      const radio = pass.radio || {};
+      const downlink = radio.downlink_hz || (pass.downlinks_hz || [])[0];
+      if (!downlink) return;
+
+      const params = new URLSearchParams({
+        name: pass.name || "",
+        norad: String(pass.norad_id || ""),
+        aos: pass.aos_utc || "",
+        downlink: String(downlink),
+        mode: radio.mode || (pass.modes || [])[0] || "",
+        description: radio.description || ""
+      });
+      if (radio.uplink_hz) params.set("uplink", String(radio.uplink_hz));
+
+      button.disabled = true;
+      button.textContent = "Planning...";
+      try {
+        await getJson(`/api/radio/plan?${params.toString()}`);
+        button.textContent = "Planned";
+        await refreshRadioStatus();
+      } catch (error) {
+        button.textContent = "Plan failed";
+        throw error;
+      } finally {
+        setTimeout(() => {
+          button.disabled = false;
+          button.textContent = "Plan Radio Target";
+        }, 1200);
+      }
+    }
+
     function renderPassDetail(pass) {
       const node = document.getElementById("passDetail");
       if (!pass) {
@@ -362,6 +429,7 @@
               <dt>Pluto tunable</dt><dd></dd>
               <dt>Description</dt><dd></dd>
             </dl>
+            <button id="planRadioButton" type="button">Plan Radio Target</button>
           </div>
         </div>
       `;
@@ -388,6 +456,14 @@
       ];
       values.forEach((value, index) => {
         dds[index].textContent = value;
+      });
+
+      const button = node.querySelector("#planRadioButton");
+      button.disabled = !radio.downlink_hz;
+      button.addEventListener("click", () => {
+        planRadioTarget(pass, button).catch((error) => {
+          document.getElementById("status").textContent = error.message;
+        });
       });
     }
 
@@ -435,11 +511,12 @@
     }
 
     async function refresh() {
-      const [status, config, catalog, passes] = await Promise.all([
+      const [status, config, catalog, passes, radioStatus] = await Promise.all([
         getJson("/api/status"),
         getJson("/api/config"),
         getJson("/api/satellites"),
-        getJson("/api/passes")
+        getJson("/api/passes"),
+        getJson("/api/radio/status")
       ]);
 
       document.getElementById("status").textContent = status.ok ? "Backend online" : "Backend warning";
@@ -456,6 +533,13 @@
         ["Web", status.web_dir],
         ["Config", status.config_dir],
         ["Data", status.data_dir]
+      ]);
+
+      setDl("radioStatus", [
+        ["State", radioStatus.state || "idle"],
+        ["Target", radioStatus.name || "-"],
+        ["Downlink", radioStatus.downlink_hz ? formatHz(radioStatus.downlink_hz) : "-"],
+        ["Mode", radioStatus.mode || "-"]
       ]);
 
       renderPasses(passes);

@@ -12,6 +12,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <time.h>
+#include <ctype.h>
 #include <unistd.h>
 
 #define APP_VERSION "0.1.0"
@@ -333,7 +334,172 @@ static void send_satellites(int fd, const struct app_config *cfg)
     send_json_file_or_default(fd, path, fallback);
 }
 
-static void handle_request(int fd, const struct app_config *cfg, const char *method, const char *path)
+static int hex_value(char c)
+{
+    if (c >= '0' && c <= '9') {
+        return c - '0';
+    }
+    if (c >= 'a' && c <= 'f') {
+        return c - 'a' + 10;
+    }
+    if (c >= 'A' && c <= 'F') {
+        return c - 'A' + 10;
+    }
+    return -1;
+}
+
+static void url_decode(char *dst, size_t dst_size, const char *src)
+{
+    size_t out = 0;
+    while (*src && out + 1 < dst_size) {
+        if (*src == '%' && isxdigit((unsigned char)src[1]) && isxdigit((unsigned char)src[2])) {
+            int hi = hex_value(src[1]);
+            int lo = hex_value(src[2]);
+            dst[out++] = (char)((hi << 4) | lo);
+            src += 3;
+        } else if (*src == '+') {
+            dst[out++] = ' ';
+            src++;
+        } else {
+            dst[out++] = *src++;
+        }
+    }
+    dst[out] = '\0';
+}
+
+static int query_param(const char *query, const char *name, char *out, size_t out_size)
+{
+    size_t name_len = strlen(name);
+    const char *p = query;
+
+    if (!query || !*query) {
+        return 0;
+    }
+
+    while (*p) {
+        const char *next = strchr(p, '&');
+        size_t len = next ? (size_t)(next - p) : strlen(p);
+        const char *eq = memchr(p, '=', len);
+
+        if (eq && (size_t)(eq - p) == name_len && strncmp(p, name, name_len) == 0) {
+            char encoded[512];
+            size_t value_len = len - (size_t)(eq - p) - 1;
+            if (value_len >= sizeof(encoded)) {
+                value_len = sizeof(encoded) - 1;
+            }
+            memcpy(encoded, eq + 1, value_len);
+            encoded[value_len] = '\0';
+            url_decode(out, out_size, encoded);
+            return 1;
+        }
+
+        if (!next) {
+            break;
+        }
+        p = next + 1;
+    }
+
+    return 0;
+}
+
+static void json_escape(char *dst, size_t dst_size, const char *src)
+{
+    size_t out = 0;
+    while (*src && out + 1 < dst_size) {
+        unsigned char c = (unsigned char)*src++;
+        if ((c == '"' || c == '\\') && out + 2 < dst_size) {
+            dst[out++] = '\\';
+            dst[out++] = (char)c;
+        } else if (c >= 32) {
+            dst[out++] = (char)c;
+        }
+    }
+    dst[out] = '\0';
+}
+
+static void send_radio_plan(int fd, const struct app_config *cfg, const char *query)
+{
+    char name[256] = "";
+    char norad[64] = "";
+    char aos[128] = "";
+    char downlink[64] = "";
+    char uplink[64] = "";
+    char mode[128] = "";
+    char description[512] = "";
+    char name_json[512];
+    char mode_json[256];
+    char description_json[1024];
+    char path[PATH_BUF_SIZE];
+    char tmp_path[PATH_BUF_SIZE + 8];
+    char body[2048];
+    FILE *f;
+    time_t now = time(NULL);
+
+    query_param(query, "name", name, sizeof(name));
+    query_param(query, "norad", norad, sizeof(norad));
+    query_param(query, "aos", aos, sizeof(aos));
+    query_param(query, "downlink", downlink, sizeof(downlink));
+    query_param(query, "uplink", uplink, sizeof(uplink));
+    query_param(query, "mode", mode, sizeof(mode));
+    query_param(query, "description", description, sizeof(description));
+
+    if (!name[0] || !norad[0] || !downlink[0]) {
+        send_text(fd, 400, "Bad Request", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"name, norad, and downlink are required\"}\n");
+        return;
+    }
+
+    json_escape(name_json, sizeof(name_json), name);
+    json_escape(mode_json, sizeof(mode_json), mode);
+    json_escape(description_json, sizeof(description_json), description);
+
+    join_path(path, sizeof(path), cfg->data_dir, "radio_target.json");
+    snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
+
+    f = fopen(tmp_path, "wb");
+    if (!f) {
+        send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"could not write radio target\"}\n");
+        return;
+    }
+
+    fprintf(f,
+            "{\n"
+            "  \"ok\": true,\n"
+            "  \"planned_epoch\": %ld,\n"
+            "  \"name\": \"%s\",\n"
+            "  \"norad_id\": %s,\n"
+            "  \"aos_utc\": \"%s\",\n"
+            "  \"downlink_hz\": %s,\n"
+            "  \"uplink_hz\": %s,\n"
+            "  \"mode\": \"%s\",\n"
+            "  \"description\": \"%s\",\n"
+            "  \"state\": \"planned\"\n"
+            "}\n",
+            (long)now,
+            name_json,
+            norad,
+            aos,
+            downlink,
+            uplink[0] ? uplink : "null",
+            mode_json,
+            description_json);
+    fclose(f);
+
+    if (rename(tmp_path, path) != 0) {
+        unlink(tmp_path);
+        send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"could not publish radio target\"}\n");
+        return;
+    }
+
+    snprintf(body, sizeof(body),
+             "{\"ok\":true,\"state\":\"planned\",\"name\":\"%s\",\"norad_id\":%s,\"downlink_hz\":%s}\n",
+             name_json, norad, downlink);
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
+}
+
+static void handle_request(int fd, const struct app_config *cfg, const char *method, const char *path, const char *query)
 {
     char file_path[PATH_BUF_SIZE];
 
@@ -359,6 +525,12 @@ static void handle_request(int fd, const struct app_config *cfg, const char *met
         join_path(file_path, sizeof(file_path), cfg->data_dir, "passes.json");
         send_json_file_or_default(fd, file_path,
                                   "{\"version\":1,\"passes\":[],\"message\":\"Pass predictions have not been generated yet.\"}\n");
+    } else if (strcmp(path, "/api/radio/status") == 0) {
+        join_path(file_path, sizeof(file_path), cfg->data_dir, "radio_target.json");
+        send_json_file_or_default(fd, file_path,
+                                  "{\"ok\":true,\"state\":\"idle\",\"message\":\"No radio target planned.\"}\n");
+    } else if (strcmp(path, "/api/radio/plan") == 0) {
+        send_radio_plan(fd, cfg, query);
     } else {
         send_text(fd, 404, "Not Found", "application/json; charset=utf-8",
                   "{\"ok\":false,\"error\":\"not found\"}\n");
@@ -370,6 +542,7 @@ static void serve_client(int fd, const struct app_config *cfg)
     char req[REQ_BUF_SIZE];
     char method[16] = "";
     char target[PATH_BUF_SIZE] = "";
+    char query_copy[PATH_BUF_SIZE] = "";
     char *query;
     ssize_t got;
 
@@ -388,6 +561,7 @@ static void serve_client(int fd, const struct app_config *cfg)
     query = strchr(target, '?');
     if (query) {
         *query = '\0';
+        snprintf(query_copy, sizeof(query_copy), "%s", query + 1);
     }
 
     if (cfg->interactive) {
@@ -395,7 +569,7 @@ static void serve_client(int fd, const struct app_config *cfg)
         fflush(stdout);
     }
 
-    handle_request(fd, cfg, method, target);
+    handle_request(fd, cfg, method, target, query_copy);
 }
 
 static int create_server_socket(const struct app_config *cfg)
