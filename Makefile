@@ -1,5 +1,5 @@
 CFLAGS ?= -O2 -g -Wall -Wextra -std=c99
-LDFLAGS ?=
+LDFLAGS ?= -pthread
 LDLIBS ?= -lm
 
 PROGNAME = pluto_sat_tracker

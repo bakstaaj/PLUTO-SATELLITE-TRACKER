@@ -15,6 +15,7 @@
 #include <ctype.h>
 #include <unistd.h>
 #include <limits.h>
+#include <pthread.h>
 
 #define APP_VERSION "0.1.0"
 #define DEFAULT_BIND_ADDR "127.0.0.1"
@@ -29,6 +30,9 @@
 #define PLUTO_MAX_HZ 6000000000LL
 
 static volatile sig_atomic_t g_running = 1;
+static pthread_mutex_t g_track_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_t g_track_thread;
+static int g_track_auto_running = 0;
 
 struct app_config {
     const char *bind_addr;
@@ -917,7 +921,14 @@ static int write_track_state(
     return 1;
 }
 
-static void send_radio_track_step(int fd, const struct app_config *cfg, const char *state)
+static int apply_radio_track_step(
+    const struct app_config *cfg,
+    const char *state,
+    const char *message,
+    char *response,
+    size_t response_size,
+    char *error,
+    size_t error_size)
 {
     char path[PATH_BUF_SIZE];
     char *plan = NULL;
@@ -926,49 +937,86 @@ static void send_radio_track_step(int fd, const struct app_config *cfg, const ch
     char name_json[512];
     char point_time[64] = "";
     char lo_path[PATH_BUF_SIZE] = "";
-    char response[1024];
     long long rx_hz = 0;
     int point_index = -1;
     time_t now = time(NULL);
 
     join_path(path, sizeof(path), cfg->data_dir, "radio_track.json");
     if (read_file_to_string(path, &plan, &plan_len) != 0) {
-        send_text(fd, 404, "Not Found", "application/json; charset=utf-8",
-                  "{\"ok\":false,\"error\":\"no Doppler track plan has been stored\"}\n");
-        return;
+        snprintf(error, error_size, "no Doppler track plan has been stored");
+        return 404;
     }
     (void)plan_len;
 
     json_string_value(plan, "name", name, sizeof(name));
     if (!find_nearest_track_point(plan, (long long)now, &rx_hz, point_time, sizeof(point_time), &point_index)) {
         free(plan);
-        send_text(fd, 400, "Bad Request", "application/json; charset=utf-8",
-                  "{\"ok\":false,\"error\":\"track plan does not contain usable Doppler points\"}\n");
-        return;
+        snprintf(error, error_size, "track plan does not contain usable Doppler points");
+        return 400;
     }
     free(plan);
 
     if (rx_hz < PLUTO_MIN_HZ || rx_hz > PLUTO_MAX_HZ || !write_rx_lo_frequency(rx_hz, lo_path, sizeof(lo_path))) {
-        send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
-                  "{\"ok\":false,\"error\":\"could not tune RX LO for Doppler track point\"}\n");
-        return;
+        snprintf(error, error_size, "could not tune RX LO for Doppler track point");
+        return 500;
     }
 
-    if (!write_track_state(cfg, state, name, point_index, point_time, rx_hz, lo_path, "nearest Doppler point tuned")) {
-        send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
-                  "{\"ok\":false,\"error\":\"could not write Doppler track state\"}\n");
-        return;
+    if (!write_track_state(cfg, state, name, point_index, point_time, rx_hz, lo_path, message)) {
+        snprintf(error, error_size, "could not write Doppler track state");
+        return 500;
     }
 
     json_escape(name_json, sizeof(name_json), name);
-    snprintf(response, sizeof(response),
+    snprintf(response, response_size,
              "{\"ok\":true,\"state\":\"%s\",\"name\":\"%s\",\"point_index\":%d,\"point_time_utc\":\"%s\",\"rx_hz\":%lld,\"lo_path\":\"%s\"}\n",
              state, name_json, point_index, point_time, rx_hz, lo_path);
+    return 200;
+}
+
+static void send_error_json(int fd, int status, const char *error)
+{
+    char body[512];
+    char error_json[384];
+    const char *reason = "Internal Server Error";
+
+    if (status == 400) {
+        reason = "Bad Request";
+    } else if (status == 404) {
+        reason = "Not Found";
+    }
+
+    json_escape(error_json, sizeof(error_json), error ? error : "request failed");
+    snprintf(body, sizeof(body), "{\"ok\":false,\"error\":\"%s\"}\n", error_json);
+    send_text(fd, status, reason, "application/json; charset=utf-8", body);
+}
+
+static void send_radio_track_step(int fd, const struct app_config *cfg, const char *state)
+{
+    char response[1024];
+    char error[256];
+    int status;
+
+    status = apply_radio_track_step(
+        cfg,
+        state,
+        "nearest Doppler point tuned",
+        response,
+        sizeof(response),
+        error,
+        sizeof(error));
+    if (status != 200) {
+        send_error_json(fd, status, error);
+        return;
+    }
     send_text(fd, 200, "OK", "application/json; charset=utf-8", response);
 }
 
 static void send_radio_track_stop(int fd, const struct app_config *cfg)
 {
+    pthread_mutex_lock(&g_track_lock);
+    g_track_auto_running = 0;
+    pthread_mutex_unlock(&g_track_lock);
+
     if (!write_track_state(cfg, "stopped", "", -1, "", 0, "", "Doppler tracking stopped")) {
         send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
                   "{\"ok\":false,\"error\":\"could not write Doppler track state\"}\n");
@@ -976,6 +1024,87 @@ static void send_radio_track_stop(int fd, const struct app_config *cfg)
     }
     send_text(fd, 200, "OK", "application/json; charset=utf-8",
               "{\"ok\":true,\"state\":\"stopped\"}\n");
+}
+
+static int track_auto_should_run(void)
+{
+    int running;
+
+    pthread_mutex_lock(&g_track_lock);
+    running = g_track_auto_running;
+    pthread_mutex_unlock(&g_track_lock);
+    return running;
+}
+
+static void track_auto_set_running(int running)
+{
+    pthread_mutex_lock(&g_track_lock);
+    g_track_auto_running = running;
+    pthread_mutex_unlock(&g_track_lock);
+}
+
+static void *track_auto_worker(void *arg)
+{
+    const struct app_config *cfg = (const struct app_config *)arg;
+
+    while (track_auto_should_run()) {
+        char response[1024];
+        char error[256] = "";
+        int status = apply_radio_track_step(
+            cfg,
+            "auto_active",
+            "automatic Doppler point tuned",
+            response,
+            sizeof(response),
+            error,
+            sizeof(error));
+        if (status != 200) {
+            write_track_state(cfg, "auto_error", "", -1, "", 0, "", error);
+        }
+        sleep(5);
+    }
+
+    write_track_state(cfg, "stopped", "", -1, "", 0, "", "Automatic Doppler tracking stopped");
+    return NULL;
+}
+
+static void send_radio_track_auto_start(int fd, const struct app_config *cfg)
+{
+    int create_result;
+
+    pthread_mutex_lock(&g_track_lock);
+    if (g_track_auto_running) {
+        pthread_mutex_unlock(&g_track_lock);
+        send_text(fd, 200, "OK", "application/json; charset=utf-8",
+                  "{\"ok\":true,\"state\":\"auto_active\",\"message\":\"Automatic Doppler tracking is already running\"}\n");
+        return;
+    }
+    g_track_auto_running = 1;
+    pthread_mutex_unlock(&g_track_lock);
+
+    create_result = pthread_create(&g_track_thread, NULL, track_auto_worker, (void *)cfg);
+    if (create_result != 0) {
+        track_auto_set_running(0);
+        send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"could not start automatic Doppler tracking thread\"}\n");
+        return;
+    }
+    pthread_detach(g_track_thread);
+
+    send_text(fd, 200, "OK", "application/json; charset=utf-8",
+              "{\"ok\":true,\"state\":\"auto_active\"}\n");
+}
+
+static void send_radio_track_auto_stop(int fd, const struct app_config *cfg)
+{
+    track_auto_set_running(0);
+    if (!write_track_state(cfg, "stopping", "", -1, "", 0, "", "Automatic Doppler tracking stopping")) {
+        send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"could not write Doppler track state\"}\n");
+        return;
+    }
+    send_text(fd, 200, "OK", "application/json; charset=utf-8",
+              "{\"ok\":true,\"state\":\"stopping\"}\n");
 }
 
 static void send_radio_tune(int fd, const struct app_config *cfg, const char *query)
@@ -1132,6 +1261,10 @@ static void handle_request(
         send_radio_track_step(fd, cfg, "active");
     } else if (strcmp(path, "/api/radio/track/stop") == 0) {
         send_radio_track_stop(fd, cfg);
+    } else if (strcmp(path, "/api/radio/track/auto/start") == 0) {
+        send_radio_track_auto_start(fd, cfg);
+    } else if (strcmp(path, "/api/radio/track/auto/stop") == 0) {
+        send_radio_track_auto_stop(fd, cfg);
     } else if (strcmp(path, "/api/radio/hardware") == 0) {
         send_radio_hardware(fd);
     } else if (strcmp(path, "/api/radio/plan") == 0) {

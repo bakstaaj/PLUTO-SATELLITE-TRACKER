@@ -95,7 +95,7 @@ MSYS_NO_PATHCONV=1 "$DOCKER" run --rm \
     make \
       CC=arm-linux-gnueabihf-gcc \
       CFLAGS=\"--sysroot=/opt/pluto/staging -I/opt/pluto/staging/usr/include -O2 -g -Wall -Wextra -std=c99\" \
-      LDFLAGS=\"--sysroot=/opt/pluto/staging -L/opt/pluto/staging/usr/lib\"
+      LDFLAGS=\"--sysroot=/opt/pluto/staging -L/opt/pluto/staging/usr/lib -pthread\"
 
     mkdir -p dist
     cp pluto_sat_tracker dist/pluto_sat_tracker

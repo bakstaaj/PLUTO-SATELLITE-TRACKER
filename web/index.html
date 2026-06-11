@@ -553,10 +553,10 @@
     async function controlDopplerTrack(action, button) {
       button.disabled = true;
       const originalText = button.textContent;
-      button.textContent = action === "stop" ? "Stopping..." : "Tuning...";
+      button.textContent = action.includes("stop") ? "Stopping..." : "Tuning...";
       try {
         await getJson(`/api/radio/track/${action}`);
-        button.textContent = action === "stop" ? "Stopped" : "Tuned";
+        button.textContent = action.includes("stop") ? "Stopped" : (action === "step" ? "Tuned" : "Started");
         await refreshRadioStatus();
       } catch (error) {
         button.textContent = "Failed";
@@ -623,6 +623,8 @@
             <button id="startDopplerButton" type="button">Start Track</button>
             <button id="stepDopplerButton" type="button">Step Now</button>
             <button id="stopDopplerButton" type="button">Stop Track</button>
+            <button id="autoStartDopplerButton" type="button">Auto Track</button>
+            <button id="autoStopDopplerButton" type="button">Stop Auto</button>
           </div>
           <div class="full-width">
             <h3>Doppler Preview</h3>
@@ -682,7 +684,9 @@
       for (const [id, action] of [
         ["startDopplerButton", "start"],
         ["stepDopplerButton", "step"],
-        ["stopDopplerButton", "stop"]
+        ["stopDopplerButton", "stop"],
+        ["autoStartDopplerButton", "auto/start"],
+        ["autoStopDopplerButton", "auto/stop"]
       ]) {
         const trackButton = node.querySelector(`#${id}`);
         trackButton.disabled = id !== "stopDopplerButton" && (!pass.doppler_plan || !(pass.doppler_plan.points || []).length);
