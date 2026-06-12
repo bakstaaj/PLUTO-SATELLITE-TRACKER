@@ -306,6 +306,28 @@
       display: inline-block;
     }
 
+    .map-info {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px 12px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfe;
+      font-size: 13px;
+    }
+
+    .map-info div {
+      min-width: 0;
+    }
+
+    .map-info strong {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
     button {
       border: 1px solid var(--accent);
       border-radius: 6px;
@@ -330,6 +352,10 @@
       header {
         align-items: flex-start;
         flex-direction: column;
+      }
+
+      .map-info {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
     }
   </style>
@@ -449,6 +475,7 @@
     let currentSelectedPass = null;
     let currentSelectedPassKey = "";
     let pendingMapLocation = null;
+    let currentMapFocusTime = "";
 
     async function getJson(url) {
       const response = await fetch(url, { cache: "no-store" });
@@ -700,6 +727,16 @@
       return findNearestTrackPoint(pass, trackState.point_time_utc);
     }
 
+    function focusedMapPoint(pass, trackState) {
+      if (!pass) return null;
+      if (currentMapFocusTime) {
+        return findNearestTrackPoint(pass, currentMapFocusTime);
+      }
+      return trackedPointForPass(pass, trackState) ||
+        findNearestTrackPoint(pass, pass.tca_utc) ||
+        ((pass.ground_track || [])[0] || null);
+    }
+
     function renderMapPanel(pass, config) {
       const node = document.getElementById("mapPanel");
       if (!config) {
@@ -737,6 +774,7 @@
       const passPeak = trackPoints.length ? trackPoints[Math.floor(trackPoints.length / 2)] : null;
       const passEnd = trackPoints.length ? trackPoints[trackPoints.length - 1] : null;
       const activeTrackPoint = trackedPointForPass(pass, lastTrackState);
+      const focusPoint = focusedMapPoint(pass, lastTrackState);
       const pendingPoint = pendingMapLocation
         ? projectLonLat(pendingMapLocation.longitude_deg, pendingMapLocation.latitude_deg, width, height)
         : null;
@@ -753,6 +791,17 @@
       const title = pass
         ? `${pass.name || "Selected pass"} visible ground track`
         : `${config.name || "Observer"} location`;
+      const focusXY = focusPoint
+        ? projectLonLat(focusPoint.longitude_deg, focusPoint.latitude_deg, width, height)
+        : null;
+      const lookLine = focusXY
+        ? `<line x1="${observerPoint.x.toFixed(1)}" y1="${observerPoint.y.toFixed(1)}" x2="${focusXY.x.toFixed(1)}" y2="${focusXY.y.toFixed(1)}" stroke="#3e6b85" stroke-width="2" stroke-dasharray="5 4" />`
+        : "";
+      const trackDots = trackPoints.map((point) => {
+        const xy = projectLonLat(point.longitude_deg, point.latitude_deg, width, height);
+        const isFocus = focusPoint && point.time_utc === focusPoint.time_utc;
+        return `<circle class="track-sample-dot" data-time="${escapeHtml(point.time_utc)}" cx="${xy.x.toFixed(1)}" cy="${xy.y.toFixed(1)}" r="${isFocus ? "5.5" : "3.2"}" fill="${isFocus ? "#102030" : "#c4471c"}" stroke="#fff" stroke-width="${isFocus ? "2" : "1.2"}" />`;
+      }).join("");
 
       node.className = "";
       node.innerHTML = `
@@ -765,6 +814,8 @@
               <line x1="${(width / 2).toFixed(1)}" y1="0" x2="${(width / 2).toFixed(1)}" y2="${height}" stroke="#89a8bc" stroke-width="1.2" />
               <rect x="0.5" y="0.5" width="${width - 1}" height="${height - 1}" fill="none" stroke="#8ea7b9" stroke-width="1" />
               ${segmentPaths}
+              ${lookLine}
+              ${trackDots}
               <circle cx="${observerPoint.x.toFixed(1)}" cy="${observerPoint.y.toFixed(1)}" r="5.5" fill="#006f9f" stroke="#fff" stroke-width="2" />
               <text x="${(observerPoint.x + 10).toFixed(1)}" y="${(observerPoint.y - 10).toFixed(1)}" font-size="12" fill="#102030">${escapeHtml(config.name || "Observer")}</text>
               ${pendingPoint ? `
@@ -778,22 +829,43 @@
               ${marker(activeTrackPoint, "#00a7c7", "Now")}
             </svg>
           </div>
+          ${focusPoint ? `
+            <div class="map-info">
+              <div><strong>Sample</strong>${escapeHtml(formatDateTime(focusPoint.time_utc))}</div>
+              <div><strong>Subsat</strong>${escapeHtml(`${focusPoint.latitude_deg.toFixed(3)} deg, ${focusPoint.longitude_deg.toFixed(3)} deg`)}</div>
+              <div><strong>Look Angles</strong>${escapeHtml(`Az ${focusPoint.azimuth_deg} deg, El ${focusPoint.elevation_deg} deg`)}</div>
+              <div><strong>Altitude</strong>${escapeHtml(`${focusPoint.altitude_km} km`)}</div>
+            </div>
+          ` : ""}
           <div class="map-legend">
             <span class="legend-item"><span class="legend-swatch" style="background:#006f9f"></span>Observer</span>
             <span class="legend-item"><span class="legend-swatch" style="background:#c4471c"></span>Visible pass path</span>
+            <span class="legend-item"><span class="legend-swatch" style="background:#102030"></span>Focused sample</span>
             <span class="legend-item"><span class="legend-swatch" style="background:#00a7c7"></span>Current track point</span>
             <span class="legend-item"><span class="legend-swatch" style="background:#1a7f37"></span>AOS</span>
             <span class="legend-item"><span class="legend-swatch" style="background:#a15c00"></span>TCA</span>
             <span class="legend-item"><span class="legend-swatch" style="background:#7d3ad3"></span>LOS</span>
           </div>
           <div class="map-note">
-            Click the map to prefill observer latitude and longitude. ${pass ? "The red path shows the visible portion of the selected pass." : "Select a pass to overlay its flyover path."}${pendingMapLocation ? " The dashed marker is your unsaved observer selection." : ""}
+            Click the map to prefill observer latitude and longitude. ${pass ? "The red path shows the visible portion of the selected pass, and the dashed line shows the observer look path to the focused sample." : "Select a pass to overlay its flyover path."}${pendingMapLocation ? " The dashed marker is your unsaved observer selection." : ""}
           </div>
         </div>
       `;
 
       const svg = document.getElementById("trackerMapSvg");
       if (!svg) return;
+      node.querySelectorAll(".track-sample-dot").forEach((dot) => {
+        const time = dot.getAttribute("data-time") || "";
+        dot.addEventListener("mouseenter", () => {
+          currentMapFocusTime = time;
+          renderMapPanel(currentSelectedPass, currentObserverConfig);
+        });
+        dot.addEventListener("click", (event) => {
+          event.stopPropagation();
+          currentMapFocusTime = time;
+          renderMapPanel(currentSelectedPass, currentObserverConfig);
+        });
+      });
       svg.addEventListener("click", (event) => {
         const rect = svg.getBoundingClientRect();
         const x = ((event.clientX - rect.left) / rect.width) * width;
@@ -1099,6 +1171,7 @@
       const node = document.getElementById("passDetail");
       currentSelectedPass = pass || null;
       currentSelectedPassKey = passKey(pass);
+      currentMapFocusTime = "";
       renderMapPanel(currentSelectedPass, currentObserverConfig);
       if (!pass) {
         node.className = "empty";
