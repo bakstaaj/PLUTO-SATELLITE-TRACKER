@@ -1241,6 +1241,76 @@ static int find_track_point_for_now(
     return 0;
 }
 
+static int find_track_point_by_time(
+    const char *plan_json,
+    const char *target_time,
+    long long *rx_hz,
+    char *point_time,
+    size_t point_time_size,
+    int *point_index,
+    long long *point_epoch_out)
+{
+    const char *p = plan_json;
+    int index = 0;
+
+    if (!plan_json || !target_time || !target_time[0]) {
+        return 0;
+    }
+
+    while ((p = strstr(p, "\"time_utc\"")) != NULL) {
+        char time_value[64] = "";
+        const char *object_start = p;
+        const char *time_start;
+        const char *next_point;
+        long long point_epoch;
+        long long point_rx_hz;
+
+        while (object_start > plan_json && *object_start != '{') {
+            object_start--;
+        }
+        time_start = strchr(p, ':');
+        if (!time_start) {
+            break;
+        }
+        time_start++;
+        while (*time_start == ' ' || *time_start == '\t' || *time_start == '\r' || *time_start == '\n') {
+            time_start++;
+        }
+        if (*time_start != '"') {
+            p += 10;
+            continue;
+        }
+        time_start++;
+        snprintf(time_value, sizeof(time_value), "%.63s", time_start);
+        if (strchr(time_value, '"')) {
+            *strchr(time_value, '"') = '\0';
+        }
+
+        next_point = strstr(time_start, "\"time_utc\"");
+        if (strcmp(time_value, target_time) != 0) {
+            p = next_point ? next_point : time_start + strlen(time_start);
+            index++;
+            continue;
+        }
+        if (!json_long_long_after(object_start, "rx_hz", &point_rx_hz)) {
+            return 0;
+        }
+        if (!parse_iso_utc_epoch(time_value, &point_epoch)) {
+            return 0;
+        }
+
+        *rx_hz = point_rx_hz;
+        *point_index = index;
+        if (point_epoch_out) {
+            *point_epoch_out = point_epoch;
+        }
+        snprintf(point_time, point_time_size, "%s", time_value);
+        return 1;
+    }
+
+    return 0;
+}
+
 static int write_track_state(
     const struct app_config *cfg,
     const char *state,
@@ -1491,7 +1561,6 @@ static void send_error_json(int fd, int status, const char *error)
 static void send_radio_track_start(int fd, const struct app_config *cfg, const char *state)
 {
     char response[1024];
-    char error[256];
     int status;
 
     if (!time_sync_state_is_synced(cfg)) {
@@ -1535,6 +1604,93 @@ static void send_radio_track_step(int fd, const struct app_config *cfg, const ch
         send_error_json(fd, status, error);
         return;
     }
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", response);
+}
+
+static void send_radio_track_tune_point(int fd, const struct app_config *cfg, const char *query, const char *state)
+{
+    char path[PATH_BUF_SIZE];
+    char *plan = NULL;
+    size_t plan_len = 0;
+    char point_time_query[64] = "";
+    char point_time[64] = "";
+    char name[256] = "";
+    char name_json[512];
+    char lo_path[PATH_BUF_SIZE] = "";
+    char response[1024];
+    char error[256];
+    long long rx_hz = 0;
+    long long point_epoch = 0;
+    long long aos_epoch = 0;
+    long long los_epoch = 0;
+    long long seconds_until_aos = -1;
+    long long seconds_until_los = -1;
+    long long seconds_until_point = -1;
+    int point_index = -1;
+    int enforce_pass_window = 0;
+    time_t now = time(NULL);
+
+    query_param(query, "time_utc", point_time_query, sizeof(point_time_query));
+    if (!point_time_query[0]) {
+        send_error_json(fd, 400, "time_utc is required");
+        return;
+    }
+
+    join_path(path, sizeof(path), cfg->data_dir, "radio_track.json");
+    if (read_file_to_string(path, &plan, &plan_len) != 0) {
+        send_error_json(fd, 404, "no Doppler track plan has been stored");
+        return;
+    }
+    (void)plan_len;
+
+    json_string_value(plan, "name", name, sizeof(name));
+    if (read_track_window(plan, &aos_epoch, &los_epoch)) {
+        enforce_pass_window = 1;
+        if ((long long)now < aos_epoch) {
+            seconds_until_aos = aos_epoch - (long long)now;
+        }
+        if ((long long)now <= los_epoch) {
+            seconds_until_los = los_epoch - (long long)now;
+        }
+    }
+
+    if (!find_track_point_by_time(plan, point_time_query, &rx_hz, point_time, sizeof(point_time), &point_index, &point_epoch)) {
+        free(plan);
+        send_error_json(fd, 404, "requested Doppler point was not found in the stored plan");
+        return;
+    }
+    free(plan);
+
+    if (point_epoch > (long long)now) {
+        seconds_until_point = point_epoch - (long long)now;
+    } else {
+        seconds_until_point = 0;
+    }
+
+    if (rx_hz < PLUTO_MIN_HZ || rx_hz > PLUTO_MAX_HZ || !write_rx_lo_frequency(rx_hz, lo_path, sizeof(lo_path))) {
+        write_track_state(cfg, "tune_error", name, point_index, point_time, rx_hz, "", "could not tune RX LO for selected Doppler point", seconds_until_aos, seconds_until_los, -1, seconds_until_point, "failed");
+        send_error_json(fd, 500, "could not tune RX LO for selected Doppler point");
+        return;
+    }
+
+    if (!write_track_state(cfg, state, name, point_index, point_time, rx_hz, lo_path, "selected Doppler point tuned", seconds_until_aos, seconds_until_los, -1, seconds_until_point, "written")) {
+        send_error_json(fd, 500, "could not write Doppler track state");
+        return;
+    }
+
+    json_escape(name_json, sizeof(name_json), name);
+    snprintf(response, sizeof(response),
+             "{\"ok\":true,\"state\":\"%s\",\"name\":\"%s\",\"point_index\":%d,\"point_time_utc\":\"%s\",\"rx_hz\":%lld,\"lo_path\":\"%s\",\"seconds_until_aos\":%lld,\"seconds_until_los\":%lld,\"seconds_until_point\":%lld,\"plan_window_enforced\":%s,\"lo_write_result\":\"written\"}\n",
+             state,
+             name_json,
+             point_index,
+             point_time,
+             rx_hz,
+             lo_path,
+             seconds_until_aos,
+             seconds_until_los,
+             seconds_until_point,
+             enforce_pass_window ? "true" : "false");
     send_text(fd, 200, "OK", "application/json; charset=utf-8", response);
 }
 
@@ -1845,6 +2001,8 @@ static void handle_request(
         send_radio_track_start(fd, cfg, "active");
     } else if (strcmp(path, "/api/radio/track/step") == 0) {
         send_radio_track_step(fd, cfg, "active");
+    } else if (strcmp(path, "/api/radio/track/tune_point") == 0) {
+        send_radio_track_tune_point(fd, cfg, query, "focused");
     } else if (strcmp(path, "/api/radio/track/stop") == 0) {
         send_radio_track_stop(fd, cfg);
     } else if (strcmp(path, "/api/radio/track/auto/start") == 0) {

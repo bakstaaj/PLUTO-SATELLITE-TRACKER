@@ -1045,9 +1045,9 @@
         });
       }
       const trackFocusStepButton = document.getElementById("trackFocusStepButton");
-      if (trackFocusStepButton && pass) {
+      if (trackFocusStepButton && pass && focusPoint) {
         trackFocusStepButton.addEventListener("click", () => {
-          runSelectedTrackAction(pass, "step", trackFocusStepButton).catch((error) => {
+          stepFocusedSample(pass, focusPoint, trackFocusStepButton).catch((error) => {
             document.getElementById("status").textContent = error.message;
           });
         });
@@ -1125,27 +1125,17 @@
     }
 
     async function tuneFocusedSample(pass, focusPoint, button) {
-      const plan = pass && pass.doppler_plan;
-      const matchingPoint = (plan && plan.points || []).find((point) => point.time_utc === focusPoint.time_utc);
-      const rxHz = matchingPoint && matchingPoint.rx_hz;
-      if (!Number.isFinite(Number(rxHz))) {
-        throw new Error("Focused sample does not have a tunable RX frequency.");
+      if (!focusPoint || !focusPoint.time_utc) {
+        throw new Error("Focused sample does not have a usable time.");
       }
-
-      const params = new URLSearchParams({
-        name: `${pass.name || "Focused sample"} @ ${focusPoint.time_utc || ""}`,
-        norad: String(pass.norad_id || ""),
-        aos: pass.aos_utc || "",
-        downlink: String(rxHz),
-        mode: (pass.radio && pass.radio.mode) || (pass.modes || [])[0] || "",
-        description: `Focused sample ${focusPoint.time_utc || ""}`
-      });
+      await ensureSelectedTrack(pass);
+      const params = new URLSearchParams({ time_utc: focusPoint.time_utc });
 
       button.disabled = true;
       const originalText = button.textContent;
       button.textContent = "Tuning...";
       try {
-        await getJson(`/api/radio/tune?${params.toString()}`);
+        await getJson(`/api/radio/track/tune_point?${params.toString()}`);
         button.textContent = "Tuned";
         await refresh();
       } finally {
@@ -1197,6 +1187,27 @@
       refreshTimerId = window.setTimeout(() => {
         timedRefresh();
       }, delay);
+    }
+
+    async function stepFocusedSample(pass, focusPoint, button) {
+      if (!focusPoint || !focusPoint.time_utc) {
+        throw new Error("Focused sample does not have a usable time.");
+      }
+      await ensureSelectedTrack(pass);
+      button.disabled = true;
+      const originalText = button.textContent;
+      button.textContent = "Stepping...";
+      try {
+        await getJson(`/api/radio/track/tune_point?time_utc=${encodeURIComponent(focusPoint.time_utc)}`);
+        button.textContent = "Stepped";
+        currentMapFocusTime = focusPoint.time_utc;
+        await refresh();
+      } finally {
+        setTimeout(() => {
+          button.disabled = false;
+          button.textContent = originalText;
+        }, 1200);
+      }
     }
 
     function radioHardwareEntries(hardware) {
