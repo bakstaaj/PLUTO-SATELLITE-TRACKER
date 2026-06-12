@@ -230,6 +230,70 @@
       margin-top: 10px;
     }
 
+    .help-panel {
+      display: grid;
+      gap: 10px;
+    }
+
+    .help-panel details {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfe;
+      padding: 10px 12px;
+    }
+
+    .help-panel summary {
+      cursor: pointer;
+      font-weight: 650;
+      color: var(--ink);
+    }
+
+    .help-panel summary::marker {
+      color: var(--accent);
+    }
+
+    .help-panel p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .help-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .help-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfe;
+      padding: 12px;
+    }
+
+    .help-card h3 {
+      margin: 0 0 8px;
+      font-size: 14px;
+    }
+
+    .help-card ol,
+    .help-card ul {
+      margin: 0;
+      padding-left: 18px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .help-card li + li {
+      margin-top: 5px;
+    }
+
+    .help-note {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
     .form-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -423,6 +487,10 @@
       .map-views {
         grid-template-columns: 1fr;
       }
+
+      .help-grid {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
@@ -433,6 +501,84 @@
   </header>
 
   <main>
+    <section class="span-2">
+      <h2>Quick Start</h2>
+      <div class="help-panel">
+        <details open>
+          <summary>Most Common Workflow</summary>
+          <p>Use this order when you are starting fresh or after a Pluto reboot.</p>
+          <div class="help-grid">
+            <div class="help-card">
+              <h3>Setup</h3>
+              <ol>
+                <li>Open the page and confirm <code>Backend online</code>.</li>
+                <li>Set your station in <code>Observer</code>, or click the map to prefill latitude and longitude.</li>
+                <li>Click <code>Save Location</code>.</li>
+                <li>Click <code>Sync Time</code>.</li>
+                <li>Click <code>Refresh Catalog/TLE</code>, then <code>Regenerate Passes</code>.</li>
+              </ol>
+            </div>
+            <div class="help-card">
+              <h3>Operate</h3>
+              <ol>
+                <li>Select a pass from <code>Next Passes</code>.</li>
+                <li>Inspect the map, sky plot, and Doppler preview.</li>
+                <li>For fixed tuning, use <code>Plan Radio Target</code> then <code>Tune Receiver</code>.</li>
+                <li>For tracking, use <code>Plan Doppler Track</code>, then <code>Start Track</code> or <code>Auto Track</code>.</li>
+              </ol>
+            </div>
+          </div>
+        </details>
+        <details>
+          <summary>Map And Focused Sample</summary>
+          <div class="help-grid">
+            <div class="help-card">
+              <h3>Map Controls</h3>
+              <ul>
+                <li>Pan and zoom the map like a normal web map.</li>
+                <li>Click the map to prefill a new observer location.</li>
+                <li>Use <code>Reset</code> to clear the remembered map view.</li>
+                <li>Hover or click a pass sample to focus it.</li>
+              </ul>
+            </div>
+            <div class="help-card">
+              <h3>Focused Sample Buttons</h3>
+              <ul>
+                <li><code>Tune Focused RX</code> tunes the exact Doppler-corrected sample frequency.</li>
+                <li><code>Step Track Now</code> applies the selected track point immediately.</li>
+                <li><code>Follow Live Point</code> returns focus to the live/current tracking point.</li>
+              </ul>
+            </div>
+          </div>
+        </details>
+        <details>
+          <summary>If Something Looks Wrong</summary>
+          <div class="help-grid">
+            <div class="help-card">
+              <h3>Check These First</h3>
+              <ol>
+                <li><code>Time</code> shows <code>synced</code>.</li>
+                <li>The selected pass is current and not stale.</li>
+                <li><code>Radio Status</code> shows a valid LO path.</li>
+                <li><code>Refresh Status</code> does not show a backend failure.</li>
+              </ol>
+            </div>
+            <div class="help-card">
+              <h3>Best Status Panels</h3>
+              <ul>
+                <li><code>Time</code> confirms Pluto UTC sync.</li>
+                <li><code>Radio Status</code> shows tuned target, track point, and LO write result.</li>
+                <li><code>Selected Pass</code> shows the buttons and Doppler preview for the current pass.</li>
+              </ul>
+            </div>
+          </div>
+          <div class="help-note">
+            The longer operator guide lives in <code>docs/USER_WORKFLOW.md</code> in the repo.
+          </div>
+        </details>
+      </div>
+    </section>
+
     <section>
       <h2>Observer</h2>
       <dl id="observer">
