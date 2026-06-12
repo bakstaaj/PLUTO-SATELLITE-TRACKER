@@ -73,7 +73,7 @@ def parse_tle_catalog(text: str) -> dict[int, dict[str, Any]]:
     return catalog
 
 
-def paged_satnogs_transmitters(timeout: int, max_pages: int) -> list[dict[str, Any]]:
+def paged_satnogs_transmitters(timeout: int, max_pages: int) -> tuple[list[dict[str, Any]], int]:
     transmitters: list[dict[str, Any]] = []
     url: str | None = SATNOGS_TRANSMITTERS
     pages = 0
@@ -91,7 +91,7 @@ def paged_satnogs_transmitters(timeout: int, max_pages: int) -> list[dict[str, A
         else:
             raise ValueError("Unexpected SatNOGS transmitters response shape")
 
-    return transmitters
+    return transmitters, pages
 
 
 def first_present(row: dict[str, Any], names: list[str]) -> Any:
@@ -149,45 +149,61 @@ def compact_transmitter(row: dict[str, Any]) -> dict[str, Any] | None:
     return compact
 
 
-def add_satnogs_transmitters(catalog: dict[int, dict[str, Any]], timeout: int, max_pages: int) -> int:
-    attached = 0
-    for row in paged_satnogs_transmitters(timeout, max_pages):
-        norad_raw = first_present(row, ["norad_cat_id", "norad_id", "norad"])
-        try:
-            norad_id = int(norad_raw)
-        except (TypeError, ValueError):
-            continue
-
-        satellite = catalog.get(norad_id)
-        if not satellite:
-            continue
-
-        transmitter = compact_transmitter(row)
-        if not transmitter:
-            continue
-
-        satellite["transmitters"].append(transmitter)
-        attached += 1
-
-        mode = transmitter.get("mode")
-        if mode and mode not in satellite["modes"]:
-            satellite["modes"].append(mode)
-
-    return attached
-
-
 def build_catalog(args: argparse.Namespace) -> dict[str, Any]:
     tle_text = fetch_text(args.celestrak_url, args.timeout)
+    celestrak_retrieved_utc = utc_now_iso()
     satellites = parse_tle_catalog(tle_text)
     if not satellites:
         raise RuntimeError("No CelesTrak amateur TLE records were parsed")
 
     transmitter_count = 0
+    satnogs_source: dict[str, Any] | None = None
     if not args.skip_satnogs:
         try:
-            transmitter_count = add_satnogs_transmitters(satellites, args.timeout, args.max_satnogs_pages)
+            rows, pages = paged_satnogs_transmitters(args.timeout, args.max_satnogs_pages)
+            satnogs_retrieved_utc = utc_now_iso()
+            for row in rows:
+                norad_raw = first_present(row, ["norad_cat_id", "norad_id", "norad"])
+                try:
+                    norad_id = int(norad_raw)
+                except (TypeError, ValueError):
+                    continue
+
+                satellite = satellites.get(norad_id)
+                if not satellite:
+                    continue
+
+                transmitter = compact_transmitter(row)
+                if not transmitter:
+                    continue
+
+                satellite["transmitters"].append(transmitter)
+                transmitter_count += 1
+
+                mode = transmitter.get("mode")
+                if mode and mode not in satellite["modes"]:
+                    satellite["modes"].append(mode)
+
+            satnogs_source = {
+                "url": SATNOGS_TRANSMITTERS,
+                "status": "ok",
+                "retrieved_utc": satnogs_retrieved_utc,
+                "page_count": pages,
+                "transmitters_seen": len(rows),
+                "transmitters_attached": transmitter_count,
+            }
         except (urllib.error.URLError, TimeoutError, ValueError, json.JSONDecodeError) as exc:
             print(f"warning: SatNOGS transmitter import skipped: {exc}", file=sys.stderr)
+            satnogs_source = {
+                "url": SATNOGS_TRANSMITTERS,
+                "status": "warning",
+                "warning": str(exc),
+            }
+    else:
+        satnogs_source = {
+            "url": SATNOGS_TRANSMITTERS,
+            "status": "skipped",
+        }
 
     rows = sorted(satellites.values(), key=lambda row: row["name"].upper())
     with_tx = sum(1 for row in rows if row["transmitters"])
@@ -196,8 +212,13 @@ def build_catalog(args: argparse.Namespace) -> dict[str, Any]:
         "version": 1,
         "updated_utc": utc_now_iso(),
         "sources": {
-            "celestrak_amateur_tle": args.celestrak_url,
-            "satnogs_transmitters": None if args.skip_satnogs else SATNOGS_TRANSMITTERS,
+            "celestrak_amateur_tle": {
+                "url": args.celestrak_url,
+                "status": "ok",
+                "retrieved_utc": celestrak_retrieved_utc,
+                "satellite_records": len(satellites),
+            },
+            "satnogs_transmitters": satnogs_source,
         },
         "metadata": {
             "satellite_count": len(rows),

@@ -415,6 +415,26 @@
       return new Date(Number(epoch) * 1000).toISOString().replace(".000Z", "Z");
     }
 
+    function appendRefreshSummary(entries, refreshStatus) {
+      const summary = refreshStatus.summary || {};
+      if ((refreshStatus.target || "") === "passes") {
+        if (summary.generated_utc) entries.push(["Passes generated", summary.generated_utc]);
+        if (summary.start_utc) entries.push(["Prediction start", summary.start_utc]);
+        if (summary.prediction_hours !== undefined) entries.push(["Prediction window", `${summary.prediction_hours} h`]);
+        if (summary.pass_count !== undefined) entries.push(["Pass count", String(summary.pass_count)]);
+        if (summary.satellite_count !== undefined) entries.push(["Satellites used", String(summary.satellite_count)]);
+      } else if ((refreshStatus.target || "") === "catalog") {
+        if (summary.catalog_updated_utc) entries.push(["Catalog updated", summary.catalog_updated_utc]);
+        if (summary.celestrak_retrieved_utc) entries.push(["CelesTrak fetched", summary.celestrak_retrieved_utc]);
+        if (summary.satnogs_status) entries.push(["SatNOGS status", summary.satnogs_status]);
+        if (summary.satnogs_retrieved_utc) entries.push(["SatNOGS fetched", summary.satnogs_retrieved_utc]);
+        if (summary.satellite_count !== undefined) entries.push(["Catalog satellites", String(summary.satellite_count)]);
+        if (summary.satellites_with_transmitters !== undefined) entries.push(["With transmitters", String(summary.satellites_with_transmitters)]);
+        if (summary.transmitter_count !== undefined) entries.push(["Transmitters", String(summary.transmitter_count)]);
+        if (summary.satnogs_warning) entries.push(["SatNOGS note", summary.satnogs_warning]);
+      }
+    }
+
     function passTimingState(pass) {
       const now = Date.now();
       const aos = Date.parse(pass.aos_utc || "");
@@ -982,12 +1002,14 @@
         ...radioHardwareEntries(radioHardware)
       ]);
 
-      setDl("refreshStatus", [
+      const refreshEntries = [
         ["State", refreshStatus.state || "idle"],
         ["Target", refreshStatus.target || "-"],
         ["Updated", refreshStatus.updated_utc || "-"],
         ["Message", refreshStatus.message || "-"]
-      ]);
+      ];
+      appendRefreshSummary(refreshEntries, refreshStatus);
+      setDl("refreshStatus", refreshEntries);
 
       renderPasses(passes);
 

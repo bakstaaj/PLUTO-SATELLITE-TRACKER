@@ -74,7 +74,9 @@ The deployed Pluto runtime also includes a local refresh runner on the SD card:
 ```
 
 The web UI calls the same workflow through `/api/refresh/passes` and
-`/api/refresh/catalog`, with status stored in `refresh_status.json`.
+`/api/refresh/catalog`, with status stored in `refresh_status.json`. Successful
+refreshes now include a summary payload so the UI can show pass counts, catalog
+counts, and the latest CelesTrak/SatNOGS source timestamps.
 
 For on-device refresh without changing firmware, stage an ARM hard-float Python
 runtime at:

@@ -7,6 +7,7 @@ TOOLS_DIR="${SD_ROOT}/tools"
 PYTHON_DIR="${SD_ROOT}/python"
 PYTHON_RUNTIME_DIR="${SD_ROOT}/python-runtime"
 STATUS_FILE="${DATA_DIR}/refresh_status.json"
+STATUS_UPDATER="${TOOLS_DIR}/write_refresh_status.py"
 
 MODE="${1:-passes}"
 
@@ -90,14 +91,22 @@ case "$MODE" in
       --catalog "${DATA_DIR}/satellites.json" \
       --observer "${DEPLOY_DIR}/config/observer.json" \
       --output "${DATA_DIR}/passes.json"
-    write_status "ok" "passes" "Pass predictions regenerated on Pluto"
+    run_python \
+      "${STATUS_UPDATER}" \
+      --target passes \
+      --input "${DATA_DIR}/passes.json" \
+      --status-file "${STATUS_FILE}"
     ;;
   catalog)
     write_status "running" "catalog" "Refreshing CelesTrak and SatNOGS catalog data on Pluto"
     run_python \
       "${TOOLS_DIR}/update_satellite_catalog.py" \
       --output "${DATA_DIR}/satellites.json"
-    write_status "ok" "catalog" "Catalog and TLE data refreshed on Pluto"
+    run_python \
+      "${STATUS_UPDATER}" \
+      --target catalog \
+      --input "${DATA_DIR}/satellites.json" \
+      --status-file "${STATUS_FILE}"
     ;;
   all)
     "$0" catalog

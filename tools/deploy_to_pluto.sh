@@ -24,10 +24,11 @@ PASSES="$ROOT_DIR/data/passes.json"
 REFRESH_RUNNER="$ROOT_DIR/tools/pluto_refresh_data.sh"
 PASS_UPDATER="$ROOT_DIR/tools/update_pass_predictions.py"
 CATALOG_UPDATER="$ROOT_DIR/tools/update_satellite_catalog.py"
+REFRESH_STATUS_WRITER="$ROOT_DIR/tools/write_refresh_status.py"
 SGP4_PACKAGE="$ROOT_DIR/.python-deps/sgp4"
 PYTHON_RUNTIME_TARBALL="${PLUTO_PYTHON_RUNTIME_TARBALL:-$ROOT_DIR/runtime/python-pluto-armhf.tar.gz}"
 
-for required in "$BIN" "$RUNTIME" "$WEB_HTML" "$OBSERVER_CONFIG" "$REPOSITORIES" "$SATELLITES" "$PASSES" "$REFRESH_RUNNER" "$PASS_UPDATER" "$CATALOG_UPDATER"; do
+for required in "$BIN" "$RUNTIME" "$WEB_HTML" "$OBSERVER_CONFIG" "$REPOSITORIES" "$SATELLITES" "$PASSES" "$REFRESH_RUNNER" "$PASS_UPDATER" "$CATALOG_UPDATER" "$REFRESH_STATUS_WRITER"; do
   if [[ ! -f "$required" ]]; then
     echo "Missing required deploy file: $required"
     exit 1
@@ -102,6 +103,9 @@ fi
 "${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
   "$CATALOG_UPDATER" "${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}/tools/update_satellite_catalog.py.tmp"
 
+"${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
+  "$REFRESH_STATUS_WRITER" "${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}/tools/write_refresh_status.py.tmp"
+
 "${SSHPASS[@]}" ssh "${SSH_OPTS[@]}" "${PLUTO_USER}@${PLUTO_IP}" "
   set -e
   rm -rf '${SD_ROOT}/python/sgp4.tmp'
@@ -130,6 +134,7 @@ fi
   mv '${SD_ROOT}/tools/pluto_refresh_data.sh.tmp' '${SD_ROOT}/tools/pluto_refresh_data.sh'
   mv '${SD_ROOT}/tools/update_pass_predictions.py.tmp' '${SD_ROOT}/tools/update_pass_predictions.py'
   mv '${SD_ROOT}/tools/update_satellite_catalog.py.tmp' '${SD_ROOT}/tools/update_satellite_catalog.py'
+  mv '${SD_ROOT}/tools/write_refresh_status.py.tmp' '${SD_ROOT}/tools/write_refresh_status.py'
   rm -rf '${SD_ROOT}/python/sgp4'
   mv '${SD_ROOT}/python/sgp4.tmp' '${SD_ROOT}/python/sgp4'
   if [ -f '${SD_ROOT}/cache/python-runtime.tar.gz.tmp' ]; then
@@ -155,7 +160,8 @@ fi
          '${SD_ROOT}/data/passes.json' \
          '${SD_ROOT}/tools/pluto_refresh_data.sh' \
          '${SD_ROOT}/tools/update_pass_predictions.py' \
-         '${SD_ROOT}/tools/update_satellite_catalog.py'
+         '${SD_ROOT}/tools/update_satellite_catalog.py' \
+         '${SD_ROOT}/tools/write_refresh_status.py'
   if [ -f '${SD_ROOT}/python-runtime/bin/python3.11' ]; then
     '${SD_ROOT}/python-runtime/bin/python3.11' --version 2>/dev/null || \
       /lib/ld-linux-armhf.so.3 '${SD_ROOT}/python-runtime/bin/python3.11' --version || true
