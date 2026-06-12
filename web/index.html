@@ -443,9 +443,12 @@
   <script>
     let lastRadioHardware = null;
     let lastTimeStatus = null;
+    let lastTrackState = null;
     let passFilter = "actionable";
     let currentObserverConfig = null;
     let currentSelectedPass = null;
+    let currentSelectedPassKey = "";
+    let pendingMapLocation = null;
 
     async function getJson(url) {
       const response = await fetch(url, { cache: "no-store" });
@@ -666,6 +669,37 @@
       return segments;
     }
 
+    function passKey(pass) {
+      if (!pass) return "";
+      return `${pass.norad_id || ""}:${pass.aos_utc || ""}`;
+    }
+
+    function findNearestTrackPoint(pass, isoTime) {
+      if (!pass || !isoTime) return null;
+      const target = Date.parse(isoTime);
+      const points = pass.ground_track || [];
+      if (!Number.isFinite(target) || !points.length) return null;
+
+      let bestPoint = null;
+      let bestDelta = Infinity;
+      for (const point of points) {
+        const pointTime = Date.parse(point.time_utc || "");
+        if (!Number.isFinite(pointTime)) continue;
+        const delta = Math.abs(pointTime - target);
+        if (delta < bestDelta) {
+          bestDelta = delta;
+          bestPoint = point;
+        }
+      }
+      return bestPoint;
+    }
+
+    function trackedPointForPass(pass, trackState) {
+      if (!pass || !trackState || !trackState.point_time_utc) return null;
+      if (trackState.state === "idle" || trackState.state === "complete") return null;
+      return findNearestTrackPoint(pass, trackState.point_time_utc);
+    }
+
     function renderMapPanel(pass, config) {
       const node = document.getElementById("mapPanel");
       if (!config) {
@@ -702,6 +736,10 @@
       const passStart = trackPoints[0];
       const passPeak = trackPoints.length ? trackPoints[Math.floor(trackPoints.length / 2)] : null;
       const passEnd = trackPoints.length ? trackPoints[trackPoints.length - 1] : null;
+      const activeTrackPoint = trackedPointForPass(pass, lastTrackState);
+      const pendingPoint = pendingMapLocation
+        ? projectLonLat(pendingMapLocation.longitude_deg, pendingMapLocation.latitude_deg, width, height)
+        : null;
 
       function marker(point, color, label) {
         if (!point) return "";
@@ -729,20 +767,27 @@
               ${segmentPaths}
               <circle cx="${observerPoint.x.toFixed(1)}" cy="${observerPoint.y.toFixed(1)}" r="5.5" fill="#006f9f" stroke="#fff" stroke-width="2" />
               <text x="${(observerPoint.x + 10).toFixed(1)}" y="${(observerPoint.y - 10).toFixed(1)}" font-size="12" fill="#102030">${escapeHtml(config.name || "Observer")}</text>
+              ${pendingPoint ? `
+                <circle cx="${pendingPoint.x.toFixed(1)}" cy="${pendingPoint.y.toFixed(1)}" r="6.5" fill="none" stroke="#006f9f" stroke-width="2.5" stroke-dasharray="4 3" />
+                <circle cx="${pendingPoint.x.toFixed(1)}" cy="${pendingPoint.y.toFixed(1)}" r="3.5" fill="#006f9f" />
+                <text x="${(pendingPoint.x + 10).toFixed(1)}" y="${(pendingPoint.y + 16).toFixed(1)}" font-size="12" fill="#102030">Pending</text>
+              ` : ""}
               ${marker(passStart, "#1a7f37", "AOS")}
               ${marker(passPeak, "#a15c00", "TCA")}
               ${marker(passEnd, "#7d3ad3", "LOS")}
+              ${marker(activeTrackPoint, "#00a7c7", "Now")}
             </svg>
           </div>
           <div class="map-legend">
             <span class="legend-item"><span class="legend-swatch" style="background:#006f9f"></span>Observer</span>
             <span class="legend-item"><span class="legend-swatch" style="background:#c4471c"></span>Visible pass path</span>
+            <span class="legend-item"><span class="legend-swatch" style="background:#00a7c7"></span>Current track point</span>
             <span class="legend-item"><span class="legend-swatch" style="background:#1a7f37"></span>AOS</span>
             <span class="legend-item"><span class="legend-swatch" style="background:#a15c00"></span>TCA</span>
             <span class="legend-item"><span class="legend-swatch" style="background:#7d3ad3"></span>LOS</span>
           </div>
           <div class="map-note">
-            Click the map to prefill observer latitude and longitude. ${pass ? "The red path shows the visible portion of the selected pass." : "Select a pass to overlay its flyover path."}
+            Click the map to prefill observer latitude and longitude. ${pass ? "The red path shows the visible portion of the selected pass." : "Select a pass to overlay its flyover path."}${pendingMapLocation ? " The dashed marker is your unsaved observer selection." : ""}
           </div>
         </div>
       `;
@@ -755,8 +800,13 @@
         const y = ((event.clientY - rect.top) / rect.height) * height;
         const longitude = ((x / width) * 360) - 180;
         const latitude = 90 - ((y / height) * 180);
+        pendingMapLocation = {
+          latitude_deg: latitude,
+          longitude_deg: longitude
+        };
         document.getElementById("observerLatitudeInput").value = latitude.toFixed(5);
         document.getElementById("observerLongitudeInput").value = longitude.toFixed(5);
+        renderMapPanel(currentSelectedPass, currentObserverConfig);
         document.getElementById("status").textContent = `Map selected ${latitude.toFixed(5)}, ${longitude.toFixed(5)}. Save Location to apply it.`;
       });
     }
@@ -1008,6 +1058,7 @@
       button.textContent = "Saving...";
       try {
         await postJson("/api/config", payload);
+        pendingMapLocation = null;
         button.textContent = "Rebuilding passes...";
         await postJson("/api/refresh/passes", {});
         button.textContent = "Saved";
@@ -1047,6 +1098,7 @@
     function renderPassDetail(pass) {
       const node = document.getElementById("passDetail");
       currentSelectedPass = pass || null;
+      currentSelectedPassKey = passKey(pass);
       renderMapPanel(currentSelectedPass, currentObserverConfig);
       if (!pass) {
         node.className = "empty";
@@ -1229,10 +1281,11 @@
         renderPassDetail(null);
         return;
       }
+      const selectedIndex = Math.max(0, visiblePasses.findIndex((pass) => passKey(pass) === currentSelectedPassKey));
       for (const [index, pass] of visiblePasses.entries()) {
         const row = document.createElement("div");
         const readiness = passReadiness(pass);
-        row.className = index === 0 ? "pass-row selected" : "pass-row";
+        row.className = index === selectedIndex ? "pass-row selected" : "pass-row";
         row.tabIndex = 0;
         const downlink = (pass.downlinks_hz || [])[0];
         row.innerHTML = `<div><strong></strong><span></span></div><div></div><div></div>`;
@@ -1257,7 +1310,7 @@
         });
         node.appendChild(row);
       }
-      renderPassDetail(visiblePasses[0]);
+      renderPassDetail(visiblePasses[selectedIndex] || visiblePasses[0]);
     }
 
     async function refresh() {
@@ -1275,6 +1328,7 @@
       ]);
       lastRadioHardware = radioHardware;
       lastTimeStatus = timeStatus;
+      lastTrackState = radioTrackState;
       currentObserverConfig = config;
 
       document.getElementById("status").textContent = status.ok ? "Backend online" : "Backend warning";
@@ -1287,8 +1341,13 @@
         ["Minimum elevation", `${config.minimum_elevation_deg} deg`]
       ]);
       document.getElementById("observerNameInput").value = config.name || "";
-      document.getElementById("observerLatitudeInput").value = config.latitude_deg ?? "";
-      document.getElementById("observerLongitudeInput").value = config.longitude_deg ?? "";
+      if (pendingMapLocation) {
+        document.getElementById("observerLatitudeInput").value = pendingMapLocation.latitude_deg.toFixed(5);
+        document.getElementById("observerLongitudeInput").value = pendingMapLocation.longitude_deg.toFixed(5);
+      } else {
+        document.getElementById("observerLatitudeInput").value = config.latitude_deg ?? "";
+        document.getElementById("observerLongitudeInput").value = config.longitude_deg ?? "";
+      }
       document.getElementById("observerAltitudeInput").value = config.altitude_m ?? 0;
       document.getElementById("observerMinElevationInput").value = config.minimum_elevation_deg ?? 10;
       renderMapPanel(currentSelectedPass, currentObserverConfig);
