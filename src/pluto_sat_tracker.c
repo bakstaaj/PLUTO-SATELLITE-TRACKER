@@ -1,5 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
+#define _DEFAULT_SOURCE
+
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -10,6 +12,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <time.h>
 #include <ctype.h>
@@ -42,6 +45,8 @@ struct app_config {
     const char *config_dir;
     int interactive;
 };
+
+static int query_param(const char *query, const char *name, char *out, size_t out_size);
 
 static void on_signal(int signum)
 {
@@ -309,6 +314,63 @@ static void send_status(int fd, const struct app_config *cfg)
              APP_VERSION, (long)now, cfg->bind_addr, cfg->port,
              cfg->web_dir, cfg->config_dir, cfg->data_dir);
     send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
+}
+
+static void send_time_sync(int fd, const struct app_config *cfg, const char *query)
+{
+    char epoch_text[64] = "";
+    char path[PATH_BUF_SIZE];
+    char tmp_path[PATH_BUF_SIZE + 8];
+    char response[512];
+    long long epoch;
+    struct timeval tv;
+    FILE *f;
+
+    query_param(query, "epoch", epoch_text, sizeof(epoch_text));
+    if (!epoch_text[0]) {
+        epoch = 0;
+    } else {
+        char *end = NULL;
+        errno = 0;
+        epoch = strtoll(epoch_text, &end, 10);
+        if (errno != 0 || !end || *end != '\0') {
+            epoch = 0;
+        }
+    }
+    if (epoch < 1781136000LL || epoch > 4102444800LL) {
+        send_text(fd, 400, "Bad Request", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"valid epoch seconds are required\"}\n");
+        return;
+    }
+
+    tv.tv_sec = (time_t)epoch;
+    tv.tv_usec = 0;
+    if (settimeofday(&tv, NULL) != 0) {
+        send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"could not set Pluto system time\"}\n");
+        return;
+    }
+
+    join_path(path, sizeof(path), cfg->data_dir, "time_sync.json");
+    snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
+    f = fopen(tmp_path, "wb");
+    if (f) {
+        fprintf(f,
+                "{\n"
+                "  \"ok\": true,\n"
+                "  \"source\": \"browser_epoch\",\n"
+                "  \"synced_epoch\": %lld,\n"
+                "  \"state\": \"synced\"\n"
+                "}\n",
+                epoch);
+        fclose(f);
+        if (rename(tmp_path, path) != 0) {
+            unlink(tmp_path);
+        }
+    }
+
+    snprintf(response, sizeof(response), "{\"ok\":true,\"state\":\"synced\",\"time_epoch\":%lld}\n", epoch);
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", response);
 }
 
 static void send_config(int fd, const struct app_config *cfg)
@@ -1235,6 +1297,12 @@ static void handle_request(
         send_file(fd, file_path);
     } else if (strcmp(path, "/api/status") == 0) {
         send_status(fd, cfg);
+    } else if (strcmp(path, "/api/time/sync") == 0) {
+        send_time_sync(fd, cfg, query);
+    } else if (strcmp(path, "/api/time/status") == 0) {
+        join_path(file_path, sizeof(file_path), cfg->data_dir, "time_sync.json");
+        send_json_file_or_default(fd, file_path,
+                                  "{\"ok\":true,\"state\":\"unknown\",\"message\":\"Time has not been synced from the UI.\"}\n");
     } else if (strcmp(path, "/api/config") == 0) {
         send_config(fd, cfg);
     } else if (strcmp(path, "/api/satellites") == 0) {

@@ -261,6 +261,14 @@
     </section>
 
     <section>
+      <h2>Time</h2>
+      <dl id="timeStatus">
+        <dt>Pluto UTC</dt><dd>Loading...</dd>
+      </dl>
+      <button id="syncTimeButton" type="button">Sync Time</button>
+    </section>
+
+    <section>
       <h2>Radio Plan</h2>
       <dl id="radioStatus">
         <dt>State</dt><dd>Loading...</dd>
@@ -352,6 +360,11 @@
         minute: "2-digit",
         second: "2-digit"
       });
+    }
+
+    function formatEpoch(epoch) {
+      if (!Number.isFinite(Number(epoch)) || Number(epoch) <= 0) return "-";
+      return new Date(Number(epoch) * 1000).toISOString().replace(".000Z", "Z");
     }
 
     function renderRadioTarget(pass) {
@@ -569,6 +582,25 @@
       }
     }
 
+    async function syncPlutoTime(button) {
+      const epoch = Math.floor(Date.now() / 1000);
+      button.disabled = true;
+      button.textContent = "Syncing...";
+      try {
+        await getJson(`/api/time/sync?epoch=${epoch}`);
+        button.textContent = "Synced";
+        await refresh();
+      } catch (error) {
+        button.textContent = "Sync failed";
+        throw error;
+      } finally {
+        setTimeout(() => {
+          button.disabled = false;
+          button.textContent = "Sync Time";
+        }, 1200);
+      }
+    }
+
     function renderPassDetail(pass) {
       const node = document.getElementById("passDetail");
       if (!pass) {
@@ -744,7 +776,7 @@
     }
 
     async function refresh() {
-      const [status, config, catalog, passes, radioStatus, radioHardware, radioTrack, radioTrackState] = await Promise.all([
+      const [status, config, catalog, passes, radioStatus, radioHardware, radioTrack, radioTrackState, timeStatus] = await Promise.all([
         getJson("/api/status"),
         getJson("/api/config"),
         getJson("/api/satellites"),
@@ -752,7 +784,8 @@
         getJson("/api/radio/status"),
         getJson("/api/radio/hardware"),
         getJson("/api/radio/track/status"),
-        getJson("/api/radio/track/state")
+        getJson("/api/radio/track/state"),
+        getJson("/api/time/status")
       ]);
 
       document.getElementById("status").textContent = status.ok ? "Backend online" : "Backend warning";
@@ -769,6 +802,13 @@
         ["Web", status.web_dir],
         ["Config", status.config_dir],
         ["Data", status.data_dir]
+      ]);
+
+      setDl("timeStatus", [
+        ["Pluto UTC", formatEpoch(status.time_epoch)],
+        ["Browser UTC", new Date().toISOString().replace(".000Z", "Z")],
+        ["Sync state", timeStatus.state || "unknown"],
+        ["Last synced", timeStatus.synced_epoch ? formatEpoch(timeStatus.synced_epoch) : "-"]
       ]);
 
       setDl("radioStatus", [
@@ -812,6 +852,12 @@
         tbody.appendChild(tr);
       }
     }
+
+    document.getElementById("syncTimeButton").addEventListener("click", (event) => {
+      syncPlutoTime(event.currentTarget).catch((error) => {
+        document.getElementById("status").textContent = error.message;
+      });
+    });
 
     refresh().catch((error) => {
       document.getElementById("status").textContent = "Backend unavailable";
