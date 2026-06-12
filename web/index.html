@@ -279,6 +279,30 @@
       background: #dfeef7;
     }
 
+    .map-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--line);
+      background: #fbfcfe;
+    }
+
+    .map-toolbar .button-row {
+      margin-top: 0;
+    }
+
+    .map-toolbar button {
+      min-width: 38px;
+      padding: 6px 10px;
+    }
+
+    .map-hint {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
     .map-frame svg {
       display: block;
       width: 100%;
@@ -501,6 +525,7 @@
     let currentSelectedPassKey = "";
     let pendingMapLocation = null;
     let currentMapFocusTime = "";
+    let currentMapViewBox = null;
 
     async function getJson(url) {
       const response = await fetch(url, { cache: "no-store" });
@@ -773,6 +798,56 @@
       };
     }
 
+    function defaultMapViewBox() {
+      return { x: 0, y: 0, width: 720, height: 360 };
+    }
+
+    function clampMapViewBox(viewBox) {
+      const base = defaultMapViewBox();
+      const minWidth = 180;
+      const minHeight = 90;
+      const width = Math.max(minWidth, Math.min(base.width, viewBox.width));
+      const height = Math.max(minHeight, Math.min(base.height, viewBox.height));
+      const maxX = base.width - width;
+      const maxY = base.height - height;
+      return {
+        x: Math.max(0, Math.min(maxX, viewBox.x)),
+        y: Math.max(0, Math.min(maxY, viewBox.y)),
+        width,
+        height
+      };
+    }
+
+    function mapViewBoxString(viewBox) {
+      return `${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`;
+    }
+
+    function ensureMapViewBox() {
+      if (!currentMapViewBox) {
+        currentMapViewBox = defaultMapViewBox();
+      }
+      currentMapViewBox = clampMapViewBox(currentMapViewBox);
+      return currentMapViewBox;
+    }
+
+    function zoomMap(factor) {
+      const view = ensureMapViewBox();
+      const nextWidth = view.width * factor;
+      const nextHeight = view.height * factor;
+      currentMapViewBox = clampMapViewBox({
+        x: view.x + ((view.width - nextWidth) / 2),
+        y: view.y + ((view.height - nextHeight) / 2),
+        width: nextWidth,
+        height: nextHeight
+      });
+      renderMapPanel(currentSelectedPass, currentObserverConfig);
+    }
+
+    function resetMapView() {
+      currentMapViewBox = defaultMapViewBox();
+      renderMapPanel(currentSelectedPass, currentObserverConfig);
+    }
+
     function renderMapPanel(pass, config) {
       const node = document.getElementById("mapPanel");
       if (!config) {
@@ -851,13 +926,22 @@
       }).join("");
       const focusSky = focusPoint ? projectSkyPoint(focusPoint.azimuth_deg, focusPoint.elevation_deg, skySize) : null;
       const activeSky = activeTrackPoint ? projectSkyPoint(activeTrackPoint.azimuth_deg, activeTrackPoint.elevation_deg, skySize) : null;
+      const mapViewBox = ensureMapViewBox();
 
       node.className = "";
       node.innerHTML = `
         <div class="map-shell">
           <div class="map-views">
             <div class="map-frame">
-              <svg id="trackerMapSvg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(title)}">
+              <div class="map-toolbar">
+                <div class="map-hint">Drag to pan, wheel to zoom</div>
+                <div class="button-row">
+                  <button id="mapZoomInButton" type="button" title="Zoom in">+</button>
+                  <button id="mapZoomOutButton" type="button" title="Zoom out">-</button>
+                  <button id="mapResetViewButton" type="button" title="Reset map view">Reset</button>
+                </div>
+              </div>
+              <svg id="trackerMapSvg" viewBox="${mapViewBoxString(mapViewBox)}" role="img" aria-label="${escapeHtml(title)}">
                 <rect x="0" y="0" width="${width}" height="${height}" fill="#dfeef7" />
                 ${gridLines.join("")}
                 <line x1="0" y1="${(height / 2).toFixed(1)}" x2="${width}" y2="${(height / 2).toFixed(1)}" stroke="#89a8bc" stroke-width="1.2" />
@@ -928,6 +1012,9 @@
 
       const svg = document.getElementById("trackerMapSvg");
       if (!svg) return;
+      document.getElementById("mapZoomInButton").addEventListener("click", () => zoomMap(0.8));
+      document.getElementById("mapZoomOutButton").addEventListener("click", () => zoomMap(1.25));
+      document.getElementById("mapResetViewButton").addEventListener("click", () => resetMapView());
       node.querySelectorAll(".track-sample-dot").forEach((dot) => {
         const time = dot.getAttribute("data-time") || "";
         dot.addEventListener("mouseenter", () => {
@@ -940,10 +1027,58 @@
           renderMapPanel(currentSelectedPass, currentObserverConfig);
         });
       });
-      svg.addEventListener("click", (event) => {
+      svg.addEventListener("wheel", (event) => {
+        event.preventDefault();
+        zoomMap(event.deltaY < 0 ? 0.9 : 1.1);
+      }, { passive: false });
+      let dragState = null;
+      let suppressMapClick = false;
+      svg.addEventListener("pointerdown", (event) => {
+        if (event.target.closest(".track-sample-dot")) return;
+        dragState = {
+          x: event.clientX,
+          y: event.clientY,
+          moved: false,
+          viewBox: { ...ensureMapViewBox() }
+        };
+        svg.setPointerCapture(event.pointerId);
+      });
+      svg.addEventListener("pointermove", (event) => {
+        if (!dragState) return;
+        if (Math.abs(event.clientX - dragState.x) > 3 || Math.abs(event.clientY - dragState.y) > 3) {
+          dragState.moved = true;
+        }
         const rect = svg.getBoundingClientRect();
-        const x = ((event.clientX - rect.left) / rect.width) * width;
-        const y = ((event.clientY - rect.top) / rect.height) * height;
+        const scaleX = dragState.viewBox.width / rect.width;
+        const scaleY = dragState.viewBox.height / rect.height;
+        currentMapViewBox = clampMapViewBox({
+          x: dragState.viewBox.x - ((event.clientX - dragState.x) * scaleX),
+          y: dragState.viewBox.y - ((event.clientY - dragState.y) * scaleY),
+          width: dragState.viewBox.width,
+          height: dragState.viewBox.height
+        });
+        svg.setAttribute("viewBox", mapViewBoxString(currentMapViewBox));
+      });
+      svg.addEventListener("pointerup", (event) => {
+        if (!dragState) return;
+        suppressMapClick = dragState.moved;
+        dragState = null;
+        svg.releasePointerCapture(event.pointerId);
+        if (suppressMapClick) {
+          window.setTimeout(() => {
+            suppressMapClick = false;
+          }, 0);
+        }
+      });
+      svg.addEventListener("pointerleave", () => {
+        dragState = null;
+      });
+      svg.addEventListener("click", (event) => {
+        if (suppressMapClick) return;
+        const rect = svg.getBoundingClientRect();
+        const view = ensureMapViewBox();
+        const x = view.x + (((event.clientX - rect.left) / rect.width) * view.width);
+        const y = view.y + (((event.clientY - rect.top) / rect.height) * view.height);
         const longitude = ((x / width) * 360) - 180;
         const latitude = 90 - ((y / height) * 180);
         pendingMapLocation = {
