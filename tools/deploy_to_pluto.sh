@@ -135,7 +135,7 @@ fi
   if [ -f '${SD_ROOT}/cache/python-runtime.tar.gz.tmp' ]; then
     rm -rf '${SD_ROOT}/python-runtime.tmp'
     mkdir -p '${SD_ROOT}/python-runtime.tmp'
-    tar -xzf '${SD_ROOT}/cache/python-runtime.tar.gz.tmp' -C '${SD_ROOT}/python-runtime.tmp'
+    gzip -dc '${SD_ROOT}/cache/python-runtime.tar.gz.tmp' | tar -xf - -C '${SD_ROOT}/python-runtime.tmp'
     if [ ! -x '${SD_ROOT}/python-runtime.tmp/bin/python3' ]; then
       echo 'Python runtime archive must contain bin/python3 at its root.'
       exit 1
@@ -156,8 +156,9 @@ fi
          '${SD_ROOT}/tools/pluto_refresh_data.sh' \
          '${SD_ROOT}/tools/update_pass_predictions.py' \
          '${SD_ROOT}/tools/update_satellite_catalog.py'
-  if [ -x '${SD_ROOT}/python-runtime/bin/python3' ]; then
-    '${SD_ROOT}/python-runtime/bin/python3' --version || true
+  if [ -f '${SD_ROOT}/python-runtime/bin/python3.11' ]; then
+    '${SD_ROOT}/python-runtime/bin/python3.11' --version 2>/dev/null || \
+      /lib/ld-linux-armhf.so.3 '${SD_ROOT}/python-runtime/bin/python3.11' --version || true
   fi
 "
 

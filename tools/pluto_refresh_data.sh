@@ -43,12 +43,14 @@ run_python() {
   SCRIPT="$1"
   shift
   PYTHON_BIN="${PLUTO_PYTHON:-}"
+  SD_RUNTIME=0
 
   if [ -n "$PYTHON_BIN" ] && [ ! -x "$PYTHON_BIN" ]; then
     fail "configured Python runtime is not executable: $PYTHON_BIN"
   fi
-  if [ -z "$PYTHON_BIN" ] && [ -x "${PYTHON_RUNTIME_DIR}/bin/python3" ]; then
-    PYTHON_BIN="${PYTHON_RUNTIME_DIR}/bin/python3"
+  if [ -z "$PYTHON_BIN" ] && [ -f "${PYTHON_RUNTIME_DIR}/bin/python3.11" ]; then
+    PYTHON_BIN="${PYTHON_RUNTIME_DIR}/bin/python3.11"
+    SD_RUNTIME=1
   fi
   if [ -z "$PYTHON_BIN" ] && command -v python3 >/dev/null 2>&1; then
     PYTHON_BIN="$(command -v python3)"
@@ -60,9 +62,19 @@ run_python() {
     fail "refresh script not found: $SCRIPT"
   fi
 
-  if [ "$PYTHON_BIN" = "${PYTHON_RUNTIME_DIR}/bin/python3" ]; then
+  if [ "$SD_RUNTIME" = "1" ]; then
     export PYTHONHOME="${PYTHON_RUNTIME_DIR}"
     export LD_LIBRARY_PATH="${PYTHON_RUNTIME_DIR}/lib:${PYTHON_RUNTIME_DIR}/usr/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+    if PYTHONPATH="${PYTHON_DIR}${PYTHONPATH:+:${PYTHONPATH}}" "$PYTHON_BIN" "$SCRIPT" "$@" 2>/tmp/pluto_python_direct.err; then
+      rm -f /tmp/pluto_python_direct.err
+      return 0
+    fi
+    if [ -x /lib/ld-linux-armhf.so.3 ]; then
+      PYTHONPATH="${PYTHON_DIR}${PYTHONPATH:+:${PYTHONPATH}}" /lib/ld-linux-armhf.so.3 "$PYTHON_BIN" "$SCRIPT" "$@"
+      return $?
+    fi
+    cat /tmp/pluto_python_direct.err >&2 2>/dev/null || true
+    fail "SD-card Python runtime is present but could not be executed"
   fi
 
   PYTHONPATH="${PYTHON_DIR}${PYTHONPATH:+:${PYTHONPATH}}" "$PYTHON_BIN" "$SCRIPT" "$@"
