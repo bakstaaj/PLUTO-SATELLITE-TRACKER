@@ -331,6 +331,7 @@
 
   <script>
     let lastRadioHardware = null;
+    let lastTimeStatus = null;
     let passFilter = "actionable";
 
     async function getJson(url) {
@@ -569,6 +570,7 @@
       if (trackState.state && trackState.state !== "idle") entries.push(["Tracking", trackState.state]);
       if (trackState.rx_hz) entries.push(["Track RX", formatHz(trackState.rx_hz)]);
       if (trackState.point_time_utc) entries.push(["Track point", formatTime(trackState.point_time_utc)]);
+      if (trackState.seconds_until_point > 0) entries.push(["Point in", formatCountdown(trackState.seconds_until_point)]);
       if (trackState.seconds_until_aos > 0) entries.push(["AOS in", formatCountdown(trackState.seconds_until_aos)]);
       if (trackState.seconds_until_los > 0) entries.push(["LOS in", formatCountdown(trackState.seconds_until_los)]);
       if (trackState.seconds_since_los > 0) entries.push(["LOS ago", formatCountdown(trackState.seconds_since_los)]);
@@ -751,6 +753,7 @@
       const tunable = isPassTunable(pass) ? "Yes" : "No";
       const description = radio.description || "-";
       const readiness = passReadiness(pass);
+      const timeSynced = (lastTimeStatus && lastTimeStatus.state) === "synced";
 
       node.className = "";
       node.innerHTML = `
@@ -860,8 +863,13 @@
         ["autoStopDopplerButton", "auto/stop"]
       ]) {
         const trackButton = node.querySelector(`#${id}`);
-        trackButton.disabled = id !== "stopDopplerButton" && id !== "autoStopDopplerButton" &&
-          !readiness.actionable;
+        const requiresTimeSync = id === "startDopplerButton" || id === "autoStartDopplerButton";
+        trackButton.disabled =
+          (id !== "stopDopplerButton" && id !== "autoStopDopplerButton" && !readiness.actionable) ||
+          (requiresTimeSync && !timeSynced);
+        if (requiresTimeSync && !timeSynced) {
+          trackButton.title = "Sync Pluto time before starting tracked Doppler control.";
+        }
         trackButton.addEventListener("click", () => {
           controlDopplerTrack(action, trackButton).catch((error) => {
             document.getElementById("status").textContent = error.message;
@@ -959,6 +967,7 @@
         getJson("/api/refresh/status")
       ]);
       lastRadioHardware = radioHardware;
+      lastTimeStatus = timeStatus;
 
       document.getElementById("status").textContent = status.ok ? "Backend online" : "Backend warning";
 
@@ -994,6 +1003,7 @@
         ["Tracking", radioTrackState.state || "-"],
         ["Track RX", radioTrackState.rx_hz ? formatHz(radioTrackState.rx_hz) : "-"],
         ["Track point", radioTrackState.point_time_utc ? formatTime(radioTrackState.point_time_utc) : "-"],
+        ["Point in", radioTrackState.seconds_until_point > 0 ? formatCountdown(radioTrackState.seconds_until_point) : "-"],
         ["AOS in", radioTrackState.seconds_until_aos > 0 ? formatCountdown(radioTrackState.seconds_until_aos) : "-"],
         ["LOS in", radioTrackState.seconds_until_los > 0 ? formatCountdown(radioTrackState.seconds_until_los) : "-"],
         ["LOS ago", radioTrackState.seconds_since_los > 0 ? formatCountdown(radioTrackState.seconds_since_los) : "-"],

@@ -1022,18 +1022,27 @@ static void send_radio_track_plan(int fd, const struct app_config *cfg, const ch
     send_text(fd, 200, "OK", "application/json; charset=utf-8", response);
 }
 
-static int find_nearest_track_point(
+static int find_track_point_for_now(
     const char *plan_json,
     long long now_epoch,
     long long *rx_hz,
     char *point_time,
     size_t point_time_size,
-    int *point_index)
+    int *point_index,
+    long long *point_epoch_out)
 {
     const char *p = plan_json;
-    long long best_delta = LLONG_MAX;
+    long long best_past_epoch = LLONG_MIN;
+    long long best_future_epoch = LLONG_MAX;
+    long long best_past_hz = 0;
+    long long best_future_hz = 0;
+    int best_past_index = -1;
+    int best_future_index = -1;
+    char best_past_time[64] = "";
+    char best_future_time[64] = "";
     int index = 0;
-    int found = 0;
+    int found_past = 0;
+    int found_future = 0;
 
     while ((p = strstr(p, "\"time_utc\"")) != NULL) {
         char time_value[64] = "";
@@ -1042,7 +1051,6 @@ static int find_nearest_track_point(
         const char *next_point;
         long long point_epoch;
         long long point_rx_hz;
-        long long delta;
 
         while (object_start > plan_json && *object_start != '{') {
             object_start--;
@@ -1077,20 +1085,45 @@ static int find_nearest_track_point(
             continue;
         }
 
-        delta = point_epoch >= now_epoch ? point_epoch - now_epoch : now_epoch - point_epoch;
-        if (!found || delta < best_delta) {
-            found = 1;
-            best_delta = delta;
-            *rx_hz = point_rx_hz;
-            *point_index = index;
-            snprintf(point_time, point_time_size, "%s", time_value);
+        if (point_epoch <= now_epoch) {
+            if (!found_past || point_epoch > best_past_epoch) {
+                found_past = 1;
+                best_past_epoch = point_epoch;
+                best_past_hz = point_rx_hz;
+                best_past_index = index;
+                snprintf(best_past_time, sizeof(best_past_time), "%s", time_value);
+            }
+        } else if (!found_future || point_epoch < best_future_epoch) {
+            found_future = 1;
+            best_future_epoch = point_epoch;
+            best_future_hz = point_rx_hz;
+            best_future_index = index;
+            snprintf(best_future_time, sizeof(best_future_time), "%s", time_value);
         }
 
         p = next_point ? next_point : time_start + strlen(time_start);
         index++;
     }
 
-    return found;
+    if (found_past) {
+        *rx_hz = best_past_hz;
+        *point_index = best_past_index;
+        if (point_epoch_out) {
+            *point_epoch_out = best_past_epoch;
+        }
+        snprintf(point_time, point_time_size, "%s", best_past_time);
+        return 1;
+    }
+    if (found_future) {
+        *rx_hz = best_future_hz;
+        *point_index = best_future_index;
+        if (point_epoch_out) {
+            *point_epoch_out = best_future_epoch;
+        }
+        snprintf(point_time, point_time_size, "%s", best_future_time);
+        return 1;
+    }
+    return 0;
 }
 
 static int write_track_state(
@@ -1105,6 +1138,7 @@ static int write_track_state(
     long long seconds_until_aos,
     long long seconds_until_los,
     long long seconds_since_los,
+    long long seconds_until_point,
     const char *lo_write_result)
 {
     char path[PATH_BUF_SIZE];
@@ -1139,6 +1173,7 @@ static int write_track_state(
             "  \"seconds_until_aos\": %lld,\n"
             "  \"seconds_until_los\": %lld,\n"
             "  \"seconds_since_los\": %lld,\n"
+            "  \"seconds_until_point\": %lld,\n"
             "  \"lo_write_result\": \"%s\",\n"
             "  \"message\": \"%s\"\n"
             "}\n",
@@ -1152,6 +1187,7 @@ static int write_track_state(
             seconds_until_aos,
             seconds_until_los,
             seconds_since_los,
+            seconds_until_point,
             lo_result_json,
             message_json);
     fclose(f);
@@ -1245,7 +1281,10 @@ static int apply_radio_track_step(
     long long rx_hz = 0;
     long long aos_epoch = 0;
     long long los_epoch = 0;
+    long long point_epoch = 0;
+    long long seconds_until_aos = -1;
     long long seconds_until_los = -1;
+    long long seconds_until_point = -1;
     int point_index = -1;
     time_t now = time(NULL);
 
@@ -1260,9 +1299,9 @@ static int apply_radio_track_step(
     if (enforce_pass_window && read_track_window(plan, &aos_epoch, &los_epoch)) {
         json_escape(name_json, sizeof(name_json), name);
         if ((long long)now < aos_epoch) {
-            long long seconds_until_aos = aos_epoch - (long long)now;
+            seconds_until_aos = aos_epoch - (long long)now;
             free(plan);
-            if (!write_track_state(cfg, "waiting", name, -1, "", 0, "", "Waiting for AOS", seconds_until_aos, -1, -1, "not_attempted")) {
+            if (!write_track_state(cfg, "waiting", name, -1, "", 0, "", "Waiting for AOS", seconds_until_aos, -1, -1, seconds_until_aos, "not_attempted")) {
                 snprintf(error, error_size, "could not write Doppler track state");
                 return 500;
             }
@@ -1274,7 +1313,7 @@ static int apply_radio_track_step(
         if ((long long)now > los_epoch) {
             long long seconds_since_los = (long long)now - los_epoch;
             free(plan);
-            if (!write_track_state(cfg, "complete", name, -1, "", 0, "", "Pass complete", -1, -1, seconds_since_los, "not_attempted")) {
+            if (!write_track_state(cfg, "complete", name, -1, "", 0, "", "Pass complete", -1, -1, seconds_since_los, -1, "not_attempted")) {
                 snprintf(error, error_size, "could not write Doppler track state");
                 return 500;
             }
@@ -1285,28 +1324,33 @@ static int apply_radio_track_step(
         }
         seconds_until_los = los_epoch - (long long)now;
     }
-    if (!find_nearest_track_point(plan, (long long)now, &rx_hz, point_time, sizeof(point_time), &point_index)) {
+    if (!find_track_point_for_now(plan, (long long)now, &rx_hz, point_time, sizeof(point_time), &point_index, &point_epoch)) {
         free(plan);
         snprintf(error, error_size, "track plan does not contain usable Doppler points");
         return 400;
     }
     free(plan);
+    if (point_epoch > (long long)now) {
+        seconds_until_point = point_epoch - (long long)now;
+    } else {
+        seconds_until_point = 0;
+    }
 
     if (rx_hz < PLUTO_MIN_HZ || rx_hz > PLUTO_MAX_HZ || !write_rx_lo_frequency(rx_hz, lo_path, sizeof(lo_path))) {
-        write_track_state(cfg, "tune_error", name, point_index, point_time, rx_hz, "", "could not tune RX LO for Doppler track point", -1, seconds_until_los, -1, "failed");
+        write_track_state(cfg, "tune_error", name, point_index, point_time, rx_hz, "", "could not tune RX LO for Doppler track point", seconds_until_aos, seconds_until_los, -1, seconds_until_point, "failed");
         snprintf(error, error_size, "could not tune RX LO for Doppler track point");
         return 500;
     }
 
-    if (!write_track_state(cfg, state, name, point_index, point_time, rx_hz, lo_path, message, -1, seconds_until_los, -1, "written")) {
+    if (!write_track_state(cfg, state, name, point_index, point_time, rx_hz, lo_path, message, seconds_until_aos, seconds_until_los, -1, seconds_until_point, "written")) {
         snprintf(error, error_size, "could not write Doppler track state");
         return 500;
     }
 
     json_escape(name_json, sizeof(name_json), name);
     snprintf(response, response_size,
-             "{\"ok\":true,\"state\":\"%s\",\"name\":\"%s\",\"point_index\":%d,\"point_time_utc\":\"%s\",\"rx_hz\":%lld,\"lo_path\":\"%s\",\"seconds_until_los\":%lld,\"lo_write_result\":\"written\"}\n",
-             state, name_json, point_index, point_time, rx_hz, lo_path, seconds_until_los);
+             "{\"ok\":true,\"state\":\"%s\",\"name\":\"%s\",\"point_index\":%d,\"point_time_utc\":\"%s\",\"rx_hz\":%lld,\"lo_path\":\"%s\",\"seconds_until_los\":%lld,\"seconds_until_point\":%lld,\"lo_write_result\":\"written\"}\n",
+             state, name_json, point_index, point_time, rx_hz, lo_path, seconds_until_los, seconds_until_point);
     return 200;
 }
 
@@ -1327,6 +1371,34 @@ static void send_error_json(int fd, int status, const char *error)
     json_escape(error_json, sizeof(error_json), error ? error : "request failed");
     snprintf(body, sizeof(body), "{\"ok\":false,\"error\":\"%s\"}\n", error_json);
     send_text(fd, status, reason, "application/json; charset=utf-8", body);
+}
+
+static void send_radio_track_start(int fd, const struct app_config *cfg, const char *state)
+{
+    char response[1024];
+    char error[256];
+    int status;
+
+    if (!time_sync_state_is_synced(cfg)) {
+        send_text(fd, 409, "Conflict", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"sync Pluto time from the browser before starting Doppler tracking\"}\n");
+        return;
+    }
+
+    status = apply_radio_track_step(
+        cfg,
+        state,
+        "Doppler tracking started",
+        1,
+        response,
+        sizeof(response),
+        error,
+        sizeof(error));
+    if (status != 200) {
+        send_error_json(fd, status, error);
+        return;
+    }
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", response);
 }
 
 static void send_radio_track_step(int fd, const struct app_config *cfg, const char *state)
@@ -1357,7 +1429,7 @@ static void send_radio_track_stop(int fd, const struct app_config *cfg)
     g_track_auto_running = 0;
     pthread_mutex_unlock(&g_track_lock);
 
-    if (!write_track_state(cfg, "stopped", "", -1, "", 0, "", "Doppler tracking stopped", -1, -1, -1, "not_attempted")) {
+    if (!write_track_state(cfg, "stopped", "", -1, "", 0, "", "Doppler tracking stopped", -1, -1, -1, -1, "not_attempted")) {
         send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
                   "{\"ok\":false,\"error\":\"could not write Doppler track state\"}\n");
         return;
@@ -1401,7 +1473,9 @@ static void *track_auto_worker(void *arg)
             error,
             sizeof(error));
         if (status != 200) {
-            write_track_state(cfg, "auto_error", "", -1, "", 0, "", error, -1, -1, -1, "failed");
+            write_track_state(cfg, "auto_error", "", -1, "", 0, "", error, -1, -1, -1, -1, "failed");
+            track_auto_set_running(0);
+            break;
         } else if (strstr(response, "\"state\":\"complete\"")) {
             completed = 1;
             track_auto_set_running(0);
@@ -1411,7 +1485,7 @@ static void *track_auto_worker(void *arg)
     }
 
     if (!completed) {
-        write_track_state(cfg, "stopped", "", -1, "", 0, "", "Automatic Doppler tracking stopped", -1, -1, -1, "not_attempted");
+        write_track_state(cfg, "stopped", "", -1, "", 0, "", "Automatic Doppler tracking stopped", -1, -1, -1, -1, "not_attempted");
     }
     return NULL;
 }
@@ -1439,7 +1513,7 @@ static void send_radio_track_auto_start(int fd, const struct app_config *cfg)
     if (now > los_epoch) {
         long long seconds_since_los = now - los_epoch;
         json_escape(name_json, sizeof(name_json), name);
-        write_track_state(cfg, "stale", name, -1, "", 0, "", "Refusing stale pass; LOS is already past", -1, -1, seconds_since_los, "not_attempted");
+        write_track_state(cfg, "stale", name, -1, "", 0, "", "Refusing stale pass; LOS is already past", -1, -1, seconds_since_los, -1, "not_attempted");
         snprintf(response, sizeof(response),
                  "{\"ok\":false,\"state\":\"stale\",\"name\":\"%s\",\"seconds_since_los\":%lld,\"error\":\"pass is stale; plan a current or future pass\"}\n",
                  name_json, seconds_since_los);
@@ -1479,7 +1553,7 @@ static void send_radio_track_auto_stop(int fd, const struct app_config *cfg)
     }
 
     track_auto_set_running(0);
-    if (!write_track_state(cfg, "stopping", "", -1, "", 0, "", "Automatic Doppler tracking stopping", -1, -1, -1, "not_attempted")) {
+    if (!write_track_state(cfg, "stopping", "", -1, "", 0, "", "Automatic Doppler tracking stopping", -1, -1, -1, -1, "not_attempted")) {
         send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
                   "{\"ok\":false,\"error\":\"could not write Doppler track state\"}\n");
         return;
@@ -1651,7 +1725,7 @@ static void handle_request(
         send_json_file_or_default(fd, file_path,
                                   "{\"ok\":true,\"state\":\"idle\",\"message\":\"Doppler tracking has not started.\"}\n");
     } else if (strcmp(path, "/api/radio/track/start") == 0) {
-        send_radio_track_step(fd, cfg, "active");
+        send_radio_track_start(fd, cfg, "active");
     } else if (strcmp(path, "/api/radio/track/step") == 0) {
         send_radio_track_step(fd, cfg, "active");
     } else if (strcmp(path, "/api/radio/track/stop") == 0) {
