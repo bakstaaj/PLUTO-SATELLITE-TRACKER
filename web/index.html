@@ -265,6 +265,13 @@
       gap: 10px;
     }
 
+    .map-views {
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.9fr);
+      gap: 10px;
+      align-items: start;
+    }
+
     .map-frame {
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -278,6 +285,20 @@
       height: auto;
       aspect-ratio: 2 / 1;
       cursor: crosshair;
+    }
+
+    .sky-frame {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #fbfcfe;
+    }
+
+    .sky-frame svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      aspect-ratio: 1 / 1;
     }
 
     .map-note {
@@ -356,6 +377,10 @@
 
       .map-info {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .map-views {
+        grid-template-columns: 1fr;
       }
     }
   </style>
@@ -737,6 +762,17 @@
         ((pass.ground_track || [])[0] || null);
     }
 
+    function projectSkyPoint(azimuthDeg, elevationDeg, size) {
+      const az = (Number(azimuthDeg || 0) * Math.PI) / 180;
+      const elevation = Math.max(0, Math.min(90, Number(elevationDeg || 0)));
+      const radius = (size / 2) * (1 - (elevation / 90));
+      const center = size / 2;
+      return {
+        x: center + radius * Math.sin(az),
+        y: center - radius * Math.cos(az)
+      };
+    }
+
     function renderMapPanel(pass, config) {
       const node = document.getElementById("mapPanel");
       if (!config) {
@@ -802,32 +838,69 @@
         const isFocus = focusPoint && point.time_utc === focusPoint.time_utc;
         return `<circle class="track-sample-dot" data-time="${escapeHtml(point.time_utc)}" cx="${xy.x.toFixed(1)}" cy="${xy.y.toFixed(1)}" r="${isFocus ? "5.5" : "3.2"}" fill="${isFocus ? "#102030" : "#c4471c"}" stroke="#fff" stroke-width="${isFocus ? "2" : "1.2"}" />`;
       }).join("");
+      const skySize = 340;
+      const skyCenter = skySize / 2;
+      const skyPath = trackPoints.map((point) => {
+        const xy = projectSkyPoint(point.azimuth_deg, point.elevation_deg, skySize);
+        return `${xy.x.toFixed(1)},${xy.y.toFixed(1)}`;
+      }).join(" ");
+      const skyTrackDots = trackPoints.map((point) => {
+        const xy = projectSkyPoint(point.azimuth_deg, point.elevation_deg, skySize);
+        const isFocus = focusPoint && point.time_utc === focusPoint.time_utc;
+        return `<circle class="track-sample-dot" data-time="${escapeHtml(point.time_utc)}" cx="${xy.x.toFixed(1)}" cy="${xy.y.toFixed(1)}" r="${isFocus ? "5.5" : "3.2"}" fill="${isFocus ? "#102030" : "#c4471c"}" stroke="#fff" stroke-width="${isFocus ? "2" : "1.2"}" />`;
+      }).join("");
+      const focusSky = focusPoint ? projectSkyPoint(focusPoint.azimuth_deg, focusPoint.elevation_deg, skySize) : null;
+      const activeSky = activeTrackPoint ? projectSkyPoint(activeTrackPoint.azimuth_deg, activeTrackPoint.elevation_deg, skySize) : null;
 
       node.className = "";
       node.innerHTML = `
         <div class="map-shell">
-          <div class="map-frame">
-            <svg id="trackerMapSvg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(title)}">
-              <rect x="0" y="0" width="${width}" height="${height}" fill="#dfeef7" />
-              ${gridLines.join("")}
-              <line x1="0" y1="${(height / 2).toFixed(1)}" x2="${width}" y2="${(height / 2).toFixed(1)}" stroke="#89a8bc" stroke-width="1.2" />
-              <line x1="${(width / 2).toFixed(1)}" y1="0" x2="${(width / 2).toFixed(1)}" y2="${height}" stroke="#89a8bc" stroke-width="1.2" />
-              <rect x="0.5" y="0.5" width="${width - 1}" height="${height - 1}" fill="none" stroke="#8ea7b9" stroke-width="1" />
-              ${segmentPaths}
-              ${lookLine}
-              ${trackDots}
-              <circle cx="${observerPoint.x.toFixed(1)}" cy="${observerPoint.y.toFixed(1)}" r="5.5" fill="#006f9f" stroke="#fff" stroke-width="2" />
-              <text x="${(observerPoint.x + 10).toFixed(1)}" y="${(observerPoint.y - 10).toFixed(1)}" font-size="12" fill="#102030">${escapeHtml(config.name || "Observer")}</text>
-              ${pendingPoint ? `
-                <circle cx="${pendingPoint.x.toFixed(1)}" cy="${pendingPoint.y.toFixed(1)}" r="6.5" fill="none" stroke="#006f9f" stroke-width="2.5" stroke-dasharray="4 3" />
-                <circle cx="${pendingPoint.x.toFixed(1)}" cy="${pendingPoint.y.toFixed(1)}" r="3.5" fill="#006f9f" />
-                <text x="${(pendingPoint.x + 10).toFixed(1)}" y="${(pendingPoint.y + 16).toFixed(1)}" font-size="12" fill="#102030">Pending</text>
-              ` : ""}
-              ${marker(passStart, "#1a7f37", "AOS")}
-              ${marker(passPeak, "#a15c00", "TCA")}
-              ${marker(passEnd, "#7d3ad3", "LOS")}
-              ${marker(activeTrackPoint, "#00a7c7", "Now")}
-            </svg>
+          <div class="map-views">
+            <div class="map-frame">
+              <svg id="trackerMapSvg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(title)}">
+                <rect x="0" y="0" width="${width}" height="${height}" fill="#dfeef7" />
+                ${gridLines.join("")}
+                <line x1="0" y1="${(height / 2).toFixed(1)}" x2="${width}" y2="${(height / 2).toFixed(1)}" stroke="#89a8bc" stroke-width="1.2" />
+                <line x1="${(width / 2).toFixed(1)}" y1="0" x2="${(width / 2).toFixed(1)}" y2="${height}" stroke="#89a8bc" stroke-width="1.2" />
+                <rect x="0.5" y="0.5" width="${width - 1}" height="${height - 1}" fill="none" stroke="#8ea7b9" stroke-width="1" />
+                ${segmentPaths}
+                ${lookLine}
+                ${trackDots}
+                <circle cx="${observerPoint.x.toFixed(1)}" cy="${observerPoint.y.toFixed(1)}" r="5.5" fill="#006f9f" stroke="#fff" stroke-width="2" />
+                <text x="${(observerPoint.x + 10).toFixed(1)}" y="${(observerPoint.y - 10).toFixed(1)}" font-size="12" fill="#102030">${escapeHtml(config.name || "Observer")}</text>
+                ${pendingPoint ? `
+                  <circle cx="${pendingPoint.x.toFixed(1)}" cy="${pendingPoint.y.toFixed(1)}" r="6.5" fill="none" stroke="#006f9f" stroke-width="2.5" stroke-dasharray="4 3" />
+                  <circle cx="${pendingPoint.x.toFixed(1)}" cy="${pendingPoint.y.toFixed(1)}" r="3.5" fill="#006f9f" />
+                  <text x="${(pendingPoint.x + 10).toFixed(1)}" y="${(pendingPoint.y + 16).toFixed(1)}" font-size="12" fill="#102030">Pending</text>
+                ` : ""}
+                ${marker(passStart, "#1a7f37", "AOS")}
+                ${marker(passPeak, "#a15c00", "TCA")}
+                ${marker(passEnd, "#7d3ad3", "LOS")}
+                ${marker(activeTrackPoint, "#00a7c7", "Now")}
+              </svg>
+            </div>
+            <div class="sky-frame">
+              <svg viewBox="0 0 ${skySize} ${skySize}" role="img" aria-label="Polar sky plot">
+                <rect x="0" y="0" width="${skySize}" height="${skySize}" fill="#fbfcfe" />
+                <circle cx="${skyCenter}" cy="${skyCenter}" r="${(skySize / 2) - 12}" fill="#f3f7fb" stroke="#8ea7b9" stroke-width="1.5" />
+                <circle cx="${skyCenter}" cy="${skyCenter}" r="${((skySize / 2) - 12) * (2 / 3)}" fill="none" stroke="#c7d4df" stroke-width="1" />
+                <circle cx="${skyCenter}" cy="${skyCenter}" r="${((skySize / 2) - 12) * (1 / 3)}" fill="none" stroke="#c7d4df" stroke-width="1" />
+                <line x1="${skyCenter}" y1="12" x2="${skyCenter}" y2="${skySize - 12}" stroke="#c7d4df" stroke-width="1" />
+                <line x1="12" y1="${skyCenter}" x2="${skySize - 12}" y2="${skyCenter}" stroke="#c7d4df" stroke-width="1" />
+                <text x="${skyCenter}" y="24" text-anchor="middle" font-size="13" fill="#526173">N</text>
+                <text x="${skySize - 24}" y="${skyCenter + 5}" text-anchor="middle" font-size="13" fill="#526173">E</text>
+                <text x="${skyCenter}" y="${skySize - 18}" text-anchor="middle" font-size="13" fill="#526173">S</text>
+                <text x="24" y="${skyCenter + 5}" text-anchor="middle" font-size="13" fill="#526173">W</text>
+                <text x="${skyCenter + 6}" y="${skyCenter - (((skySize / 2) - 12) * (2 / 3)) + 2}" font-size="11" fill="#7b8797">60</text>
+                <text x="${skyCenter + 6}" y="${skyCenter - (((skySize / 2) - 12) * (1 / 3)) + 2}" font-size="11" fill="#7b8797">30</text>
+                <text x="${skyCenter + 6}" y="${skyCenter + 12}" font-size="11" fill="#7b8797">90</text>
+                ${trackPoints.length ? `<polyline fill="none" stroke="#c4471c" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="${skyPath}" />` : ""}
+                ${focusSky ? `<line x1="${skyCenter}" y1="${skyCenter}" x2="${focusSky.x.toFixed(1)}" y2="${focusSky.y.toFixed(1)}" stroke="#3e6b85" stroke-width="2" stroke-dasharray="5 4" />` : ""}
+                ${skyTrackDots}
+                ${focusSky ? `<circle cx="${focusSky.x.toFixed(1)}" cy="${focusSky.y.toFixed(1)}" r="6" fill="#102030" stroke="#fff" stroke-width="2" />` : ""}
+                ${activeSky ? `<circle cx="${activeSky.x.toFixed(1)}" cy="${activeSky.y.toFixed(1)}" r="5" fill="#00a7c7" stroke="#fff" stroke-width="2" />` : ""}
+              </svg>
+            </div>
           </div>
           ${focusPoint ? `
             <div class="map-info">
@@ -840,6 +913,7 @@
           <div class="map-legend">
             <span class="legend-item"><span class="legend-swatch" style="background:#006f9f"></span>Observer</span>
             <span class="legend-item"><span class="legend-swatch" style="background:#c4471c"></span>Visible pass path</span>
+            <span class="legend-item"><span class="legend-swatch" style="background:#3e6b85"></span>Observer look line</span>
             <span class="legend-item"><span class="legend-swatch" style="background:#102030"></span>Focused sample</span>
             <span class="legend-item"><span class="legend-swatch" style="background:#00a7c7"></span>Current track point</span>
             <span class="legend-item"><span class="legend-swatch" style="background:#1a7f37"></span>AOS</span>
@@ -847,7 +921,7 @@
             <span class="legend-item"><span class="legend-swatch" style="background:#7d3ad3"></span>LOS</span>
           </div>
           <div class="map-note">
-            Click the map to prefill observer latitude and longitude. ${pass ? "The red path shows the visible portion of the selected pass, and the dashed line shows the observer look path to the focused sample." : "Select a pass to overlay its flyover path."}${pendingMapLocation ? " The dashed marker is your unsaved observer selection." : ""}
+            Click the map to prefill observer latitude and longitude. ${pass ? "The left panel shows the visible ground track, and the right polar plot shows azimuth/elevation geometry for the same focused sample." : "Select a pass to overlay its flyover path."}${pendingMapLocation ? " The dashed marker is your unsaved observer selection." : ""}
           </div>
         </div>
       `;
