@@ -872,6 +872,93 @@ static void send_radio_plan(int fd, const struct app_config *cfg, const char *qu
     send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
 }
 
+static int write_radio_target_state(
+    const struct app_config *cfg,
+    time_t planned_epoch,
+    time_t tuned_epoch,
+    const char *name,
+    const char *norad,
+    const char *aos,
+    long long downlink_hz,
+    const char *uplink,
+    const char *mode,
+    const char *description,
+    const char *lo_path,
+    const char *sample_time_utc,
+    const char *state)
+{
+    char name_json[512];
+    char mode_json[256];
+    char description_json[1024];
+    char lo_path_json[PATH_BUF_SIZE * 2];
+    char sample_time_json[128];
+    char aos_json[256];
+    char path[PATH_BUF_SIZE];
+    char tmp_path[PATH_BUF_SIZE + 8];
+    char tuned_epoch_value[32];
+    const char *norad_value = (norad && *norad) ? norad : "null";
+    const char *uplink_value = (uplink && *uplink) ? uplink : "null";
+    FILE *f;
+
+    json_escape(name_json, sizeof(name_json), name ? name : "");
+    json_escape(mode_json, sizeof(mode_json), mode ? mode : "");
+    json_escape(description_json, sizeof(description_json), description ? description : "");
+    json_escape(lo_path_json, sizeof(lo_path_json), lo_path ? lo_path : "");
+    json_escape(sample_time_json, sizeof(sample_time_json), sample_time_utc ? sample_time_utc : "");
+    json_escape(aos_json, sizeof(aos_json), aos ? aos : "");
+
+    if (tuned_epoch > 0) {
+        snprintf(tuned_epoch_value, sizeof(tuned_epoch_value), "%ld", (long)tuned_epoch);
+    } else {
+        snprintf(tuned_epoch_value, sizeof(tuned_epoch_value), "null");
+    }
+
+    join_path(path, sizeof(path), cfg->data_dir, "radio_target.json");
+    snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
+
+    f = fopen(tmp_path, "wb");
+    if (!f) {
+        return 0;
+    }
+
+    fprintf(f,
+            "{\n"
+            "  \"ok\": true,\n"
+            "  \"planned_epoch\": %ld,\n"
+            "  \"tuned_epoch\": %s,\n"
+            "  \"name\": \"%s\",\n"
+            "  \"norad_id\": %s,\n"
+            "  \"aos_utc\": \"%s\",\n"
+            "  \"downlink_hz\": %lld,\n"
+            "  \"uplink_hz\": %s,\n"
+            "  \"mode\": \"%s\",\n"
+            "  \"description\": \"%s\",\n"
+            "  \"lo_path\": \"%s\",\n"
+            "  \"sample_time_utc\": \"%s\",\n"
+            "  \"state\": \"%s\"\n"
+            "}\n",
+            (long)planned_epoch,
+            tuned_epoch_value,
+            name_json,
+            norad_value,
+            aos_json,
+            downlink_hz,
+            uplink_value,
+            mode_json,
+            description_json,
+            lo_path_json,
+            sample_time_json,
+            state ? state : "idle");
+    fclose(f);
+
+    if (rename(tmp_path, path) != 0) {
+        unlink(tmp_path);
+        return 0;
+    }
+
+    return 1;
+}
+
 static int parse_frequency_hz(const char *value, long long *out)
 {
     char *end = NULL;
@@ -1561,6 +1648,7 @@ static void send_error_json(int fd, int status, const char *error)
 static void send_radio_track_start(int fd, const struct app_config *cfg, const char *state)
 {
     char response[1024];
+    char error[256];
     int status;
 
     if (!time_sync_state_is_synced(cfg)) {
@@ -1615,14 +1703,18 @@ static void send_radio_track_tune_point(int fd, const struct app_config *cfg, co
     char point_time_query[64] = "";
     char point_time[64] = "";
     char name[256] = "";
+    char norad[64] = "";
+    char aos[128] = "";
+    char mode[128] = "";
+    char description[512] = "";
     char name_json[512];
     char lo_path[PATH_BUF_SIZE] = "";
     char response[1024];
-    char error[256];
     long long rx_hz = 0;
     long long point_epoch = 0;
     long long aos_epoch = 0;
     long long los_epoch = 0;
+    long long norad_id = 0;
     long long seconds_until_aos = -1;
     long long seconds_until_los = -1;
     long long seconds_until_point = -1;
@@ -1644,6 +1736,12 @@ static void send_radio_track_tune_point(int fd, const struct app_config *cfg, co
     (void)plan_len;
 
     json_string_value(plan, "name", name, sizeof(name));
+    json_string_value(plan, "aos_utc", aos, sizeof(aos));
+    json_string_value(plan, "mode", mode, sizeof(mode));
+    json_string_value(plan, "description", description, sizeof(description));
+    if (json_long_long_after(plan, "norad_id", &norad_id)) {
+        snprintf(norad, sizeof(norad), "%lld", norad_id);
+    }
     if (read_track_window(plan, &aos_epoch, &los_epoch)) {
         enforce_pass_window = 1;
         if ((long long)now < aos_epoch) {
@@ -1675,6 +1773,10 @@ static void send_radio_track_tune_point(int fd, const struct app_config *cfg, co
 
     if (!write_track_state(cfg, state, name, point_index, point_time, rx_hz, lo_path, "selected Doppler point tuned", seconds_until_aos, seconds_until_los, -1, seconds_until_point, "written")) {
         send_error_json(fd, 500, "could not write Doppler track state");
+        return;
+    }
+    if (!write_radio_target_state(cfg, now, now, name, norad, aos, rx_hz, "", mode, description, lo_path, point_time, state)) {
+        send_error_json(fd, 500, "could not write tuned target state");
         return;
     }
 
@@ -1843,14 +1945,9 @@ static void send_radio_tune(int fd, const struct app_config *cfg, const char *qu
     char mode[128] = "";
     char description[512] = "";
     char name_json[512];
-    char mode_json[256];
-    char description_json[1024];
     char lo_path[PATH_BUF_SIZE] = "";
-    char path[PATH_BUF_SIZE];
-    char tmp_path[PATH_BUF_SIZE + 8];
     char body[2048];
     long long frequency_hz;
-    FILE *f;
     time_t now = time(NULL);
 
     query_param(query, "name", name, sizeof(name));
@@ -1873,54 +1970,13 @@ static void send_radio_tune(int fd, const struct app_config *cfg, const char *qu
         return;
     }
 
-    json_escape(name_json, sizeof(name_json), name);
-    json_escape(mode_json, sizeof(mode_json), mode);
-    json_escape(description_json, sizeof(description_json), description);
-
-    join_path(path, sizeof(path), cfg->data_dir, "radio_target.json");
-    snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
-
-    f = fopen(tmp_path, "wb");
-    if (!f) {
+    if (!write_radio_target_state(cfg, now, now, name, norad, aos, frequency_hz, uplink, mode, description, lo_path, "", "tuned")) {
         send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
                   "{\"ok\":false,\"error\":\"could not write tuned target state\"}\n");
         return;
     }
 
-    fprintf(f,
-            "{\n"
-            "  \"ok\": true,\n"
-            "  \"planned_epoch\": %ld,\n"
-            "  \"tuned_epoch\": %ld,\n"
-            "  \"name\": \"%s\",\n"
-            "  \"norad_id\": %s,\n"
-            "  \"aos_utc\": \"%s\",\n"
-            "  \"downlink_hz\": %lld,\n"
-            "  \"uplink_hz\": %s,\n"
-            "  \"mode\": \"%s\",\n"
-            "  \"description\": \"%s\",\n"
-            "  \"lo_path\": \"%s\",\n"
-            "  \"state\": \"tuned\"\n"
-            "}\n",
-            (long)now,
-            (long)now,
-            name_json,
-            norad,
-            aos,
-            frequency_hz,
-            uplink[0] ? uplink : "null",
-            mode_json,
-            description_json,
-            lo_path);
-    fclose(f);
-
-    if (rename(tmp_path, path) != 0) {
-        unlink(tmp_path);
-        send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
-                  "{\"ok\":false,\"error\":\"could not publish tuned target state\"}\n");
-        return;
-    }
-
+    json_escape(name_json, sizeof(name_json), name);
     snprintf(body, sizeof(body),
              "{\"ok\":true,\"state\":\"tuned\",\"name\":\"%s\",\"norad_id\":%s,\"downlink_hz\":%lld,\"lo_path\":\"%s\"}\n",
              name_json, norad, frequency_hz, lo_path);
