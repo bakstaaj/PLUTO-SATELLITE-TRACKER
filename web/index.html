@@ -351,6 +351,16 @@
       return `${minutes} min`;
     }
 
+    function formatCountdown(seconds) {
+      const total = Math.max(0, Math.round(Number(seconds || 0)));
+      const hours = Math.floor(total / 3600);
+      const minutes = Math.floor((total % 3600) / 60);
+      const secs = total % 60;
+      if (hours > 0) return `${hours}h ${minutes}m ${secs}s`;
+      if (minutes > 0) return `${minutes}m ${secs}s`;
+      return `${secs}s`;
+    }
+
     function formatDateTime(iso) {
       if (!iso) return "";
       return new Date(iso).toLocaleString([], {
@@ -459,6 +469,9 @@
       if (trackState.state && trackState.state !== "idle") entries.push(["Tracking", trackState.state]);
       if (trackState.rx_hz) entries.push(["Track RX", formatHz(trackState.rx_hz)]);
       if (trackState.point_time_utc) entries.push(["Track point", formatTime(trackState.point_time_utc)]);
+      if (trackState.seconds_until_aos > 0) entries.push(["AOS in", formatCountdown(trackState.seconds_until_aos)]);
+      if (trackState.seconds_since_los > 0) entries.push(["LOS ago", formatCountdown(trackState.seconds_since_los)]);
+      if (trackState.message) entries.push(["Track message", trackState.message]);
       entries.push(...radioHardwareEntries(hardware));
       setDl("radioStatus", entries);
     }
@@ -822,6 +835,9 @@
         ["Tracking", radioTrackState.state || "-"],
         ["Track RX", radioTrackState.rx_hz ? formatHz(radioTrackState.rx_hz) : "-"],
         ["Track point", radioTrackState.point_time_utc ? formatTime(radioTrackState.point_time_utc) : "-"],
+        ["AOS in", radioTrackState.seconds_until_aos > 0 ? formatCountdown(radioTrackState.seconds_until_aos) : "-"],
+        ["LOS ago", radioTrackState.seconds_since_los > 0 ? formatCountdown(radioTrackState.seconds_since_los) : "-"],
+        ["Track message", radioTrackState.message || "-"],
         ...radioHardwareEntries(radioHardware)
       ]);
 

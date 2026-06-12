@@ -935,7 +935,9 @@ static int write_track_state(
     const char *point_time,
     long long rx_hz,
     const char *lo_path,
-    const char *message)
+    const char *message,
+    long long seconds_until_aos,
+    long long seconds_since_los)
 {
     char path[PATH_BUF_SIZE];
     char tmp_path[PATH_BUF_SIZE + 8];
@@ -964,6 +966,8 @@ static int write_track_state(
             "  \"point_time_utc\": \"%s\",\n"
             "  \"rx_hz\": %lld,\n"
             "  \"lo_path\": \"%s\",\n"
+            "  \"seconds_until_aos\": %lld,\n"
+            "  \"seconds_since_los\": %lld,\n"
             "  \"message\": \"%s\"\n"
             "}\n",
             state,
@@ -973,6 +977,8 @@ static int write_track_state(
             point_time ? point_time : "",
             rx_hz,
             lo_path ? lo_path : "",
+            seconds_until_aos,
+            seconds_since_los,
             message_json);
     fclose(f);
 
@@ -983,10 +989,26 @@ static int write_track_state(
     return 1;
 }
 
+static int read_track_window(
+    const char *plan,
+    long long *aos_epoch,
+    long long *los_epoch)
+{
+    char aos[64] = "";
+    char los[64] = "";
+
+    if (!json_string_value(plan, "aos_utc", aos, sizeof(aos)) ||
+        !json_string_value(plan, "los_utc", los, sizeof(los))) {
+        return 0;
+    }
+    return parse_iso_utc_epoch(aos, aos_epoch) && parse_iso_utc_epoch(los, los_epoch);
+}
+
 static int apply_radio_track_step(
     const struct app_config *cfg,
     const char *state,
     const char *message,
+    int enforce_pass_window,
     char *response,
     size_t response_size,
     char *error,
@@ -1000,6 +1022,8 @@ static int apply_radio_track_step(
     char point_time[64] = "";
     char lo_path[PATH_BUF_SIZE] = "";
     long long rx_hz = 0;
+    long long aos_epoch = 0;
+    long long los_epoch = 0;
     int point_index = -1;
     time_t now = time(NULL);
 
@@ -1011,6 +1035,33 @@ static int apply_radio_track_step(
     (void)plan_len;
 
     json_string_value(plan, "name", name, sizeof(name));
+    if (enforce_pass_window && read_track_window(plan, &aos_epoch, &los_epoch)) {
+        json_escape(name_json, sizeof(name_json), name);
+        if ((long long)now < aos_epoch) {
+            long long seconds_until_aos = aos_epoch - (long long)now;
+            free(plan);
+            if (!write_track_state(cfg, "waiting", name, -1, "", 0, "", "Waiting for AOS", seconds_until_aos, -1)) {
+                snprintf(error, error_size, "could not write Doppler track state");
+                return 500;
+            }
+            snprintf(response, response_size,
+                     "{\"ok\":true,\"state\":\"waiting\",\"name\":\"%s\",\"seconds_until_aos\":%lld}\n",
+                     name_json, seconds_until_aos);
+            return 200;
+        }
+        if ((long long)now > los_epoch) {
+            long long seconds_since_los = (long long)now - los_epoch;
+            free(plan);
+            if (!write_track_state(cfg, "complete", name, -1, "", 0, "", "Pass complete", -1, seconds_since_los)) {
+                snprintf(error, error_size, "could not write Doppler track state");
+                return 500;
+            }
+            snprintf(response, response_size,
+                     "{\"ok\":true,\"state\":\"complete\",\"name\":\"%s\",\"seconds_since_los\":%lld}\n",
+                     name_json, seconds_since_los);
+            return 200;
+        }
+    }
     if (!find_nearest_track_point(plan, (long long)now, &rx_hz, point_time, sizeof(point_time), &point_index)) {
         free(plan);
         snprintf(error, error_size, "track plan does not contain usable Doppler points");
@@ -1023,7 +1074,7 @@ static int apply_radio_track_step(
         return 500;
     }
 
-    if (!write_track_state(cfg, state, name, point_index, point_time, rx_hz, lo_path, message)) {
+    if (!write_track_state(cfg, state, name, point_index, point_time, rx_hz, lo_path, message, -1, -1)) {
         snprintf(error, error_size, "could not write Doppler track state");
         return 500;
     }
@@ -1062,6 +1113,7 @@ static void send_radio_track_step(int fd, const struct app_config *cfg, const ch
         cfg,
         state,
         "nearest Doppler point tuned",
+        0,
         response,
         sizeof(response),
         error,
@@ -1079,7 +1131,7 @@ static void send_radio_track_stop(int fd, const struct app_config *cfg)
     g_track_auto_running = 0;
     pthread_mutex_unlock(&g_track_lock);
 
-    if (!write_track_state(cfg, "stopped", "", -1, "", 0, "", "Doppler tracking stopped")) {
+    if (!write_track_state(cfg, "stopped", "", -1, "", 0, "", "Doppler tracking stopped", -1, -1)) {
         send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
                   "{\"ok\":false,\"error\":\"could not write Doppler track state\"}\n");
         return;
@@ -1108,6 +1160,7 @@ static void track_auto_set_running(int running)
 static void *track_auto_worker(void *arg)
 {
     const struct app_config *cfg = (const struct app_config *)arg;
+    int completed = 0;
 
     while (track_auto_should_run()) {
         char response[1024];
@@ -1116,17 +1169,24 @@ static void *track_auto_worker(void *arg)
             cfg,
             "auto_active",
             "automatic Doppler point tuned",
+            1,
             response,
             sizeof(response),
             error,
             sizeof(error));
         if (status != 200) {
-            write_track_state(cfg, "auto_error", "", -1, "", 0, "", error);
+            write_track_state(cfg, "auto_error", "", -1, "", 0, "", error, -1, -1);
+        } else if (strstr(response, "\"state\":\"complete\"")) {
+            completed = 1;
+            track_auto_set_running(0);
+            break;
         }
         sleep(5);
     }
 
-    write_track_state(cfg, "stopped", "", -1, "", 0, "", "Automatic Doppler tracking stopped");
+    if (!completed) {
+        write_track_state(cfg, "stopped", "", -1, "", 0, "", "Automatic Doppler tracking stopped", -1, -1);
+    }
     return NULL;
 }
 
@@ -1159,8 +1219,14 @@ static void send_radio_track_auto_start(int fd, const struct app_config *cfg)
 
 static void send_radio_track_auto_stop(int fd, const struct app_config *cfg)
 {
+    if (!track_auto_should_run()) {
+        send_text(fd, 200, "OK", "application/json; charset=utf-8",
+                  "{\"ok\":true,\"state\":\"idle\",\"message\":\"Automatic Doppler tracking is not running\"}\n");
+        return;
+    }
+
     track_auto_set_running(0);
-    if (!write_track_state(cfg, "stopping", "", -1, "", 0, "", "Automatic Doppler tracking stopping")) {
+    if (!write_track_state(cfg, "stopping", "", -1, "", 0, "", "Automatic Doppler tracking stopping", -1, -1)) {
         send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
                   "{\"ok\":false,\"error\":\"could not write Doppler track state\"}\n");
         return;

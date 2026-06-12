@@ -33,4 +33,14 @@ echo "Stopping Pluto Satellite Tracker on ${PLUTO_IP}..."
   fi
   echo "Killing: $PIDS"
   kill $PIDS
+  sleep 1
+
+  LEFTOVERS="$(pidof pluto_sat_tracker 2>/dev/null || true)"
+  if [ -z "$LEFTOVERS" ]; then
+    LEFTOVERS="$(ps | awk "/pluto_sat_tracker/ && !/awk/ { print \$1 }")"
+  fi
+  if [ -n "$LEFTOVERS" ]; then
+    echo "Force killing: $LEFTOVERS"
+    kill -9 $LEFTOVERS
+  fi
 '
