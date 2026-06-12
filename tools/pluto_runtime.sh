@@ -3,6 +3,11 @@
 DEPLOY_DIR="${PLUTO_DEPLOY_DIR:-/mnt/jffs2/pluto_sat_tracker}"
 SD_ROOT="${PLUTO_SD_ROOT:-/media/mmcblk0p1/pluto_sat_tracker}"
 BIN="${DEPLOY_DIR}/pluto_sat_tracker"
+REFRESH_RUNNER="${SD_ROOT}/tools/pluto_refresh_data.sh"
+OBSERVER_FILE="${DEPLOY_DIR}/config/observer.json"
+CATALOG_FILE="${SD_ROOT}/data/satellites.json"
+PASSES_FILE="${SD_ROOT}/data/passes.json"
+STARTUP_REFRESH_LOG="${SD_ROOT}/logs/startup_pass_refresh.log"
 
 TIME_EPOCH_FILE="${DEPLOY_DIR}/last_time_epoch.txt"
 TIME_UTC_FILE="${DEPLOY_DIR}/last_time_utc.txt"
@@ -57,6 +62,26 @@ save_time() {
     date -u "+%Y.%m.%d-%H:%M:%S" > "$TIME_UTC_FILE" 2>/dev/null || true
     sync
   fi
+}
+
+maybe_refresh_passes() {
+  if [ ! -x "$REFRESH_RUNNER" ] && [ ! -r "$REFRESH_RUNNER" ]; then
+    echo "Startup pass refresh: runner not available"
+    return 0
+  fi
+  if [ ! -f "$OBSERVER_FILE" ]; then
+    echo "Startup pass refresh: observer config not found"
+    return 0
+  fi
+  if [ ! -f "$CATALOG_FILE" ]; then
+    echo "Startup pass refresh: satellite catalog not found"
+    return 0
+  fi
+
+  echo "Startup pass refresh: regenerating passes from saved observer config"
+  (
+    /bin/sh "$REFRESH_RUNNER" passes
+  ) >"$STARTUP_REFRESH_LOG" 2>&1 &
 }
 
 try_host_time() {
@@ -132,6 +157,7 @@ else
 fi
 
 echo "Current Pluto UTC time: $(date -u 2>/dev/null || true)"
+maybe_refresh_passes
 echo "Starting: $BIN --web-dir $DEPLOY_DIR/web --config-dir $DEPLOY_DIR/config --data-dir $SD_ROOT/data $TRACKER_ARGS"
 echo
 
