@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Pluto Satellite Tracker</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <style>
     :root {
       color-scheme: light;
@@ -303,12 +304,28 @@
       font-size: 12px;
     }
 
-    .map-frame svg {
+    .map-canvas {
       display: block;
       width: 100%;
-      height: auto;
       aspect-ratio: 2 / 1;
+      min-height: 360px;
       cursor: crosshair;
+    }
+
+    .map-frame .leaflet-container {
+      width: 100%;
+      height: 100%;
+      min-height: 360px;
+      background: #dfeef7;
+    }
+
+    .leaflet-control-attribution {
+      font-size: 11px;
+    }
+
+    .map-popup {
+      font-size: 12px;
+      line-height: 1.4;
     }
 
     .sky-frame {
@@ -515,6 +532,7 @@
     </section>
   </main>
 
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script>
     let lastRadioHardware = null;
     let lastTimeStatus = null;
@@ -525,7 +543,9 @@
     let currentSelectedPassKey = "";
     let pendingMapLocation = null;
     let currentMapFocusTime = "";
-    let currentMapViewBox = null;
+    let currentLeafletMap = null;
+    let currentLeafletPassKey = "";
+    let currentLeafletView = null;
     let refreshTimerId = 0;
     let refreshInFlight = false;
 
@@ -724,12 +744,6 @@
       return value;
     }
 
-    function projectLonLat(longitude, latitude, width, height) {
-      const x = ((normalizeLongitude(longitude) + 180) / 360) * width;
-      const y = ((90 - Number(latitude || 0)) / 180) * height;
-      return { x, y };
-    }
-
     function splitTrackSegments(points) {
       const segments = [];
       let current = [];
@@ -800,54 +814,178 @@
       };
     }
 
-    function defaultMapViewBox() {
-      return { x: 0, y: 0, width: 720, height: 360 };
-    }
-
-    function clampMapViewBox(viewBox) {
-      const base = defaultMapViewBox();
-      const minWidth = 180;
-      const minHeight = 90;
-      const width = Math.max(minWidth, Math.min(base.width, viewBox.width));
-      const height = Math.max(minHeight, Math.min(base.height, viewBox.height));
-      const maxX = base.width - width;
-      const maxY = base.height - height;
-      return {
-        x: Math.max(0, Math.min(maxX, viewBox.x)),
-        y: Math.max(0, Math.min(maxY, viewBox.y)),
-        width,
-        height
-      };
-    }
-
-    function mapViewBoxString(viewBox) {
-      return `${viewBox.x} ${viewBox.y} ${viewBox.width} ${viewBox.height}`;
-    }
-
-    function ensureMapViewBox() {
-      if (!currentMapViewBox) {
-        currentMapViewBox = defaultMapViewBox();
+    function formatMapPopup(point, label) {
+      if (!point) return "";
+      const details = [
+        `<strong>${escapeHtml(label)}</strong>`,
+        escapeHtml(formatDateTime(point.time_utc))
+      ];
+      if (Number.isFinite(Number(point.latitude_deg)) && Number.isFinite(Number(point.longitude_deg))) {
+        details.push(escapeHtml(`Lat ${Number(point.latitude_deg).toFixed(3)} deg, Lon ${Number(point.longitude_deg).toFixed(3)} deg`));
       }
-      currentMapViewBox = clampMapViewBox(currentMapViewBox);
-      return currentMapViewBox;
-    }
-
-    function zoomMap(factor) {
-      const view = ensureMapViewBox();
-      const nextWidth = view.width * factor;
-      const nextHeight = view.height * factor;
-      currentMapViewBox = clampMapViewBox({
-        x: view.x + ((view.width - nextWidth) / 2),
-        y: view.y + ((view.height - nextHeight) / 2),
-        width: nextWidth,
-        height: nextHeight
-      });
-      renderMapPanel(currentSelectedPass, currentObserverConfig);
+      if (Number.isFinite(Number(point.azimuth_deg)) && Number.isFinite(Number(point.elevation_deg))) {
+        details.push(escapeHtml(`Az ${point.azimuth_deg} deg, El ${point.elevation_deg} deg`));
+      }
+      if (Number.isFinite(Number(point.rx_hz))) {
+        details.push(escapeHtml(`RX ${formatHz(point.rx_hz)}`));
+      }
+      return `<div class="map-popup">${details.join("<br>")}</div>`;
     }
 
     function resetMapView() {
-      currentMapViewBox = defaultMapViewBox();
+      currentLeafletView = null;
       renderMapPanel(currentSelectedPass, currentObserverConfig);
+    }
+
+    function renderLeafletMap(pass, config, focusPoint, activeTrackPoint) {
+      const mapNode = document.getElementById("trackerLeafletMap");
+      if (!mapNode) return;
+      if (!window.L) {
+        mapNode.textContent = "Basemap library did not load. Check browser internet access and reload the page.";
+        return;
+      }
+
+      if (currentLeafletMap) {
+        currentLeafletMap.remove();
+        currentLeafletMap = null;
+      }
+
+      const passKeyValue = passKey(pass);
+      const observerLatLng = [Number(config.latitude_deg || 0), normalizeLongitude(config.longitude_deg)];
+      const overlayBounds = [observerLatLng];
+      currentLeafletMap = L.map(mapNode, {
+        zoomControl: false,
+        worldCopyJump: true
+      });
+
+      L.control.zoom({ position: "topright" }).addTo(currentLeafletMap);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        minZoom: 2,
+        maxZoom: 19,
+        attribution: "&copy; OpenStreetMap contributors"
+      }).addTo(currentLeafletMap);
+
+      L.circleMarker(observerLatLng, {
+        radius: 7,
+        color: "#ffffff",
+        weight: 2,
+        fillColor: "#006f9f",
+        fillOpacity: 1,
+        bubblingMouseEvents: false
+      }).addTo(currentLeafletMap)
+        .bindPopup(`<div class="map-popup"><strong>${escapeHtml(config.name || "Observer")}</strong><br>${escapeHtml(`${Number(config.latitude_deg).toFixed(5)} deg, ${Number(config.longitude_deg).toFixed(5)} deg`)}</div>`);
+
+      if (pendingMapLocation) {
+        L.circleMarker([pendingMapLocation.latitude_deg, normalizeLongitude(pendingMapLocation.longitude_deg)], {
+          radius: 8,
+          color: "#006f9f",
+          weight: 2,
+          dashArray: "4 3",
+          fillColor: "#006f9f",
+          fillOpacity: 0.35,
+          bubblingMouseEvents: false
+        }).addTo(currentLeafletMap)
+          .bindPopup(`<div class="map-popup"><strong>Pending observer location</strong><br>${escapeHtml(`${pendingMapLocation.latitude_deg.toFixed(5)} deg, ${pendingMapLocation.longitude_deg.toFixed(5)} deg`)}</div>`);
+      }
+
+      const trackPoints = (pass && pass.ground_track) || [];
+      const segments = splitTrackSegments(trackPoints);
+      segments.forEach((segment) => {
+        const latLngs = segment.map((point) => {
+          const latLng = [Number(point.latitude_deg || 0), normalizeLongitude(point.longitude_deg)];
+          overlayBounds.push(latLng);
+          return latLng;
+        });
+        if (latLngs.length > 1) {
+          L.polyline(latLngs, {
+            color: "#c4471c",
+            weight: 4,
+            opacity: 0.9,
+            bubblingMouseEvents: false
+          }).addTo(currentLeafletMap);
+        }
+      });
+
+      trackPoints.forEach((point) => {
+        const latLng = [Number(point.latitude_deg || 0), normalizeLongitude(point.longitude_deg)];
+        const isFocus = focusPoint && point.time_utc === focusPoint.time_utc;
+        L.circleMarker(latLng, {
+          radius: isFocus ? 7 : 4,
+          color: "#ffffff",
+          weight: isFocus ? 2 : 1,
+          fillColor: isFocus ? "#102030" : "#c4471c",
+          fillOpacity: 1,
+          bubblingMouseEvents: false
+        }).addTo(currentLeafletMap)
+          .bindPopup(formatMapPopup(point, isFocus ? "Focused sample" : "Pass sample"))
+          .on("mouseover", () => {
+            currentMapFocusTime = point.time_utc || "";
+            renderMapPanel(currentSelectedPass, currentObserverConfig);
+          })
+          .on("click", () => {
+            currentMapFocusTime = point.time_utc || "";
+            renderMapPanel(currentSelectedPass, currentObserverConfig);
+          });
+      });
+
+      [
+        { point: trackPoints[0], label: "AOS", color: "#1a7f37" },
+        { point: trackPoints.length ? trackPoints[Math.floor(trackPoints.length / 2)] : null, label: "TCA", color: "#a15c00" },
+        { point: trackPoints.length ? trackPoints[trackPoints.length - 1] : null, label: "LOS", color: "#7d3ad3" },
+        { point: activeTrackPoint, label: "Now", color: "#00a7c7" }
+      ].forEach(({ point, label, color }) => {
+        if (!point) return;
+        const latLng = [Number(point.latitude_deg || 0), normalizeLongitude(point.longitude_deg)];
+        L.circleMarker(latLng, {
+          radius: 7,
+          color: "#ffffff",
+          weight: 2,
+          fillColor: color,
+          fillOpacity: 1,
+          bubblingMouseEvents: false
+        }).addTo(currentLeafletMap).bindPopup(formatMapPopup(point, label));
+      });
+
+      if (focusPoint) {
+        const focusLatLng = [Number(focusPoint.latitude_deg || 0), normalizeLongitude(focusPoint.longitude_deg)];
+        L.polyline([observerLatLng, focusLatLng], {
+          color: "#3e6b85",
+          weight: 2,
+          opacity: 0.85,
+          dashArray: "6 5",
+          bubblingMouseEvents: false
+        }).addTo(currentLeafletMap);
+      }
+
+      currentLeafletMap.on("click", (event) => {
+        pendingMapLocation = {
+          latitude_deg: event.latlng.lat,
+          longitude_deg: event.latlng.lng
+        };
+        document.getElementById("observerLatitudeInput").value = event.latlng.lat.toFixed(5);
+        document.getElementById("observerLongitudeInput").value = event.latlng.lng.toFixed(5);
+        renderMapPanel(currentSelectedPass, currentObserverConfig);
+        document.getElementById("status").textContent = `Map selected ${event.latlng.lat.toFixed(5)}, ${event.latlng.lng.toFixed(5)}. Save Location to apply it.`;
+      });
+
+      currentLeafletMap.on("moveend", () => {
+        const center = currentLeafletMap.getCenter();
+        currentLeafletView = {
+          center: [center.lat, center.lng],
+          zoom: currentLeafletMap.getZoom()
+        };
+        currentLeafletPassKey = passKeyValue;
+      });
+
+      if (currentLeafletView && currentLeafletPassKey === passKeyValue) {
+        currentLeafletMap.setView(currentLeafletView.center, currentLeafletView.zoom);
+      } else if (overlayBounds.length > 1) {
+        currentLeafletMap.fitBounds(overlayBounds, { padding: [24, 24] });
+      } else {
+        currentLeafletMap.setView(observerLatLng, 4);
+      }
+
+      window.setTimeout(() => currentLeafletMap && currentLeafletMap.invalidateSize(), 0);
     }
 
     function renderMapPanel(pass, config) {
@@ -858,63 +996,9 @@
         return;
       }
 
-      const width = 720;
-      const height = 360;
-      const gridLines = [];
-      for (let lon = -150; lon <= 180; lon += 30) {
-        const p1 = projectLonLat(lon, -85, width, height);
-        const p2 = projectLonLat(lon, 85, width, height);
-        gridLines.push(`<line x1="${p1.x.toFixed(1)}" y1="${p1.y.toFixed(1)}" x2="${p2.x.toFixed(1)}" y2="${p2.y.toFixed(1)}" stroke="#b9cad7" stroke-width="1" />`);
-      }
-      for (let lat = -60; lat <= 60; lat += 30) {
-        const p1 = projectLonLat(-180, lat, width, height);
-        const p2 = projectLonLat(180, lat, width, height);
-        gridLines.push(`<line x1="${p1.x.toFixed(1)}" y1="${p1.y.toFixed(1)}" x2="${p2.x.toFixed(1)}" y2="${p2.y.toFixed(1)}" stroke="#b9cad7" stroke-width="1" />`);
-      }
-
-      const observerPoint = projectLonLat(config.longitude_deg, config.latitude_deg, width, height);
       const trackPoints = (pass && pass.ground_track) || [];
-      const segments = splitTrackSegments(trackPoints);
-      const segmentPaths = segments.map((segment) => {
-        const points = segment.map((point) => {
-          const xy = projectLonLat(point.longitude_deg, point.latitude_deg, width, height);
-          return `${xy.x.toFixed(1)},${xy.y.toFixed(1)}`;
-        }).join(" ");
-        return `<polyline fill="none" stroke="#c4471c" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="${points}" />`;
-      }).join("");
-
-      const passStart = trackPoints[0];
-      const passPeak = trackPoints.length ? trackPoints[Math.floor(trackPoints.length / 2)] : null;
-      const passEnd = trackPoints.length ? trackPoints[trackPoints.length - 1] : null;
       const activeTrackPoint = trackedPointForPass(pass, lastTrackState);
       const focusPoint = focusedMapPoint(pass, lastTrackState);
-      const pendingPoint = pendingMapLocation
-        ? projectLonLat(pendingMapLocation.longitude_deg, pendingMapLocation.latitude_deg, width, height)
-        : null;
-
-      function marker(point, color, label) {
-        if (!point) return "";
-        const xy = projectLonLat(point.longitude_deg, point.latitude_deg, width, height);
-        return `
-          <circle cx="${xy.x.toFixed(1)}" cy="${xy.y.toFixed(1)}" r="4.5" fill="${color}" stroke="#fff" stroke-width="2" />
-          <text x="${(xy.x + 8).toFixed(1)}" y="${(xy.y - 8).toFixed(1)}" font-size="12" fill="#102030">${escapeHtml(label)}</text>
-        `;
-      }
-
-      const title = pass
-        ? `${pass.name || "Selected pass"} visible ground track`
-        : `${config.name || "Observer"} location`;
-      const focusXY = focusPoint
-        ? projectLonLat(focusPoint.longitude_deg, focusPoint.latitude_deg, width, height)
-        : null;
-      const lookLine = focusXY
-        ? `<line x1="${observerPoint.x.toFixed(1)}" y1="${observerPoint.y.toFixed(1)}" x2="${focusXY.x.toFixed(1)}" y2="${focusXY.y.toFixed(1)}" stroke="#3e6b85" stroke-width="2" stroke-dasharray="5 4" />`
-        : "";
-      const trackDots = trackPoints.map((point) => {
-        const xy = projectLonLat(point.longitude_deg, point.latitude_deg, width, height);
-        const isFocus = focusPoint && point.time_utc === focusPoint.time_utc;
-        return `<circle class="track-sample-dot" data-time="${escapeHtml(point.time_utc)}" cx="${xy.x.toFixed(1)}" cy="${xy.y.toFixed(1)}" r="${isFocus ? "5.5" : "3.2"}" fill="${isFocus ? "#102030" : "#c4471c"}" stroke="#fff" stroke-width="${isFocus ? "2" : "1.2"}" />`;
-      }).join("");
       const skySize = 340;
       const skyCenter = skySize / 2;
       const skyPath = trackPoints.map((point) => {
@@ -928,7 +1012,9 @@
       }).join("");
       const focusSky = focusPoint ? projectSkyPoint(focusPoint.azimuth_deg, focusPoint.elevation_deg, skySize) : null;
       const activeSky = activeTrackPoint ? projectSkyPoint(activeTrackPoint.azimuth_deg, activeTrackPoint.elevation_deg, skySize) : null;
-      const mapViewBox = ensureMapViewBox();
+      const title = pass
+        ? `${pass.name || "Selected pass"} visible ground track`
+        : `${config.name || "Observer"} location`;
 
       node.className = "";
       node.innerHTML = `
@@ -936,34 +1022,12 @@
           <div class="map-views">
             <div class="map-frame">
               <div class="map-toolbar">
-                <div class="map-hint">Drag to pan, wheel to zoom</div>
+                <div class="map-hint">Pan and zoom the map. Click it to prefill observer latitude and longitude.</div>
                 <div class="button-row">
-                  <button id="mapZoomInButton" type="button" title="Zoom in">+</button>
-                  <button id="mapZoomOutButton" type="button" title="Zoom out">-</button>
                   <button id="mapResetViewButton" type="button" title="Reset map view">Reset</button>
                 </div>
               </div>
-              <svg id="trackerMapSvg" viewBox="${mapViewBoxString(mapViewBox)}" role="img" aria-label="${escapeHtml(title)}">
-                <rect x="0" y="0" width="${width}" height="${height}" fill="#dfeef7" />
-                ${gridLines.join("")}
-                <line x1="0" y1="${(height / 2).toFixed(1)}" x2="${width}" y2="${(height / 2).toFixed(1)}" stroke="#89a8bc" stroke-width="1.2" />
-                <line x1="${(width / 2).toFixed(1)}" y1="0" x2="${(width / 2).toFixed(1)}" y2="${height}" stroke="#89a8bc" stroke-width="1.2" />
-                <rect x="0.5" y="0.5" width="${width - 1}" height="${height - 1}" fill="none" stroke="#8ea7b9" stroke-width="1" />
-                ${segmentPaths}
-                ${lookLine}
-                ${trackDots}
-                <circle cx="${observerPoint.x.toFixed(1)}" cy="${observerPoint.y.toFixed(1)}" r="5.5" fill="#006f9f" stroke="#fff" stroke-width="2" />
-                <text x="${(observerPoint.x + 10).toFixed(1)}" y="${(observerPoint.y - 10).toFixed(1)}" font-size="12" fill="#102030">${escapeHtml(config.name || "Observer")}</text>
-                ${pendingPoint ? `
-                  <circle cx="${pendingPoint.x.toFixed(1)}" cy="${pendingPoint.y.toFixed(1)}" r="6.5" fill="none" stroke="#006f9f" stroke-width="2.5" stroke-dasharray="4 3" />
-                  <circle cx="${pendingPoint.x.toFixed(1)}" cy="${pendingPoint.y.toFixed(1)}" r="3.5" fill="#006f9f" />
-                  <text x="${(pendingPoint.x + 10).toFixed(1)}" y="${(pendingPoint.y + 16).toFixed(1)}" font-size="12" fill="#102030">Pending</text>
-                ` : ""}
-                ${marker(passStart, "#1a7f37", "AOS")}
-                ${marker(passPeak, "#a15c00", "TCA")}
-                ${marker(passEnd, "#7d3ad3", "LOS")}
-                ${marker(activeTrackPoint, "#00a7c7", "Now")}
-              </svg>
+              <div id="trackerLeafletMap" class="map-canvas" role="img" aria-label="${escapeHtml(title)}"></div>
             </div>
             <div class="sky-frame">
               <svg viewBox="0 0 ${skySize} ${skySize}" role="img" aria-label="Polar sky plot">
@@ -1014,28 +1078,13 @@
             <span class="legend-item"><span class="legend-swatch" style="background:#7d3ad3"></span>LOS</span>
           </div>
           <div class="map-note">
-            Click the map to prefill observer latitude and longitude. ${pass ? "The left panel shows the visible ground track, and the right polar plot shows azimuth/elevation geometry for the same focused sample." : "Select a pass to overlay its flyover path."}${pendingMapLocation ? " The dashed marker is your unsaved observer selection." : ""}
+            ${pass ? "The left panel shows a real basemap with the visible ground track, and the right polar plot shows azimuth/elevation geometry for the same focused sample." : "Select a pass to overlay its flyover path."}${pendingMapLocation ? " The dashed marker is your unsaved observer selection." : ""} Basemap tiles come from OpenStreetMap and require browser internet access.
           </div>
         </div>
       `;
 
-      const svg = document.getElementById("trackerMapSvg");
-      if (!svg) return;
-      document.getElementById("mapZoomInButton").addEventListener("click", () => zoomMap(0.8));
-      document.getElementById("mapZoomOutButton").addEventListener("click", () => zoomMap(1.25));
+      renderLeafletMap(pass, config, focusPoint, activeTrackPoint);
       document.getElementById("mapResetViewButton").addEventListener("click", () => resetMapView());
-      node.querySelectorAll(".track-sample-dot").forEach((dot) => {
-        const time = dot.getAttribute("data-time") || "";
-        dot.addEventListener("mouseenter", () => {
-          currentMapFocusTime = time;
-          renderMapPanel(currentSelectedPass, currentObserverConfig);
-        });
-        dot.addEventListener("click", (event) => {
-          event.stopPropagation();
-          currentMapFocusTime = time;
-          renderMapPanel(currentSelectedPass, currentObserverConfig);
-        });
-      });
       const tuneFocusButton = document.getElementById("tuneFocusButton");
       if (tuneFocusButton && pass && focusPoint) {
         tuneFocusButton.addEventListener("click", () => {
@@ -1059,69 +1108,6 @@
           renderMapPanel(currentSelectedPass, currentObserverConfig);
         });
       }
-      svg.addEventListener("wheel", (event) => {
-        event.preventDefault();
-        zoomMap(event.deltaY < 0 ? 0.9 : 1.1);
-      }, { passive: false });
-      let dragState = null;
-      let suppressMapClick = false;
-      svg.addEventListener("pointerdown", (event) => {
-        if (event.target.closest(".track-sample-dot")) return;
-        dragState = {
-          x: event.clientX,
-          y: event.clientY,
-          moved: false,
-          viewBox: { ...ensureMapViewBox() }
-        };
-        svg.setPointerCapture(event.pointerId);
-      });
-      svg.addEventListener("pointermove", (event) => {
-        if (!dragState) return;
-        if (Math.abs(event.clientX - dragState.x) > 3 || Math.abs(event.clientY - dragState.y) > 3) {
-          dragState.moved = true;
-        }
-        const rect = svg.getBoundingClientRect();
-        const scaleX = dragState.viewBox.width / rect.width;
-        const scaleY = dragState.viewBox.height / rect.height;
-        currentMapViewBox = clampMapViewBox({
-          x: dragState.viewBox.x - ((event.clientX - dragState.x) * scaleX),
-          y: dragState.viewBox.y - ((event.clientY - dragState.y) * scaleY),
-          width: dragState.viewBox.width,
-          height: dragState.viewBox.height
-        });
-        svg.setAttribute("viewBox", mapViewBoxString(currentMapViewBox));
-      });
-      svg.addEventListener("pointerup", (event) => {
-        if (!dragState) return;
-        suppressMapClick = dragState.moved;
-        dragState = null;
-        svg.releasePointerCapture(event.pointerId);
-        if (suppressMapClick) {
-          window.setTimeout(() => {
-            suppressMapClick = false;
-          }, 0);
-        }
-      });
-      svg.addEventListener("pointerleave", () => {
-        dragState = null;
-      });
-      svg.addEventListener("click", (event) => {
-        if (suppressMapClick) return;
-        const rect = svg.getBoundingClientRect();
-        const view = ensureMapViewBox();
-        const x = view.x + (((event.clientX - rect.left) / rect.width) * view.width);
-        const y = view.y + (((event.clientY - rect.top) / rect.height) * view.height);
-        const longitude = ((x / width) * 360) - 180;
-        const latitude = 90 - ((y / height) * 180);
-        pendingMapLocation = {
-          latitude_deg: latitude,
-          longitude_deg: longitude
-        };
-        document.getElementById("observerLatitudeInput").value = latitude.toFixed(5);
-        document.getElementById("observerLongitudeInput").value = longitude.toFixed(5);
-        renderMapPanel(currentSelectedPass, currentObserverConfig);
-        document.getElementById("status").textContent = `Map selected ${latitude.toFixed(5)}, ${longitude.toFixed(5)}. Save Location to apply it.`;
-      });
     }
 
     async function tuneFocusedSample(pass, focusPoint, button) {

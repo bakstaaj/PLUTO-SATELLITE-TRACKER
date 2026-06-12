@@ -54,6 +54,10 @@ The first repo milestone provides:
 - SD-card data repository layout.
 - Cross-build, deploy, web-only deploy, run, and stop scripts.
 
+## Operator Guide
+
+For a practical UI walkthrough, see [docs/USER_WORKFLOW.md](docs/USER_WORKFLOW.md).
+
 ## Update Satellite Catalog
 
 From MSYS2 UCRT64 or another shell with Python 3:
