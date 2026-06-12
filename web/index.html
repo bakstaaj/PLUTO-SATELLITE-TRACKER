@@ -225,6 +225,37 @@
       margin-top: 10px;
     }
 
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px 12px;
+      margin-top: 12px;
+    }
+
+    .field {
+      display: grid;
+      gap: 4px;
+      font-size: 13px;
+    }
+
+    .field.full-width {
+      grid-column: 1 / -1;
+    }
+
+    .field label {
+      color: var(--muted);
+    }
+
+    input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font: inherit;
+      color: var(--ink);
+      background: #fff;
+    }
+
     button {
       border: 1px solid var(--accent);
       border-radius: 6px;
@@ -265,6 +296,31 @@
       <dl id="observer">
         <dt>Name</dt><dd>Loading...</dd>
       </dl>
+      <div class="form-grid">
+        <div class="field full-width">
+          <label for="observerNameInput">Name</label>
+          <input id="observerNameInput" type="text" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="observerLatitudeInput">Latitude</label>
+          <input id="observerLatitudeInput" type="number" step="0.000001">
+        </div>
+        <div class="field">
+          <label for="observerLongitudeInput">Longitude</label>
+          <input id="observerLongitudeInput" type="number" step="0.000001">
+        </div>
+        <div class="field">
+          <label for="observerAltitudeInput">Altitude (m)</label>
+          <input id="observerAltitudeInput" type="number" step="1">
+        </div>
+        <div class="field">
+          <label for="observerMinElevationInput">Min Elevation (deg)</label>
+          <input id="observerMinElevationInput" type="number" step="1" min="0" max="90">
+        </div>
+      </div>
+      <div class="button-row">
+        <button id="saveObserverButton" type="button">Save Location</button>
+      </div>
     </section>
 
     <section>
@@ -699,6 +755,39 @@
       }
     }
 
+    function dopplerTrackPayload(pass) {
+      const radio = pass.radio || {};
+      const plan = pass.doppler_plan;
+      return {
+        ok: true,
+        state: "track_planned",
+        name: pass.name || "",
+        norad_id: pass.norad_id || null,
+        aos_utc: pass.aos_utc || "",
+        tca_utc: pass.tca_utc || "",
+        los_utc: pass.los_utc || "",
+        mode: radio.mode || (pass.modes || [])[0] || "",
+        description: radio.description || "",
+        point_count: (plan && plan.points ? plan.points.length : 0),
+        doppler_plan: plan
+      };
+    }
+
+    async function ensureSelectedTrack(pass) {
+      const plan = pass && pass.doppler_plan;
+      if (!plan || !(plan.points || []).length) {
+        throw new Error("Selected pass does not have a Doppler plan.");
+      }
+      await postJson("/api/radio/track/plan", dopplerTrackPayload(pass));
+    }
+
+    async function runSelectedTrackAction(pass, action, button) {
+      if (action !== "stop" && action !== "auto/stop") {
+        await ensureSelectedTrack(pass);
+      }
+      await controlDopplerTrack(action, button);
+    }
+
     async function syncPlutoTime(button) {
       const epoch = Math.floor(Date.now() / 1000);
       button.disabled = true;
@@ -714,6 +803,39 @@
         setTimeout(() => {
           button.disabled = false;
           button.textContent = "Sync Time";
+        }, 1200);
+      }
+    }
+
+    async function saveObserverConfig(button) {
+      const payload = {
+        name: document.getElementById("observerNameInput").value.trim(),
+        latitude_deg: Number(document.getElementById("observerLatitudeInput").value),
+        longitude_deg: Number(document.getElementById("observerLongitudeInput").value),
+        altitude_m: Number(document.getElementById("observerAltitudeInput").value || 0),
+        minimum_elevation_deg: Number(document.getElementById("observerMinElevationInput").value || 10),
+        grid: ""
+      };
+
+      if (!payload.name || !Number.isFinite(payload.latitude_deg) || !Number.isFinite(payload.longitude_deg)) {
+        throw new Error("Observer name, latitude, and longitude are required.");
+      }
+
+      button.disabled = true;
+      button.textContent = "Saving...";
+      try {
+        await postJson("/api/config", payload);
+        button.textContent = "Rebuilding passes...";
+        await postJson("/api/refresh/passes", {});
+        button.textContent = "Saved";
+        await refresh();
+      } catch (error) {
+        button.textContent = "Save failed";
+        throw error;
+      } finally {
+        setTimeout(() => {
+          button.disabled = false;
+          button.textContent = "Save Location";
         }, 1200);
       }
     }
@@ -871,7 +993,7 @@
           trackButton.title = "Sync Pluto time before starting tracked Doppler control.";
         }
         trackButton.addEventListener("click", () => {
-          controlDopplerTrack(action, trackButton).catch((error) => {
+          runSelectedTrackAction(pass, action, trackButton).catch((error) => {
             document.getElementById("status").textContent = error.message;
           });
         });
@@ -978,6 +1100,11 @@
         ["Altitude", `${config.altitude_m} m`],
         ["Minimum elevation", `${config.minimum_elevation_deg} deg`]
       ]);
+      document.getElementById("observerNameInput").value = config.name || "";
+      document.getElementById("observerLatitudeInput").value = config.latitude_deg ?? "";
+      document.getElementById("observerLongitudeInput").value = config.longitude_deg ?? "";
+      document.getElementById("observerAltitudeInput").value = config.altitude_m ?? 0;
+      document.getElementById("observerMinElevationInput").value = config.minimum_elevation_deg ?? 10;
 
       setDl("storage", [
         ["Web", status.web_dir],
@@ -1063,6 +1190,12 @@
 
     document.getElementById("refreshCatalogButton").addEventListener("click", (event) => {
       runDataRefresh("catalog", event.currentTarget).catch((error) => {
+        document.getElementById("status").textContent = error.message;
+      });
+    });
+
+    document.getElementById("saveObserverButton").addEventListener("click", (event) => {
+      saveObserverConfig(event.currentTarget).catch((error) => {
         document.getElementById("status").textContent = error.message;
       });
     });

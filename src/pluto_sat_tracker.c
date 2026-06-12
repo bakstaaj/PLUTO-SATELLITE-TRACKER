@@ -48,6 +48,9 @@ struct app_config {
 };
 
 static int query_param(const char *query, const char *name, char *out, size_t out_size);
+static void json_escape(char *dst, size_t dst_size, const char *src);
+static int json_string_value(const char *json, const char *key, char *out, size_t out_size);
+static int json_double_value(const char *json, const char *key, double *out);
 
 static void on_signal(int signum)
 {
@@ -390,6 +393,90 @@ static void send_config(int fd, const struct app_config *cfg)
     send_json_file_or_default(fd, path, fallback);
 }
 
+static void send_config_save(int fd, const struct app_config *cfg, const char *body)
+{
+    char path[PATH_BUF_SIZE];
+    char tmp_path[PATH_BUF_SIZE + 8];
+    char name[256] = "";
+    char grid[64] = "";
+    char name_json[512];
+    char grid_json[128];
+    double latitude = 0.0;
+    double longitude = 0.0;
+    double altitude = 0.0;
+    double minimum_elevation = 10.0;
+    FILE *f;
+
+    if (!body || body[0] != '{') {
+        send_text(fd, 400, "Bad Request", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"valid observer JSON is required\"}\n");
+        return;
+    }
+
+    if (!json_string_value(body, "name", name, sizeof(name)) ||
+        !json_double_value(body, "latitude_deg", &latitude) ||
+        !json_double_value(body, "longitude_deg", &longitude)) {
+        send_text(fd, 400, "Bad Request", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"observer name, latitude, and longitude are required\"}\n");
+        return;
+    }
+    if (!json_double_value(body, "altitude_m", &altitude)) {
+        altitude = 0.0;
+    }
+    if (!json_double_value(body, "minimum_elevation_deg", &minimum_elevation)) {
+        minimum_elevation = 10.0;
+    }
+    json_string_value(body, "grid", grid, sizeof(grid));
+
+    if (!name[0] ||
+        latitude < -90.0 || latitude > 90.0 ||
+        longitude < -180.0 || longitude > 180.0 ||
+        minimum_elevation < 0.0 || minimum_elevation > 90.0 ||
+        altitude < -1000.0 || altitude > 20000.0) {
+        send_text(fd, 400, "Bad Request", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"observer values are out of range\"}\n");
+        return;
+    }
+
+    json_escape(name_json, sizeof(name_json), name);
+    json_escape(grid_json, sizeof(grid_json), grid);
+
+    join_path(path, sizeof(path), cfg->config_dir, "observer.json");
+    snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
+    f = fopen(tmp_path, "wb");
+    if (!f) {
+        send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"could not write observer config\"}\n");
+        return;
+    }
+
+    fprintf(f,
+            "{\n"
+            "  \"name\": \"%s\",\n"
+            "  \"latitude_deg\": %.6f,\n"
+            "  \"longitude_deg\": %.6f,\n"
+            "  \"altitude_m\": %.1f,\n"
+            "  \"grid\": \"%s\",\n"
+            "  \"minimum_elevation_deg\": %.1f\n"
+            "}\n",
+            name_json,
+            latitude,
+            longitude,
+            altitude,
+            grid_json,
+            minimum_elevation);
+    fclose(f);
+
+    if (rename(tmp_path, path) != 0) {
+        unlink(tmp_path);
+        send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"could not publish observer config\"}\n");
+        return;
+    }
+
+    send_config(fd, cfg);
+}
+
 static void send_refresh_status_code(int fd, const struct app_config *cfg, int status, const char *reason)
 {
     char path[PATH_BUF_SIZE];
@@ -646,6 +733,34 @@ static int json_string_value(const char *json, const char *key, char *out, size_
     }
     out[i] = '\0';
     return p > start;
+}
+
+static int json_double_value(const char *json, const char *key, double *out)
+{
+    char pattern[128];
+    const char *p;
+    char *end = NULL;
+
+    if (!json || !key || !out) {
+        return 0;
+    }
+
+    snprintf(pattern, sizeof(pattern), "\"%s\"", key);
+    p = strstr(json, pattern);
+    if (!p) {
+        return 0;
+    }
+    p = strchr(p + strlen(pattern), ':');
+    if (!p) {
+        return 0;
+    }
+    p++;
+    while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') {
+        p++;
+    }
+    errno = 0;
+    *out = strtod(p, &end);
+    return errno == 0 && end && end != p;
 }
 
 static int json_long_long_after(const char *json, const char *key, long long *out)
@@ -1675,6 +1790,8 @@ static void handle_request(
     if (strcmp(method, "POST") == 0) {
         if (strcmp(path, "/api/radio/track/plan") == 0) {
             send_radio_track_plan(fd, cfg, body);
+        } else if (strcmp(path, "/api/config") == 0) {
+            send_config_save(fd, cfg, body);
         } else if (strcmp(path, "/api/refresh/passes") == 0) {
             send_refresh_run(fd, cfg, "passes");
         } else if (strcmp(path, "/api/refresh/catalog") == 0) {
