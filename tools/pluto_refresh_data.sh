@@ -5,6 +5,7 @@ SD_ROOT="${PLUTO_SD_ROOT:-/media/mmcblk0p1/pluto_sat_tracker}"
 DATA_DIR="${SD_ROOT}/data"
 TOOLS_DIR="${SD_ROOT}/tools"
 PYTHON_DIR="${SD_ROOT}/python"
+PYTHON_RUNTIME_DIR="${SD_ROOT}/python-runtime"
 STATUS_FILE="${DATA_DIR}/refresh_status.json"
 
 MODE="${1:-passes}"
@@ -41,15 +42,30 @@ fail() {
 run_python() {
   SCRIPT="$1"
   shift
+  PYTHON_BIN="${PLUTO_PYTHON:-}"
 
-  if ! command -v python3 >/dev/null 2>&1; then
-    fail "python3 is not installed on this Pluto image"
+  if [ -n "$PYTHON_BIN" ] && [ ! -x "$PYTHON_BIN" ]; then
+    fail "configured Python runtime is not executable: $PYTHON_BIN"
+  fi
+  if [ -z "$PYTHON_BIN" ] && [ -x "${PYTHON_RUNTIME_DIR}/bin/python3" ]; then
+    PYTHON_BIN="${PYTHON_RUNTIME_DIR}/bin/python3"
+  fi
+  if [ -z "$PYTHON_BIN" ] && command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN="$(command -v python3)"
+  fi
+  if [ -z "$PYTHON_BIN" ]; then
+    fail "python3 runtime not found; deploy runtime/python-pluto-armhf.tar.gz to the SD card"
   fi
   if [ ! -f "$SCRIPT" ]; then
     fail "refresh script not found: $SCRIPT"
   fi
 
-  PYTHONPATH="${PYTHON_DIR}${PYTHONPATH:+:${PYTHONPATH}}" python3 "$SCRIPT" "$@"
+  if [ "$PYTHON_BIN" = "${PYTHON_RUNTIME_DIR}/bin/python3" ]; then
+    export PYTHONHOME="${PYTHON_RUNTIME_DIR}"
+    export LD_LIBRARY_PATH="${PYTHON_RUNTIME_DIR}/lib:${PYTHON_RUNTIME_DIR}/usr/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+  fi
+
+  PYTHONPATH="${PYTHON_DIR}${PYTHONPATH:+:${PYTHONPATH}}" "$PYTHON_BIN" "$SCRIPT" "$@"
 }
 
 mkdir -p "$DATA_DIR" "$TOOLS_DIR" "$PYTHON_DIR"

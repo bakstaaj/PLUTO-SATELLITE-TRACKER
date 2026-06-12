@@ -25,6 +25,7 @@ REFRESH_RUNNER="$ROOT_DIR/tools/pluto_refresh_data.sh"
 PASS_UPDATER="$ROOT_DIR/tools/update_pass_predictions.py"
 CATALOG_UPDATER="$ROOT_DIR/tools/update_satellite_catalog.py"
 SGP4_PACKAGE="$ROOT_DIR/.python-deps/sgp4"
+PYTHON_RUNTIME_TARBALL="${PLUTO_PYTHON_RUNTIME_TARBALL:-$ROOT_DIR/runtime/python-pluto-armhf.tar.gz}"
 
 for required in "$BIN" "$RUNTIME" "$WEB_HTML" "$OBSERVER_CONFIG" "$REPOSITORIES" "$SATELLITES" "$PASSES" "$REFRESH_RUNNER" "$PASS_UPDATER" "$CATALOG_UPDATER"; do
   if [[ ! -f "$required" ]]; then
@@ -55,6 +56,11 @@ SSHPASS=(sshpass -p "$PLUTO_PASS")
 echo "== Deploying Pluto Satellite Tracker =="
 echo "Runtime: ${PLUTO_USER}@${PLUTO_IP}:${DEPLOY_DIR}"
 echo "SD data: ${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}"
+if [[ -f "$PYTHON_RUNTIME_TARBALL" ]]; then
+  echo "Python runtime: $PYTHON_RUNTIME_TARBALL"
+else
+  echo "Python runtime: not staged; refresh will use system python3 if present"
+fi
 
 "${SSHPASS[@]}" ssh "${SSH_OPTS[@]}" "${PLUTO_USER}@${PLUTO_IP}" "
   set -e
@@ -105,6 +111,11 @@ echo "SD data: ${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}"
 "${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" "$SGP4_PACKAGE"/*.py \
   "${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}/python/sgp4.tmp/"
 
+if [[ -f "$PYTHON_RUNTIME_TARBALL" ]]; then
+  "${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
+    "$PYTHON_RUNTIME_TARBALL" "${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}/cache/python-runtime.tar.gz.tmp"
+fi
+
 "${SSHPASS[@]}" ssh "${SSH_OPTS[@]}" "${PLUTO_USER}@${PLUTO_IP}" "
   set -e
   chmod +x '${DEPLOY_DIR}/pluto_sat_tracker.tmp' '${DEPLOY_DIR}/run_tracker.sh.tmp'
@@ -121,6 +132,18 @@ echo "SD data: ${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}"
   mv '${SD_ROOT}/tools/update_satellite_catalog.py.tmp' '${SD_ROOT}/tools/update_satellite_catalog.py'
   rm -rf '${SD_ROOT}/python/sgp4'
   mv '${SD_ROOT}/python/sgp4.tmp' '${SD_ROOT}/python/sgp4'
+  if [ -f '${SD_ROOT}/cache/python-runtime.tar.gz.tmp' ]; then
+    rm -rf '${SD_ROOT}/python-runtime.tmp'
+    mkdir -p '${SD_ROOT}/python-runtime.tmp'
+    tar -xzf '${SD_ROOT}/cache/python-runtime.tar.gz.tmp' -C '${SD_ROOT}/python-runtime.tmp'
+    if [ ! -x '${SD_ROOT}/python-runtime.tmp/bin/python3' ]; then
+      echo 'Python runtime archive must contain bin/python3 at its root.'
+      exit 1
+    fi
+    rm -rf '${SD_ROOT}/python-runtime'
+    mv '${SD_ROOT}/python-runtime.tmp' '${SD_ROOT}/python-runtime'
+    mv '${SD_ROOT}/cache/python-runtime.tar.gz.tmp' '${SD_ROOT}/cache/python-runtime.tar.gz'
+  fi
   sync
   echo '== Remote files =='
   ls -lh '${DEPLOY_DIR}/pluto_sat_tracker' \
@@ -133,6 +156,9 @@ echo "SD data: ${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}"
          '${SD_ROOT}/tools/pluto_refresh_data.sh' \
          '${SD_ROOT}/tools/update_pass_predictions.py' \
          '${SD_ROOT}/tools/update_satellite_catalog.py'
+  if [ -x '${SD_ROOT}/python-runtime/bin/python3' ]; then
+    '${SD_ROOT}/python-runtime/bin/python3' --version || true
+  fi
 "
 
 echo

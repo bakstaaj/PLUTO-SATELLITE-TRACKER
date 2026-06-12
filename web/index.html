@@ -127,6 +127,23 @@
       gap: 8px;
     }
 
+    .filter-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .filter-row button {
+      background: #fff;
+      color: var(--accent);
+    }
+
+    .filter-row button.active {
+      background: var(--accent);
+      color: #fff;
+    }
+
     .pass-row {
       display: grid;
       grid-template-columns: 1.3fr 1fr 1.2fr;
@@ -314,6 +331,7 @@
 
   <script>
     let lastRadioHardware = null;
+    let passFilter = "actionable";
 
     async function getJson(url) {
       const response = await fetch(url, { cache: "no-store" });
@@ -395,6 +413,28 @@
     function formatEpoch(epoch) {
       if (!Number.isFinite(Number(epoch)) || Number(epoch) <= 0) return "-";
       return new Date(Number(epoch) * 1000).toISOString().replace(".000Z", "Z");
+    }
+
+    function passTimingState(pass) {
+      const now = Date.now();
+      const aos = Date.parse(pass.aos_utc || "");
+      const los = Date.parse(pass.los_utc || "");
+      if (Number.isFinite(los) && now > los) return "stale";
+      if (Number.isFinite(aos) && now < aos) return "upcoming";
+      if (Number.isFinite(los) && now <= los) return "active";
+      return "unknown";
+    }
+
+    function passReadiness(pass) {
+      const timing = passTimingState(pass);
+      if (timing === "stale") return { state: timing, label: "Stale", actionable: false };
+      if (!isPassTunable(pass)) return { state: timing, label: "Out of range", actionable: false };
+      if (!pass.doppler_plan || !(pass.doppler_plan.points || []).length) {
+        return { state: timing, label: "No Doppler", actionable: false };
+      }
+      if (timing === "active") return { state: timing, label: "Active now", actionable: true };
+      if (timing === "upcoming") return { state: timing, label: "Ready", actionable: true };
+      return { state: timing, label: "Check time", actionable: false };
     }
 
     function renderRadioTarget(pass) {
@@ -690,6 +730,7 @@
       const downlink = radio.downlink_hz ? formatHz(radio.downlink_hz) : "-";
       const tunable = isPassTunable(pass) ? "Yes" : "No";
       const description = radio.description || "-";
+      const readiness = passReadiness(pass);
 
       node.className = "";
       node.innerHTML = `
@@ -723,6 +764,7 @@
               <dt>Type</dt><dd></dd>
               <dt>Status</dt><dd></dd>
               <dt>Pluto tunable</dt><dd></dd>
+              <dt>Track status</dt><dd></dd>
               <dt>Description</dt><dd></dd>
             </dl>
             <button id="planRadioButton" type="button">Plan Radio Target</button>
@@ -759,6 +801,7 @@
         radio.type || "-",
         radio.status || "-",
         tunable,
+        readiness.label,
         description
       ];
       values.forEach((value, index) => {
@@ -766,7 +809,7 @@
       });
 
       const button = node.querySelector("#planRadioButton");
-      button.disabled = !radio.downlink_hz || !isPassTunable(pass);
+      button.disabled = !radio.downlink_hz || !readiness.actionable;
       button.addEventListener("click", () => {
         planRadioTarget(pass, button).catch((error) => {
           document.getElementById("status").textContent = error.message;
@@ -774,7 +817,7 @@
       });
 
       const tuneButton = node.querySelector("#tuneRadioButton");
-      tuneButton.disabled = !radio.downlink_hz || !isPassTunable(pass);
+      tuneButton.disabled = !radio.downlink_hz || !readiness.actionable;
       tuneButton.addEventListener("click", () => {
         tuneRadioTarget(pass, tuneButton).catch((error) => {
           document.getElementById("status").textContent = error.message;
@@ -782,7 +825,7 @@
       });
 
       const dopplerButton = node.querySelector("#planDopplerButton");
-      dopplerButton.disabled = !isPassTunable(pass) || !pass.doppler_plan || !(pass.doppler_plan.points || []).length;
+      dopplerButton.disabled = !readiness.actionable;
       dopplerButton.addEventListener("click", () => {
         planDopplerTrack(pass, dopplerButton).catch((error) => {
           document.getElementById("status").textContent = error.message;
@@ -798,7 +841,7 @@
       ]) {
         const trackButton = node.querySelector(`#${id}`);
         trackButton.disabled = id !== "stopDopplerButton" && id !== "autoStopDopplerButton" &&
-          (!isPassTunable(pass) || !pass.doppler_plan || !(pass.doppler_plan.points || []).length);
+          !readiness.actionable;
         trackButton.addEventListener("click", () => {
           controlDopplerTrack(action, trackButton).catch((error) => {
             document.getElementById("status").textContent = error.message;
@@ -821,9 +864,39 @@
 
       node.className = "pass-list";
       node.innerHTML = "";
-      const visiblePasses = passes.slice(0, 12);
+      const filteredPasses = passes.filter((pass) => {
+        const readiness = passReadiness(pass);
+        if (passFilter === "all") return true;
+        if (passFilter === "ready") return readiness.actionable;
+        if (passFilter === "active") return readiness.state === "active";
+        return readiness.state !== "stale";
+      });
+      const visiblePasses = filteredPasses.slice(0, 12);
+      const filters = document.createElement("div");
+      filters.className = "filter-row";
+      for (const [value, label] of [["actionable", "Upcoming"], ["ready", "Ready"], ["active", "Active"], ["all", "All"]]) {
+        const filterButton = document.createElement("button");
+        filterButton.type = "button";
+        filterButton.textContent = label;
+        filterButton.className = passFilter === value ? "active" : "";
+        filterButton.addEventListener("click", () => {
+          passFilter = value;
+          renderPasses(payload);
+        });
+        filters.appendChild(filterButton);
+      }
+      node.appendChild(filters);
+      if (!visiblePasses.length) {
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.textContent = "No passes match the current filter.";
+        node.appendChild(empty);
+        renderPassDetail(null);
+        return;
+      }
       for (const [index, pass] of visiblePasses.entries()) {
         const row = document.createElement("div");
+        const readiness = passReadiness(pass);
         row.className = index === 0 ? "pass-row selected" : "pass-row";
         row.tabIndex = 0;
         const downlink = (pass.downlinks_hz || [])[0];
@@ -834,8 +907,8 @@
         row.children[1].textContent =
           `${formatTime(pass.aos_utc)}-${formatTime(pass.los_utc)} (${formatDuration(pass.duration_s)})`;
         row.children[2].className = isPassTunable(pass) ? "radio-ok" : "radio-warn";
-        row.children[2].textContent = renderRadioTarget(pass);
-        row.title = `Max ${pass.max_elevation_deg} deg, az ${pass.aos_azimuth_deg}-${pass.los_azimuth_deg}`;
+        row.children[2].textContent = `${readiness.label}: ${renderRadioTarget(pass)}`;
+        row.title = `Max ${pass.max_elevation_deg} deg, az ${pass.aos_azimuth_deg}-${pass.los_azimuth_deg}, ${readiness.label}`;
         row.addEventListener("click", () => {
           node.querySelectorAll(".pass-row").forEach((item) => item.classList.remove("selected"));
           row.classList.add("selected");

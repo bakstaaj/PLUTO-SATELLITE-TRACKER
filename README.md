@@ -74,8 +74,25 @@ The deployed Pluto runtime also includes a local refresh runner on the SD card:
 ```
 
 The web UI calls the same workflow through `/api/refresh/passes` and
-`/api/refresh/catalog`, with status stored in `refresh_status.json`. The current
-Pluto image must provide `python3` for on-device pass/catalog regeneration; if it
-does not, the endpoint records a clear `python3 is not installed` status.
+`/api/refresh/catalog`, with status stored in `refresh_status.json`.
+
+For on-device refresh without changing firmware, stage an ARM hard-float Python
+runtime at:
+
+```text
+runtime/python-pluto-armhf.tar.gz
+```
+
+The archive contents must be rooted at `bin/python3`, `lib/`, and any other files
+needed by that interpreter. During deploy it is extracted to:
+
+```text
+/media/mmcblk0p1/pluto_sat_tracker/python-runtime/
+```
+
+The refresh runner prefers
+`/media/mmcblk0p1/pluto_sat_tracker/python-runtime/bin/python3`, then falls back
+to system `python3` if present. If neither exists, the endpoint records a clear
+runtime-missing status.
 
 Pass filtering and richer radio operations are the next implementation layers.

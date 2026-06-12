@@ -4,6 +4,7 @@ build
 dist
 downloads
 cache
+runtime
 test_output
 *.o
 *.log
