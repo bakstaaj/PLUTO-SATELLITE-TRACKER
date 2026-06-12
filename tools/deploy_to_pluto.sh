@@ -21,13 +21,21 @@ OBSERVER_CONFIG="$ROOT_DIR/config/observer.example.json"
 REPOSITORIES="$ROOT_DIR/data/repositories.json"
 SATELLITES="$ROOT_DIR/data/satellites.json"
 PASSES="$ROOT_DIR/data/passes.json"
+REFRESH_RUNNER="$ROOT_DIR/tools/pluto_refresh_data.sh"
+PASS_UPDATER="$ROOT_DIR/tools/update_pass_predictions.py"
+CATALOG_UPDATER="$ROOT_DIR/tools/update_satellite_catalog.py"
+SGP4_PACKAGE="$ROOT_DIR/.python-deps/sgp4"
 
-for required in "$BIN" "$RUNTIME" "$WEB_HTML" "$OBSERVER_CONFIG" "$REPOSITORIES" "$SATELLITES" "$PASSES"; do
+for required in "$BIN" "$RUNTIME" "$WEB_HTML" "$OBSERVER_CONFIG" "$REPOSITORIES" "$SATELLITES" "$PASSES" "$REFRESH_RUNNER" "$PASS_UPDATER" "$CATALOG_UPDATER"; do
   if [[ ! -f "$required" ]]; then
     echo "Missing required deploy file: $required"
     exit 1
   fi
 done
+if [[ ! -d "$SGP4_PACKAGE" ]]; then
+  echo "Missing required Python package directory: $SGP4_PACKAGE"
+  exit 1
+fi
 
 if ! command -v sshpass >/dev/null 2>&1; then
   echo "Missing sshpass. Install it with:"
@@ -55,7 +63,7 @@ echo "SD data: ${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}"
     echo \"SD mount parent not found: \$SD_PARENT\"
     exit 1
   fi
-  mkdir -p '$DEPLOY_DIR/web' '$DEPLOY_DIR/config' '$SD_ROOT/data' '$SD_ROOT/cache' '$SD_ROOT/logs'
+  mkdir -p '$DEPLOY_DIR/web' '$DEPLOY_DIR/config' '$SD_ROOT/data' '$SD_ROOT/cache' '$SD_ROOT/logs' '$SD_ROOT/tools' '$SD_ROOT/python'
 "
 
 "${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
@@ -79,9 +87,28 @@ echo "SD data: ${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}"
 "${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
   "$PASSES" "${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}/data/passes.json.tmp"
 
+"${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
+  "$REFRESH_RUNNER" "${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}/tools/pluto_refresh_data.sh.tmp"
+
+"${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
+  "$PASS_UPDATER" "${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}/tools/update_pass_predictions.py.tmp"
+
+"${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
+  "$CATALOG_UPDATER" "${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}/tools/update_satellite_catalog.py.tmp"
+
+"${SSHPASS[@]}" ssh "${SSH_OPTS[@]}" "${PLUTO_USER}@${PLUTO_IP}" "
+  set -e
+  rm -rf '${SD_ROOT}/python/sgp4.tmp'
+  mkdir -p '${SD_ROOT}/python/sgp4.tmp'
+"
+
+"${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" "$SGP4_PACKAGE"/*.py \
+  "${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}/python/sgp4.tmp/"
+
 "${SSHPASS[@]}" ssh "${SSH_OPTS[@]}" "${PLUTO_USER}@${PLUTO_IP}" "
   set -e
   chmod +x '${DEPLOY_DIR}/pluto_sat_tracker.tmp' '${DEPLOY_DIR}/run_tracker.sh.tmp'
+  chmod +x '${SD_ROOT}/tools/pluto_refresh_data.sh.tmp'
   mv '${DEPLOY_DIR}/pluto_sat_tracker.tmp' '${DEPLOY_DIR}/pluto_sat_tracker'
   mv '${DEPLOY_DIR}/run_tracker.sh.tmp' '${DEPLOY_DIR}/run_tracker.sh'
   mv '${DEPLOY_DIR}/web/index.html.tmp' '${DEPLOY_DIR}/web/index.html'
@@ -89,6 +116,11 @@ echo "SD data: ${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}"
   mv '${SD_ROOT}/data/repositories.json.tmp' '${SD_ROOT}/data/repositories.json'
   mv '${SD_ROOT}/data/satellites.json.tmp' '${SD_ROOT}/data/satellites.json'
   mv '${SD_ROOT}/data/passes.json.tmp' '${SD_ROOT}/data/passes.json'
+  mv '${SD_ROOT}/tools/pluto_refresh_data.sh.tmp' '${SD_ROOT}/tools/pluto_refresh_data.sh'
+  mv '${SD_ROOT}/tools/update_pass_predictions.py.tmp' '${SD_ROOT}/tools/update_pass_predictions.py'
+  mv '${SD_ROOT}/tools/update_satellite_catalog.py.tmp' '${SD_ROOT}/tools/update_satellite_catalog.py'
+  rm -rf '${SD_ROOT}/python/sgp4'
+  mv '${SD_ROOT}/python/sgp4.tmp' '${SD_ROOT}/python/sgp4'
   sync
   echo '== Remote files =='
   ls -lh '${DEPLOY_DIR}/pluto_sat_tracker' \
@@ -97,7 +129,10 @@ echo "SD data: ${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}"
          '${DEPLOY_DIR}/config/observer.json' \
          '${SD_ROOT}/data/repositories.json' \
          '${SD_ROOT}/data/satellites.json' \
-         '${SD_ROOT}/data/passes.json'
+         '${SD_ROOT}/data/passes.json' \
+         '${SD_ROOT}/tools/pluto_refresh_data.sh' \
+         '${SD_ROOT}/tools/update_pass_predictions.py' \
+         '${SD_ROOT}/tools/update_satellite_catalog.py'
 "
 
 echo

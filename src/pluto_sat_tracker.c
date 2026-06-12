@@ -14,6 +14,7 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <ctype.h>
 #include <unistd.h>
@@ -389,6 +390,87 @@ static void send_config(int fd, const struct app_config *cfg)
     send_json_file_or_default(fd, path, fallback);
 }
 
+static void send_refresh_status_code(int fd, const struct app_config *cfg, int status, const char *reason)
+{
+    char path[PATH_BUF_SIZE];
+
+    join_path(path, sizeof(path), cfg->data_dir, "refresh_status.json");
+    if (status == 200) {
+        send_json_file_or_default(fd, path,
+                                  "{\"ok\":true,\"state\":\"idle\",\"target\":\"none\",\"message\":\"No Pluto-local refresh has run yet.\"}\n");
+        return;
+    }
+
+    {
+        char *body = NULL;
+        size_t body_len = 0;
+        if (read_file_to_string(path, &body, &body_len) == 0) {
+            (void)body_len;
+            send_text(fd, status, reason, "application/json; charset=utf-8", body);
+            free(body);
+            return;
+        }
+    }
+
+    send_text(fd, status, reason, "application/json; charset=utf-8",
+              "{\"ok\":false,\"state\":\"error\",\"message\":\"refresh failed\"}\n");
+}
+
+static void send_refresh_status(int fd, const struct app_config *cfg)
+{
+    send_refresh_status_code(fd, cfg, 200, "OK");
+}
+
+static void send_refresh_run(int fd, const struct app_config *cfg, const char *target)
+{
+    char command[PATH_BUF_SIZE * 4];
+    char script_path[PATH_BUF_SIZE * 2];
+    char deploy_dir[PATH_BUF_SIZE];
+    char sd_root[PATH_BUF_SIZE];
+    char *slash;
+    int result;
+
+    if (strcmp(target, "passes") != 0 && strcmp(target, "catalog") != 0 && strcmp(target, "all") != 0) {
+        send_text(fd, 400, "Bad Request", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"unknown refresh target\"}\n");
+        return;
+    }
+
+    snprintf(deploy_dir, sizeof(deploy_dir), "%s", cfg->config_dir);
+    slash = strrchr(deploy_dir, '/');
+    if (slash) {
+        *slash = '\0';
+    }
+    snprintf(sd_root, sizeof(sd_root), "%s", cfg->data_dir);
+    slash = strrchr(sd_root, '/');
+    if (slash) {
+        *slash = '\0';
+    }
+    join_path(script_path, sizeof(script_path), sd_root, "tools/pluto_refresh_data.sh");
+
+    if (access(script_path, X_OK) != 0 && access(script_path, R_OK) != 0) {
+        send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"Pluto refresh runner is not deployed on the SD card\"}\n");
+        return;
+    }
+
+    if (snprintf(command, sizeof(command),
+                 "PLUTO_DEPLOY_DIR='%s' PLUTO_SD_ROOT='%s' /bin/sh '%s' '%s'",
+                 deploy_dir, sd_root, script_path, target) >= (int)sizeof(command)) {
+        send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"refresh command path is too long\"}\n");
+        return;
+    }
+    result = system(command);
+
+    if (result == -1 || (WIFEXITED(result) && WEXITSTATUS(result) != 0) || !WIFEXITED(result)) {
+        send_refresh_status_code(fd, cfg, 500, "Internal Server Error");
+        return;
+    }
+
+    send_refresh_status(fd, cfg);
+}
+
 static void send_satellites(int fd, const struct app_config *cfg)
 {
     char path[PATH_BUF_SIZE];
@@ -751,7 +833,53 @@ static int write_rx_lo_frequency(long long frequency_hz, char *path_used, size_t
     return 0;
 }
 
-static void send_radio_hardware(int fd)
+static int contains_nocase(const char *haystack, const char *needle)
+{
+    size_t needle_len;
+    const char *p;
+
+    if (!haystack || !needle) {
+        return 0;
+    }
+    needle_len = strlen(needle);
+    if (needle_len == 0) {
+        return 1;
+    }
+
+    for (p = haystack; *p; p++) {
+        size_t i;
+        for (i = 0; i < needle_len; i++) {
+            if (!p[i] || tolower((unsigned char)p[i]) != tolower((unsigned char)needle[i])) {
+                break;
+            }
+        }
+        if (i == needle_len) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void write_radio_profile(const struct app_config *cfg, const char *body)
+{
+    char path[PATH_BUF_SIZE];
+    char tmp_path[PATH_BUF_SIZE + 8];
+    FILE *f;
+
+    join_path(path, sizeof(path), cfg->data_dir, "radio_profile.json");
+    snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
+    f = fopen(tmp_path, "wb");
+    if (!f) {
+        return;
+    }
+    fputs(body, f);
+    fclose(f);
+    if (rename(tmp_path, path) != 0) {
+        unlink(tmp_path);
+    }
+}
+
+static void send_radio_hardware(int fd, const struct app_config *cfg)
 {
     const char *paths[] = {
         "/sys/bus/iio/devices/iio:device1/out_altvoltage0_RX_LO_frequency",
@@ -769,7 +897,14 @@ static void send_radio_hardware(int fd)
     char available[512] = "";
     char device_name_json[512];
     char available_json[1024];
-    char body[2048];
+    char body[3072];
+    const char *profile_id = "unknown";
+    const char *profile_label = "Unknown AD936x profile";
+    const char *firmware_mode = "unknown";
+    long long capability_min_hz = PLUTO_MIN_HZ;
+    long long capability_max_hz = PLUTO_MAX_HZ;
+    int vhf_tunable = 1;
+    int uhf_tunable = 1;
     size_t i;
 
     for (i = 0; i < sizeof(paths) / sizeof(paths[0]); i++) {
@@ -797,11 +932,34 @@ static void send_radio_hardware(int fd)
     json_escape(device_name_json, sizeof(device_name_json), device_name);
     json_escape(available_json, sizeof(available_json), available);
 
+    if (contains_nocase(device_name, "ad9363")) {
+        profile_id = "ad9363_stock";
+        profile_label = "AD9363 stock Pluto profile";
+        firmware_mode = "1r1t_stock";
+        capability_min_hz = 325000000LL;
+        vhf_tunable = 0;
+    } else if (contains_nocase(device_name, "ad9364")) {
+        profile_id = "ad9364_expanded";
+        profile_label = "AD9364 compatibility profile";
+        firmware_mode = "2r2t_compat";
+    } else if (contains_nocase(device_name, "ad9361")) {
+        profile_id = "ad9361_expanded";
+        profile_label = "AD9361 compatibility profile";
+        firmware_mode = "2r2t_compat";
+    }
+
     snprintf(body, sizeof(body),
              "{"
              "\"ok\":true,"
              "\"software_min_hz\":%lld,"
              "\"software_max_hz\":%lld,"
+             "\"capability_min_hz\":%lld,"
+             "\"capability_max_hz\":%lld,"
+             "\"profile_id\":\"%s\","
+             "\"profile_label\":\"%s\","
+             "\"firmware_mode\":\"%s\","
+             "\"vhf_tunable\":%s,"
+             "\"uhf_tunable\":%s,"
              "\"rx_lo_path\":\"%s\","
              "\"iio_device_name\":\"%s\","
              "\"current_rx_lo_hz\":%s,"
@@ -809,10 +967,18 @@ static void send_radio_hardware(int fd)
              "}\n",
              PLUTO_MIN_HZ,
              PLUTO_MAX_HZ,
+             capability_min_hz,
+             capability_max_hz,
+             profile_id,
+             profile_label,
+             firmware_mode,
+             vhf_tunable ? "true" : "false",
+             uhf_tunable ? "true" : "false",
              rx_path,
              device_name_json,
              current[0] ? current : "null",
              available_json);
+    write_radio_profile(cfg, body);
     send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
 }
 
@@ -937,17 +1103,21 @@ static int write_track_state(
     const char *lo_path,
     const char *message,
     long long seconds_until_aos,
-    long long seconds_since_los)
+    long long seconds_until_los,
+    long long seconds_since_los,
+    const char *lo_write_result)
 {
     char path[PATH_BUF_SIZE];
     char tmp_path[PATH_BUF_SIZE + 8];
     char name_json[512];
     char message_json[512];
+    char lo_result_json[128];
     FILE *f;
     time_t now = time(NULL);
 
     json_escape(name_json, sizeof(name_json), name ? name : "");
     json_escape(message_json, sizeof(message_json), message ? message : "");
+    json_escape(lo_result_json, sizeof(lo_result_json), lo_write_result ? lo_write_result : "not_attempted");
 
     join_path(path, sizeof(path), cfg->data_dir, "radio_track_state.json");
     snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
@@ -967,7 +1137,9 @@ static int write_track_state(
             "  \"rx_hz\": %lld,\n"
             "  \"lo_path\": \"%s\",\n"
             "  \"seconds_until_aos\": %lld,\n"
+            "  \"seconds_until_los\": %lld,\n"
             "  \"seconds_since_los\": %lld,\n"
+            "  \"lo_write_result\": \"%s\",\n"
             "  \"message\": \"%s\"\n"
             "}\n",
             state,
@@ -978,7 +1150,9 @@ static int write_track_state(
             rx_hz,
             lo_path ? lo_path : "",
             seconds_until_aos,
+            seconds_until_los,
             seconds_since_los,
+            lo_result_json,
             message_json);
     fclose(f);
 
@@ -1004,6 +1178,53 @@ static int read_track_window(
     return parse_iso_utc_epoch(aos, aos_epoch) && parse_iso_utc_epoch(los, los_epoch);
 }
 
+static int time_sync_state_is_synced(const struct app_config *cfg)
+{
+    char path[PATH_BUF_SIZE];
+    char *body = NULL;
+    size_t body_len = 0;
+    int synced = 0;
+
+    join_path(path, sizeof(path), cfg->data_dir, "time_sync.json");
+    if (read_file_to_string(path, &body, &body_len) != 0) {
+        return 0;
+    }
+    (void)body_len;
+    synced = strstr(body, "\"state\": \"synced\"") != NULL || strstr(body, "\"state\":\"synced\"") != NULL;
+    free(body);
+    return synced;
+}
+
+static int read_stored_track_window(
+    const struct app_config *cfg,
+    char *name,
+    size_t name_size,
+    long long *aos_epoch,
+    long long *los_epoch,
+    char *error,
+    size_t error_size)
+{
+    char path[PATH_BUF_SIZE];
+    char *plan = NULL;
+    size_t plan_len = 0;
+    int ok;
+
+    join_path(path, sizeof(path), cfg->data_dir, "radio_track.json");
+    if (read_file_to_string(path, &plan, &plan_len) != 0) {
+        snprintf(error, error_size, "no Doppler track plan has been stored");
+        return 0;
+    }
+    (void)plan_len;
+    json_string_value(plan, "name", name, name_size);
+    ok = read_track_window(plan, aos_epoch, los_epoch);
+    free(plan);
+    if (!ok) {
+        snprintf(error, error_size, "track plan does not contain AOS/LOS timestamps");
+        return 0;
+    }
+    return 1;
+}
+
 static int apply_radio_track_step(
     const struct app_config *cfg,
     const char *state,
@@ -1024,6 +1245,7 @@ static int apply_radio_track_step(
     long long rx_hz = 0;
     long long aos_epoch = 0;
     long long los_epoch = 0;
+    long long seconds_until_los = -1;
     int point_index = -1;
     time_t now = time(NULL);
 
@@ -1040,7 +1262,7 @@ static int apply_radio_track_step(
         if ((long long)now < aos_epoch) {
             long long seconds_until_aos = aos_epoch - (long long)now;
             free(plan);
-            if (!write_track_state(cfg, "waiting", name, -1, "", 0, "", "Waiting for AOS", seconds_until_aos, -1)) {
+            if (!write_track_state(cfg, "waiting", name, -1, "", 0, "", "Waiting for AOS", seconds_until_aos, -1, -1, "not_attempted")) {
                 snprintf(error, error_size, "could not write Doppler track state");
                 return 500;
             }
@@ -1052,7 +1274,7 @@ static int apply_radio_track_step(
         if ((long long)now > los_epoch) {
             long long seconds_since_los = (long long)now - los_epoch;
             free(plan);
-            if (!write_track_state(cfg, "complete", name, -1, "", 0, "", "Pass complete", -1, seconds_since_los)) {
+            if (!write_track_state(cfg, "complete", name, -1, "", 0, "", "Pass complete", -1, -1, seconds_since_los, "not_attempted")) {
                 snprintf(error, error_size, "could not write Doppler track state");
                 return 500;
             }
@@ -1061,6 +1283,7 @@ static int apply_radio_track_step(
                      name_json, seconds_since_los);
             return 200;
         }
+        seconds_until_los = los_epoch - (long long)now;
     }
     if (!find_nearest_track_point(plan, (long long)now, &rx_hz, point_time, sizeof(point_time), &point_index)) {
         free(plan);
@@ -1070,19 +1293,20 @@ static int apply_radio_track_step(
     free(plan);
 
     if (rx_hz < PLUTO_MIN_HZ || rx_hz > PLUTO_MAX_HZ || !write_rx_lo_frequency(rx_hz, lo_path, sizeof(lo_path))) {
+        write_track_state(cfg, "tune_error", name, point_index, point_time, rx_hz, "", "could not tune RX LO for Doppler track point", -1, seconds_until_los, -1, "failed");
         snprintf(error, error_size, "could not tune RX LO for Doppler track point");
         return 500;
     }
 
-    if (!write_track_state(cfg, state, name, point_index, point_time, rx_hz, lo_path, message, -1, -1)) {
+    if (!write_track_state(cfg, state, name, point_index, point_time, rx_hz, lo_path, message, -1, seconds_until_los, -1, "written")) {
         snprintf(error, error_size, "could not write Doppler track state");
         return 500;
     }
 
     json_escape(name_json, sizeof(name_json), name);
     snprintf(response, response_size,
-             "{\"ok\":true,\"state\":\"%s\",\"name\":\"%s\",\"point_index\":%d,\"point_time_utc\":\"%s\",\"rx_hz\":%lld,\"lo_path\":\"%s\"}\n",
-             state, name_json, point_index, point_time, rx_hz, lo_path);
+             "{\"ok\":true,\"state\":\"%s\",\"name\":\"%s\",\"point_index\":%d,\"point_time_utc\":\"%s\",\"rx_hz\":%lld,\"lo_path\":\"%s\",\"seconds_until_los\":%lld,\"lo_write_result\":\"written\"}\n",
+             state, name_json, point_index, point_time, rx_hz, lo_path, seconds_until_los);
     return 200;
 }
 
@@ -1094,6 +1318,8 @@ static void send_error_json(int fd, int status, const char *error)
 
     if (status == 400) {
         reason = "Bad Request";
+    } else if (status == 409) {
+        reason = "Conflict";
     } else if (status == 404) {
         reason = "Not Found";
     }
@@ -1131,7 +1357,7 @@ static void send_radio_track_stop(int fd, const struct app_config *cfg)
     g_track_auto_running = 0;
     pthread_mutex_unlock(&g_track_lock);
 
-    if (!write_track_state(cfg, "stopped", "", -1, "", 0, "", "Doppler tracking stopped", -1, -1)) {
+    if (!write_track_state(cfg, "stopped", "", -1, "", 0, "", "Doppler tracking stopped", -1, -1, -1, "not_attempted")) {
         send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
                   "{\"ok\":false,\"error\":\"could not write Doppler track state\"}\n");
         return;
@@ -1175,7 +1401,7 @@ static void *track_auto_worker(void *arg)
             error,
             sizeof(error));
         if (status != 200) {
-            write_track_state(cfg, "auto_error", "", -1, "", 0, "", error, -1, -1);
+            write_track_state(cfg, "auto_error", "", -1, "", 0, "", error, -1, -1, -1, "failed");
         } else if (strstr(response, "\"state\":\"complete\"")) {
             completed = 1;
             track_auto_set_running(0);
@@ -1185,7 +1411,7 @@ static void *track_auto_worker(void *arg)
     }
 
     if (!completed) {
-        write_track_state(cfg, "stopped", "", -1, "", 0, "", "Automatic Doppler tracking stopped", -1, -1);
+        write_track_state(cfg, "stopped", "", -1, "", 0, "", "Automatic Doppler tracking stopped", -1, -1, -1, "not_attempted");
     }
     return NULL;
 }
@@ -1193,6 +1419,33 @@ static void *track_auto_worker(void *arg)
 static void send_radio_track_auto_start(int fd, const struct app_config *cfg)
 {
     int create_result;
+    char name[256] = "";
+    char error[256] = "";
+    char response[768];
+    char name_json[512];
+    long long aos_epoch = 0;
+    long long los_epoch = 0;
+    long long now = (long long)time(NULL);
+
+    if (!time_sync_state_is_synced(cfg)) {
+        send_text(fd, 409, "Conflict", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"sync Pluto time from the browser before starting automatic Doppler tracking\"}\n");
+        return;
+    }
+    if (!read_stored_track_window(cfg, name, sizeof(name), &aos_epoch, &los_epoch, error, sizeof(error))) {
+        send_error_json(fd, 400, error);
+        return;
+    }
+    if (now > los_epoch) {
+        long long seconds_since_los = now - los_epoch;
+        json_escape(name_json, sizeof(name_json), name);
+        write_track_state(cfg, "stale", name, -1, "", 0, "", "Refusing stale pass; LOS is already past", -1, -1, seconds_since_los, "not_attempted");
+        snprintf(response, sizeof(response),
+                 "{\"ok\":false,\"state\":\"stale\",\"name\":\"%s\",\"seconds_since_los\":%lld,\"error\":\"pass is stale; plan a current or future pass\"}\n",
+                 name_json, seconds_since_los);
+        send_text(fd, 409, "Conflict", "application/json; charset=utf-8", response);
+        return;
+    }
 
     pthread_mutex_lock(&g_track_lock);
     if (g_track_auto_running) {
@@ -1226,7 +1479,7 @@ static void send_radio_track_auto_stop(int fd, const struct app_config *cfg)
     }
 
     track_auto_set_running(0);
-    if (!write_track_state(cfg, "stopping", "", -1, "", 0, "", "Automatic Doppler tracking stopping", -1, -1)) {
+    if (!write_track_state(cfg, "stopping", "", -1, "", 0, "", "Automatic Doppler tracking stopping", -1, -1, -1, "not_attempted")) {
         send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
                   "{\"ok\":false,\"error\":\"could not write Doppler track state\"}\n");
         return;
@@ -1348,6 +1601,12 @@ static void handle_request(
     if (strcmp(method, "POST") == 0) {
         if (strcmp(path, "/api/radio/track/plan") == 0) {
             send_radio_track_plan(fd, cfg, body);
+        } else if (strcmp(path, "/api/refresh/passes") == 0) {
+            send_refresh_run(fd, cfg, "passes");
+        } else if (strcmp(path, "/api/refresh/catalog") == 0) {
+            send_refresh_run(fd, cfg, "catalog");
+        } else if (strcmp(path, "/api/refresh/all") == 0) {
+            send_refresh_run(fd, cfg, "all");
         } else {
             send_text(fd, 404, "Not Found", "application/json; charset=utf-8",
                       "{\"ok\":false,\"error\":\"not found\"}\n");
@@ -1369,6 +1628,8 @@ static void handle_request(
         join_path(file_path, sizeof(file_path), cfg->data_dir, "time_sync.json");
         send_json_file_or_default(fd, file_path,
                                   "{\"ok\":true,\"state\":\"unknown\",\"message\":\"Time has not been synced from the UI.\"}\n");
+    } else if (strcmp(path, "/api/refresh/status") == 0) {
+        send_refresh_status(fd, cfg);
     } else if (strcmp(path, "/api/config") == 0) {
         send_config(fd, cfg);
     } else if (strcmp(path, "/api/satellites") == 0) {
@@ -1400,7 +1661,7 @@ static void handle_request(
     } else if (strcmp(path, "/api/radio/track/auto/stop") == 0) {
         send_radio_track_auto_stop(fd, cfg);
     } else if (strcmp(path, "/api/radio/hardware") == 0) {
-        send_radio_hardware(fd);
+        send_radio_hardware(fd, cfg);
     } else if (strcmp(path, "/api/radio/plan") == 0) {
         send_radio_plan(fd, cfg, query);
     } else if (strcmp(path, "/api/radio/tune") == 0) {

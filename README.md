@@ -66,4 +66,16 @@ python3 tools/update_pass_predictions.py
 
 The catalog updater builds `data/satellites.json` from CelesTrak amateur TLE data and matching SatNOGS transmitter metadata. The pass updater builds `data/passes.json` from the local catalog and observer configuration.
 
-Pass prediction, TLE refresh, satellite filtering, Doppler planning, and Pluto radio control are the next implementation layers.
+The deployed Pluto runtime also includes a local refresh runner on the SD card:
+
+```text
+/media/mmcblk0p1/pluto_sat_tracker/tools/pluto_refresh_data.sh passes
+/media/mmcblk0p1/pluto_sat_tracker/tools/pluto_refresh_data.sh catalog
+```
+
+The web UI calls the same workflow through `/api/refresh/passes` and
+`/api/refresh/catalog`, with status stored in `refresh_status.json`. The current
+Pluto image must provide `python3` for on-device pass/catalog regeneration; if it
+does not, the endpoint records a clear `python3 is not installed` status.
+
+Pass filtering and richer radio operations are the next implementation layers.

@@ -201,6 +201,13 @@
       font-size: 12px;
     }
 
+    .button-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
     button {
       border: 1px solid var(--accent);
       border-radius: 6px;
@@ -276,6 +283,17 @@
     </section>
 
     <section>
+      <h2>Data Refresh</h2>
+      <dl id="refreshStatus">
+        <dt>Status</dt><dd>Loading...</dd>
+      </dl>
+      <div class="button-row">
+        <button id="refreshPassesButton" type="button">Regenerate Passes</button>
+        <button id="refreshCatalogButton" type="button">Refresh Catalog/TLE</button>
+      </div>
+    </section>
+
+    <section>
       <h2>Satellite Catalog</h2>
       <div id="catalogMeta" class="meta">Loading catalog...</div>
       <table>
@@ -295,6 +313,8 @@
   </main>
 
   <script>
+    let lastRadioHardware = null;
+
     async function getJson(url) {
       const response = await fetch(url, { cache: "no-store" });
       if (!response.ok) throw new Error(`${url}: ${response.status}`);
@@ -382,7 +402,7 @@
       const downlink = radio.downlink_hz || (pass.downlinks_hz || [])[0];
       if (!downlink) return "No downlink";
       const mode = radio.mode || (pass.modes || [])[0] || "";
-      const prefix = radio.pluto_tunable === false ? "Out of range" : "Tune";
+      const prefix = isPassTunable(pass) ? "Tune" : "Out of range";
       return `${prefix} ${formatHz(downlink)} ${mode}`.trim();
     }
 
@@ -443,11 +463,31 @@
 
     function radioHardwareEntries(hardware) {
       return [
-        ["Radio profile", hardware.iio_device_name || "-"],
+        ["Radio profile", hardware.profile_label || hardware.profile_id || "-"],
+        ["Firmware mode", hardware.firmware_mode || "-"],
+        ["IIO device", hardware.iio_device_name || "-"],
+        ["Capability range", `${formatHz(hardware.capability_min_hz)}-${formatHz(hardware.capability_max_hz)}`],
+        ["VHF tunable", hardware.vhf_tunable ? "Yes" : "No"],
+        ["UHF tunable", hardware.uhf_tunable ? "Yes" : "No"],
         ["RX LO", hardware.current_rx_lo_hz ? formatHz(hardware.current_rx_lo_hz) : "-"],
         ["RX LO path", hardware.rx_lo_path || "-"],
         ["App range", `${formatHz(hardware.software_min_hz)}-${formatHz(hardware.software_max_hz)}`]
       ];
+    }
+
+    function isHardwareTunable(hz) {
+      const value = Number(hz || 0);
+      if (!value) return false;
+      const hardware = lastRadioHardware || {};
+      const min = Number(hardware.capability_min_hz || hardware.software_min_hz || 70000000);
+      const max = Number(hardware.capability_max_hz || hardware.software_max_hz || 6000000000);
+      return value >= min && value <= max;
+    }
+
+    function isPassTunable(pass) {
+      const radio = pass.radio || {};
+      const downlink = radio.downlink_hz || (pass.downlinks_hz || [])[0];
+      return radio.pluto_tunable !== false && isHardwareTunable(downlink);
     }
 
     async function refreshRadioStatus() {
@@ -470,7 +510,9 @@
       if (trackState.rx_hz) entries.push(["Track RX", formatHz(trackState.rx_hz)]);
       if (trackState.point_time_utc) entries.push(["Track point", formatTime(trackState.point_time_utc)]);
       if (trackState.seconds_until_aos > 0) entries.push(["AOS in", formatCountdown(trackState.seconds_until_aos)]);
+      if (trackState.seconds_until_los > 0) entries.push(["LOS in", formatCountdown(trackState.seconds_until_los)]);
       if (trackState.seconds_since_los > 0) entries.push(["LOS ago", formatCountdown(trackState.seconds_since_los)]);
+      if (trackState.lo_write_result) entries.push(["LO write", trackState.lo_write_result]);
       if (trackState.message) entries.push(["Track message", trackState.message]);
       entries.push(...radioHardwareEntries(hardware));
       setDl("radioStatus", entries);
@@ -614,6 +656,27 @@
       }
     }
 
+    async function runDataRefresh(target, button) {
+      const originalText = button.textContent;
+      button.disabled = true;
+      button.textContent = "Running...";
+      try {
+        await postJson(`/api/refresh/${target}`, {});
+        button.textContent = "Done";
+        await refresh();
+      } catch (error) {
+        button.textContent = "Failed";
+        await refresh().catch(() => {});
+        throw error;
+      } finally {
+        setTimeout(() => {
+          button.disabled = false;
+          button.textContent = originalText;
+        }, 1200);
+      }
+    }
+
+
     function renderPassDetail(pass) {
       const node = document.getElementById("passDetail");
       if (!pass) {
@@ -625,7 +688,7 @@
       const radio = pass.radio || {};
       const uplink = radio.uplink_hz ? formatHz(radio.uplink_hz) : "-";
       const downlink = radio.downlink_hz ? formatHz(radio.downlink_hz) : "-";
-      const tunable = radio.pluto_tunable === false ? "No" : "Yes";
+      const tunable = isPassTunable(pass) ? "Yes" : "No";
       const description = radio.description || "-";
 
       node.className = "";
@@ -703,7 +766,7 @@
       });
 
       const button = node.querySelector("#planRadioButton");
-      button.disabled = !radio.downlink_hz;
+      button.disabled = !radio.downlink_hz || !isPassTunable(pass);
       button.addEventListener("click", () => {
         planRadioTarget(pass, button).catch((error) => {
           document.getElementById("status").textContent = error.message;
@@ -711,7 +774,7 @@
       });
 
       const tuneButton = node.querySelector("#tuneRadioButton");
-      tuneButton.disabled = !radio.downlink_hz || radio.pluto_tunable === false;
+      tuneButton.disabled = !radio.downlink_hz || !isPassTunable(pass);
       tuneButton.addEventListener("click", () => {
         tuneRadioTarget(pass, tuneButton).catch((error) => {
           document.getElementById("status").textContent = error.message;
@@ -719,7 +782,7 @@
       });
 
       const dopplerButton = node.querySelector("#planDopplerButton");
-      dopplerButton.disabled = !pass.doppler_plan || !(pass.doppler_plan.points || []).length;
+      dopplerButton.disabled = !isPassTunable(pass) || !pass.doppler_plan || !(pass.doppler_plan.points || []).length;
       dopplerButton.addEventListener("click", () => {
         planDopplerTrack(pass, dopplerButton).catch((error) => {
           document.getElementById("status").textContent = error.message;
@@ -734,7 +797,8 @@
         ["autoStopDopplerButton", "auto/stop"]
       ]) {
         const trackButton = node.querySelector(`#${id}`);
-        trackButton.disabled = id !== "stopDopplerButton" && (!pass.doppler_plan || !(pass.doppler_plan.points || []).length);
+        trackButton.disabled = id !== "stopDopplerButton" && id !== "autoStopDopplerButton" &&
+          (!isPassTunable(pass) || !pass.doppler_plan || !(pass.doppler_plan.points || []).length);
         trackButton.addEventListener("click", () => {
           controlDopplerTrack(action, trackButton).catch((error) => {
             document.getElementById("status").textContent = error.message;
@@ -769,7 +833,7 @@
           downlink ? `${formatHz(downlink)} ${((pass.modes || [])[0] || "")}` : ((pass.modes || [])[0] || "");
         row.children[1].textContent =
           `${formatTime(pass.aos_utc)}-${formatTime(pass.los_utc)} (${formatDuration(pass.duration_s)})`;
-        row.children[2].className = pass.radio && pass.radio.pluto_tunable === false ? "radio-warn" : "radio-ok";
+        row.children[2].className = isPassTunable(pass) ? "radio-ok" : "radio-warn";
         row.children[2].textContent = renderRadioTarget(pass);
         row.title = `Max ${pass.max_elevation_deg} deg, az ${pass.aos_azimuth_deg}-${pass.los_azimuth_deg}`;
         row.addEventListener("click", () => {
@@ -789,7 +853,7 @@
     }
 
     async function refresh() {
-      const [status, config, catalog, passes, radioStatus, radioHardware, radioTrack, radioTrackState, timeStatus] = await Promise.all([
+      const [status, config, catalog, passes, radioStatus, radioHardware, radioTrack, radioTrackState, timeStatus, refreshStatus] = await Promise.all([
         getJson("/api/status"),
         getJson("/api/config"),
         getJson("/api/satellites"),
@@ -798,8 +862,10 @@
         getJson("/api/radio/hardware"),
         getJson("/api/radio/track/status"),
         getJson("/api/radio/track/state"),
-        getJson("/api/time/status")
+        getJson("/api/time/status"),
+        getJson("/api/refresh/status")
       ]);
+      lastRadioHardware = radioHardware;
 
       document.getElementById("status").textContent = status.ok ? "Backend online" : "Backend warning";
 
@@ -836,9 +902,18 @@
         ["Track RX", radioTrackState.rx_hz ? formatHz(radioTrackState.rx_hz) : "-"],
         ["Track point", radioTrackState.point_time_utc ? formatTime(radioTrackState.point_time_utc) : "-"],
         ["AOS in", radioTrackState.seconds_until_aos > 0 ? formatCountdown(radioTrackState.seconds_until_aos) : "-"],
+        ["LOS in", radioTrackState.seconds_until_los > 0 ? formatCountdown(radioTrackState.seconds_until_los) : "-"],
         ["LOS ago", radioTrackState.seconds_since_los > 0 ? formatCountdown(radioTrackState.seconds_since_los) : "-"],
+        ["LO write", radioTrackState.lo_write_result || "-"],
         ["Track message", radioTrackState.message || "-"],
         ...radioHardwareEntries(radioHardware)
+      ]);
+
+      setDl("refreshStatus", [
+        ["State", refreshStatus.state || "idle"],
+        ["Target", refreshStatus.target || "-"],
+        ["Updated", refreshStatus.updated_utc || "-"],
+        ["Message", refreshStatus.message || "-"]
       ]);
 
       renderPasses(passes);
@@ -871,6 +946,18 @@
 
     document.getElementById("syncTimeButton").addEventListener("click", (event) => {
       syncPlutoTime(event.currentTarget).catch((error) => {
+        document.getElementById("status").textContent = error.message;
+      });
+    });
+
+    document.getElementById("refreshPassesButton").addEventListener("click", (event) => {
+      runDataRefresh("passes", event.currentTarget).catch((error) => {
+        document.getElementById("status").textContent = error.message;
+      });
+    });
+
+    document.getElementById("refreshCatalogButton").addEventListener("click", (event) => {
+      runDataRefresh("catalog", event.currentTarget).catch((error) => {
         document.getElementById("status").textContent = error.message;
       });
     });
