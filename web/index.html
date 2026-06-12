@@ -526,6 +526,8 @@
     let pendingMapLocation = null;
     let currentMapFocusTime = "";
     let currentMapViewBox = null;
+    let refreshTimerId = 0;
+    let refreshInFlight = false;
 
     async function getJson(url) {
       const response = await fetch(url, { cache: "no-store" });
@@ -992,6 +994,13 @@
               <div><strong>Subsat</strong>${escapeHtml(`${focusPoint.latitude_deg.toFixed(3)} deg, ${focusPoint.longitude_deg.toFixed(3)} deg`)}</div>
               <div><strong>Look Angles</strong>${escapeHtml(`Az ${focusPoint.azimuth_deg} deg, El ${focusPoint.elevation_deg} deg`)}</div>
               <div><strong>Altitude</strong>${escapeHtml(`${focusPoint.altitude_km} km`)}</div>
+              <div class="full-width">
+                <div class="button-row">
+                  <button id="tuneFocusButton" type="button">Tune Focused RX</button>
+                  <button id="trackFocusStepButton" type="button">Step Track Now</button>
+                  <button id="followLivePointButton" type="button">Follow Live Point</button>
+                </div>
+              </div>
             </div>
           ` : ""}
           <div class="map-legend">
@@ -1027,6 +1036,29 @@
           renderMapPanel(currentSelectedPass, currentObserverConfig);
         });
       });
+      const tuneFocusButton = document.getElementById("tuneFocusButton");
+      if (tuneFocusButton && pass && focusPoint) {
+        tuneFocusButton.addEventListener("click", () => {
+          tuneFocusedSample(pass, focusPoint, tuneFocusButton).catch((error) => {
+            document.getElementById("status").textContent = error.message;
+          });
+        });
+      }
+      const trackFocusStepButton = document.getElementById("trackFocusStepButton");
+      if (trackFocusStepButton && pass) {
+        trackFocusStepButton.addEventListener("click", () => {
+          runSelectedTrackAction(pass, "step", trackFocusStepButton).catch((error) => {
+            document.getElementById("status").textContent = error.message;
+          });
+        });
+      }
+      const followLivePointButton = document.getElementById("followLivePointButton");
+      if (followLivePointButton) {
+        followLivePointButton.addEventListener("click", () => {
+          currentMapFocusTime = "";
+          renderMapPanel(currentSelectedPass, currentObserverConfig);
+        });
+      }
       svg.addEventListener("wheel", (event) => {
         event.preventDefault();
         zoomMap(event.deltaY < 0 ? 0.9 : 1.1);
@@ -1090,6 +1122,81 @@
         renderMapPanel(currentSelectedPass, currentObserverConfig);
         document.getElementById("status").textContent = `Map selected ${latitude.toFixed(5)}, ${longitude.toFixed(5)}. Save Location to apply it.`;
       });
+    }
+
+    async function tuneFocusedSample(pass, focusPoint, button) {
+      const plan = pass && pass.doppler_plan;
+      const matchingPoint = (plan && plan.points || []).find((point) => point.time_utc === focusPoint.time_utc);
+      const rxHz = matchingPoint && matchingPoint.rx_hz;
+      if (!Number.isFinite(Number(rxHz))) {
+        throw new Error("Focused sample does not have a tunable RX frequency.");
+      }
+
+      const params = new URLSearchParams({
+        name: `${pass.name || "Focused sample"} @ ${focusPoint.time_utc || ""}`,
+        norad: String(pass.norad_id || ""),
+        aos: pass.aos_utc || "",
+        downlink: String(rxHz),
+        mode: (pass.radio && pass.radio.mode) || (pass.modes || [])[0] || "",
+        description: `Focused sample ${focusPoint.time_utc || ""}`
+      });
+
+      button.disabled = true;
+      const originalText = button.textContent;
+      button.textContent = "Tuning...";
+      try {
+        await getJson(`/api/radio/tune?${params.toString()}`);
+        button.textContent = "Tuned";
+        await refresh();
+      } finally {
+        setTimeout(() => {
+          button.disabled = false;
+          button.textContent = originalText;
+        }, 1200);
+      }
+    }
+
+    function preferredRefreshMs() {
+      if (document.hidden) return 0;
+      const trackState = lastTrackState || {};
+      if (trackState.state && trackState.state !== "idle" && trackState.state !== "stopped" && trackState.state !== "complete") {
+        return 4000;
+      }
+      if (currentSelectedPass) {
+        const state = passTimingState(currentSelectedPass);
+        if (state === "active") return 5000;
+        if (state === "upcoming") {
+          const aos = Date.parse(currentSelectedPass.aos_utc || "");
+          if (Number.isFinite(aos) && (aos - Date.now()) <= (15 * 60 * 1000)) {
+            return 10000;
+          }
+        }
+      }
+      return 30000;
+    }
+
+    async function timedRefresh() {
+      if (refreshInFlight) return;
+      refreshInFlight = true;
+      try {
+        await refresh();
+      } catch (_error) {
+      } finally {
+        refreshInFlight = false;
+        scheduleRefreshLoop();
+      }
+    }
+
+    function scheduleRefreshLoop() {
+      if (refreshTimerId) {
+        clearTimeout(refreshTimerId);
+        refreshTimerId = 0;
+      }
+      const delay = preferredRefreshMs();
+      if (!delay) return;
+      refreshTimerId = window.setTimeout(() => {
+        timedRefresh();
+      }, delay);
     }
 
     function radioHardwareEntries(hardware) {
@@ -1677,6 +1784,7 @@
       setDl("refreshStatus", refreshEntries);
 
       renderPasses(passes);
+      scheduleRefreshLoop();
 
       const tbody = document.getElementById("satellites");
       const satellites = catalog.satellites || [];
@@ -1726,6 +1834,10 @@
       saveObserverConfig(event.currentTarget).catch((error) => {
         document.getElementById("status").textContent = error.message;
       });
+    });
+
+    document.addEventListener("visibilitychange", () => {
+      scheduleRefreshLoop();
     });
 
     refresh().catch((error) => {
