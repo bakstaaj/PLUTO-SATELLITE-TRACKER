@@ -121,6 +121,34 @@ def look_angles(
     return azimuth_deg, elevation_deg, range_km
 
 
+def eci_to_geodetic(
+    sat_eci: tuple[float, float, float],
+    when: dt.datetime,
+) -> tuple[float, float, float]:
+    theta = gmst_rad(when)
+    cos_t = math.cos(theta)
+    sin_t = math.sin(theta)
+    x = cos_t * sat_eci[0] + sin_t * sat_eci[1]
+    y = -sin_t * sat_eci[0] + cos_t * sat_eci[1]
+    z = sat_eci[2]
+
+    lon = math.atan2(y, x)
+    p = math.hypot(x, y)
+    e2 = EARTH_FLATTENING * (2.0 - EARTH_FLATTENING)
+    lat = math.atan2(z, p * (1.0 - e2))
+
+    for _ in range(6):
+        sin_lat = math.sin(lat)
+        n = EARTH_RADIUS_KM / math.sqrt(1.0 - e2 * sin_lat * sin_lat)
+        alt = p / max(math.cos(lat), 1e-9) - n
+        lat = math.atan2(z, p * (1.0 - e2 * (n / max(n + alt, 1e-9))))
+
+    sin_lat = math.sin(lat)
+    n = EARTH_RADIUS_KM / math.sqrt(1.0 - e2 * sin_lat * sin_lat)
+    alt = p / max(math.cos(lat), 1e-9) - n
+    return math.degrees(lat), ((math.degrees(lon) + 540.0) % 360.0) - 180.0, alt
+
+
 def propagate(satrec: Satrec, when: dt.datetime) -> tuple[float, float, float] | None:
     jd, fr = julian_date(when)
     error, position, _velocity = satrec.sgp4(jd, fr)
@@ -288,6 +316,7 @@ def predict_satellite_passes(
             continue
 
         az, el, range_km = look_angles(sat_pos, lat, lon, alt_m, when)
+        sat_lat_deg, sat_lon_deg, sat_alt_km = eci_to_geodetic(sat_pos, when)
         visible = el >= min_el
 
         if visible and not in_pass:
@@ -315,6 +344,9 @@ def predict_satellite_passes(
                     "azimuth_deg": az,
                     "elevation_deg": el,
                     "range_km": range_km,
+                    "sat_latitude_deg": sat_lat_deg,
+                    "sat_longitude_deg": sat_lon_deg,
+                    "sat_altitude_km": sat_alt_km,
                 }
             )
             if el > float(current["max_elevation_deg"]):
@@ -348,6 +380,17 @@ def predict_satellite_passes(
 def format_pass(satellite: dict[str, Any], row: dict[str, Any], duration_s: int) -> dict[str, Any]:
     radio = primary_radio_target(satellite)
     doppler_plan = build_doppler_plan(row.get("samples", []), radio)
+    ground_track = [
+        {
+            "time_utc": iso_utc(sample["time"]),
+            "latitude_deg": round(float(sample["sat_latitude_deg"]), 3),
+            "longitude_deg": round(float(sample["sat_longitude_deg"]), 3),
+            "altitude_km": round(float(sample["sat_altitude_km"]), 1),
+            "azimuth_deg": round(float(sample["azimuth_deg"]), 1),
+            "elevation_deg": round(float(sample["elevation_deg"]), 1),
+        }
+        for sample in row.get("samples", [])
+    ]
     return {
         "norad_id": satellite.get("norad_id"),
         "name": satellite.get("name"),
@@ -363,6 +406,7 @@ def format_pass(satellite: dict[str, Any], row: dict[str, Any], duration_s: int)
         "modes": satellite.get("modes", [])[:8],
         "radio": radio,
         "doppler_plan": doppler_plan,
+        "ground_track": ground_track,
     }
 
 

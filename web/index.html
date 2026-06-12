@@ -60,6 +60,10 @@
       padding: 14px;
     }
 
+    .span-2 {
+      grid-column: 1 / -1;
+    }
+
     h2 {
       margin: 0 0 12px;
       font-size: 15px;
@@ -256,6 +260,52 @@
       background: #fff;
     }
 
+    .map-shell {
+      display: grid;
+      gap: 10px;
+    }
+
+    .map-frame {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #dfeef7;
+    }
+
+    .map-frame svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      aspect-ratio: 2 / 1;
+      cursor: crosshair;
+    }
+
+    .map-note {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .map-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 14px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .legend-swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      display: inline-block;
+    }
+
     button {
       border: 1px solid var(--accent);
       border-radius: 6px;
@@ -328,7 +378,12 @@
       <div id="passes" class="empty">Loading passes...</div>
     </section>
 
-    <section>
+    <section class="span-2">
+      <h2>Map</h2>
+      <div id="mapPanel" class="empty">Loading map...</div>
+    </section>
+
+    <section class="span-2">
       <h2>Selected Pass</h2>
       <div id="passDetail" class="empty">Select a pass to see radio and tracking details.</div>
     </section>
@@ -389,6 +444,8 @@
     let lastRadioHardware = null;
     let lastTimeStatus = null;
     let passFilter = "actionable";
+    let currentObserverConfig = null;
+    let currentSelectedPass = null;
 
     async function getJson(url) {
       const response = await fetch(url, { cache: "no-store" });
@@ -576,6 +633,132 @@
         </table>
         <p class="doppler-note">Range-rate model. Positive range rate means the satellite is moving away.</p>
       `;
+    }
+
+    function normalizeLongitude(lon) {
+      let value = Number(lon || 0);
+      while (value < -180) value += 360;
+      while (value > 180) value -= 360;
+      return value;
+    }
+
+    function projectLonLat(longitude, latitude, width, height) {
+      const x = ((normalizeLongitude(longitude) + 180) / 360) * width;
+      const y = ((90 - Number(latitude || 0)) / 180) * height;
+      return { x, y };
+    }
+
+    function splitTrackSegments(points) {
+      const segments = [];
+      let current = [];
+      for (const point of points || []) {
+        const lon = normalizeLongitude(point.longitude_deg);
+        if (current.length) {
+          const previous = current[current.length - 1];
+          if (Math.abs(lon - previous.longitude_deg) > 180) {
+            if (current.length > 1) segments.push(current);
+            current = [];
+          }
+        }
+        current.push({ ...point, longitude_deg: lon });
+      }
+      if (current.length > 1) segments.push(current);
+      return segments;
+    }
+
+    function renderMapPanel(pass, config) {
+      const node = document.getElementById("mapPanel");
+      if (!config) {
+        node.className = "empty";
+        node.textContent = "Map unavailable until observer config loads.";
+        return;
+      }
+
+      const width = 720;
+      const height = 360;
+      const gridLines = [];
+      for (let lon = -150; lon <= 180; lon += 30) {
+        const p1 = projectLonLat(lon, -85, width, height);
+        const p2 = projectLonLat(lon, 85, width, height);
+        gridLines.push(`<line x1="${p1.x.toFixed(1)}" y1="${p1.y.toFixed(1)}" x2="${p2.x.toFixed(1)}" y2="${p2.y.toFixed(1)}" stroke="#b9cad7" stroke-width="1" />`);
+      }
+      for (let lat = -60; lat <= 60; lat += 30) {
+        const p1 = projectLonLat(-180, lat, width, height);
+        const p2 = projectLonLat(180, lat, width, height);
+        gridLines.push(`<line x1="${p1.x.toFixed(1)}" y1="${p1.y.toFixed(1)}" x2="${p2.x.toFixed(1)}" y2="${p2.y.toFixed(1)}" stroke="#b9cad7" stroke-width="1" />`);
+      }
+
+      const observerPoint = projectLonLat(config.longitude_deg, config.latitude_deg, width, height);
+      const trackPoints = (pass && pass.ground_track) || [];
+      const segments = splitTrackSegments(trackPoints);
+      const segmentPaths = segments.map((segment) => {
+        const points = segment.map((point) => {
+          const xy = projectLonLat(point.longitude_deg, point.latitude_deg, width, height);
+          return `${xy.x.toFixed(1)},${xy.y.toFixed(1)}`;
+        }).join(" ");
+        return `<polyline fill="none" stroke="#c4471c" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="${points}" />`;
+      }).join("");
+
+      const passStart = trackPoints[0];
+      const passPeak = trackPoints.length ? trackPoints[Math.floor(trackPoints.length / 2)] : null;
+      const passEnd = trackPoints.length ? trackPoints[trackPoints.length - 1] : null;
+
+      function marker(point, color, label) {
+        if (!point) return "";
+        const xy = projectLonLat(point.longitude_deg, point.latitude_deg, width, height);
+        return `
+          <circle cx="${xy.x.toFixed(1)}" cy="${xy.y.toFixed(1)}" r="4.5" fill="${color}" stroke="#fff" stroke-width="2" />
+          <text x="${(xy.x + 8).toFixed(1)}" y="${(xy.y - 8).toFixed(1)}" font-size="12" fill="#102030">${escapeHtml(label)}</text>
+        `;
+      }
+
+      const title = pass
+        ? `${pass.name || "Selected pass"} visible ground track`
+        : `${config.name || "Observer"} location`;
+
+      node.className = "";
+      node.innerHTML = `
+        <div class="map-shell">
+          <div class="map-frame">
+            <svg id="trackerMapSvg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHtml(title)}">
+              <rect x="0" y="0" width="${width}" height="${height}" fill="#dfeef7" />
+              ${gridLines.join("")}
+              <line x1="0" y1="${(height / 2).toFixed(1)}" x2="${width}" y2="${(height / 2).toFixed(1)}" stroke="#89a8bc" stroke-width="1.2" />
+              <line x1="${(width / 2).toFixed(1)}" y1="0" x2="${(width / 2).toFixed(1)}" y2="${height}" stroke="#89a8bc" stroke-width="1.2" />
+              <rect x="0.5" y="0.5" width="${width - 1}" height="${height - 1}" fill="none" stroke="#8ea7b9" stroke-width="1" />
+              ${segmentPaths}
+              <circle cx="${observerPoint.x.toFixed(1)}" cy="${observerPoint.y.toFixed(1)}" r="5.5" fill="#006f9f" stroke="#fff" stroke-width="2" />
+              <text x="${(observerPoint.x + 10).toFixed(1)}" y="${(observerPoint.y - 10).toFixed(1)}" font-size="12" fill="#102030">${escapeHtml(config.name || "Observer")}</text>
+              ${marker(passStart, "#1a7f37", "AOS")}
+              ${marker(passPeak, "#a15c00", "TCA")}
+              ${marker(passEnd, "#7d3ad3", "LOS")}
+            </svg>
+          </div>
+          <div class="map-legend">
+            <span class="legend-item"><span class="legend-swatch" style="background:#006f9f"></span>Observer</span>
+            <span class="legend-item"><span class="legend-swatch" style="background:#c4471c"></span>Visible pass path</span>
+            <span class="legend-item"><span class="legend-swatch" style="background:#1a7f37"></span>AOS</span>
+            <span class="legend-item"><span class="legend-swatch" style="background:#a15c00"></span>TCA</span>
+            <span class="legend-item"><span class="legend-swatch" style="background:#7d3ad3"></span>LOS</span>
+          </div>
+          <div class="map-note">
+            Click the map to prefill observer latitude and longitude. ${pass ? "The red path shows the visible portion of the selected pass." : "Select a pass to overlay its flyover path."}
+          </div>
+        </div>
+      `;
+
+      const svg = document.getElementById("trackerMapSvg");
+      if (!svg) return;
+      svg.addEventListener("click", (event) => {
+        const rect = svg.getBoundingClientRect();
+        const x = ((event.clientX - rect.left) / rect.width) * width;
+        const y = ((event.clientY - rect.top) / rect.height) * height;
+        const longitude = ((x / width) * 360) - 180;
+        const latitude = 90 - ((y / height) * 180);
+        document.getElementById("observerLatitudeInput").value = latitude.toFixed(5);
+        document.getElementById("observerLongitudeInput").value = longitude.toFixed(5);
+        document.getElementById("status").textContent = `Map selected ${latitude.toFixed(5)}, ${longitude.toFixed(5)}. Save Location to apply it.`;
+      });
     }
 
     function radioHardwareEntries(hardware) {
@@ -863,6 +1046,8 @@
 
     function renderPassDetail(pass) {
       const node = document.getElementById("passDetail");
+      currentSelectedPass = pass || null;
+      renderMapPanel(currentSelectedPass, currentObserverConfig);
       if (!pass) {
         node.className = "empty";
         node.textContent = "Select a pass to see radio and tracking details.";
@@ -1090,6 +1275,7 @@
       ]);
       lastRadioHardware = radioHardware;
       lastTimeStatus = timeStatus;
+      currentObserverConfig = config;
 
       document.getElementById("status").textContent = status.ok ? "Backend online" : "Backend warning";
 
@@ -1105,6 +1291,7 @@
       document.getElementById("observerLongitudeInput").value = config.longitude_deg ?? "";
       document.getElementById("observerAltitudeInput").value = config.altitude_m ?? 0;
       document.getElementById("observerMinElevationInput").value = config.minimum_elevation_deg ?? 10;
+      renderMapPanel(currentSelectedPass, currentObserverConfig);
 
       setDl("storage", [
         ["Web", status.web_dir],
