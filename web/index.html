@@ -957,6 +957,13 @@
     let refreshTimerId = 0;
     let refreshInFlight = false;
     let analogAudioSession = null;
+    let autoSyncInFlight = false;
+    let lastAutoSyncMs = 0;
+    let lastAutoPassRefreshMs = 0;
+
+    const AUTO_TIME_SYNC_COOLDOWN_MS = 10 * 60 * 1000;
+    const AUTO_PASS_REFRESH_COOLDOWN_MS = 10 * 60 * 1000;
+    const AUTO_TIME_SYNC_DRIFT_SECONDS = 45;
 
     async function parseJsonResponse(response, url) {
       const text = await response.text();
@@ -983,6 +990,61 @@
         body: JSON.stringify(payload)
       });
       return parseJsonResponse(response, url);
+    }
+
+    function currentBrowserEpochSeconds() {
+      return Math.floor(Date.now() / 1000);
+    }
+
+    function currentPlutoDriftSeconds(statusPayload) {
+      const plutoEpoch = Number(statusPayload && statusPayload.time_epoch ? statusPayload.time_epoch : 0);
+      if (!plutoEpoch) return Infinity;
+      return Math.abs(currentBrowserEpochSeconds() - plutoEpoch);
+    }
+
+    async function autoSyncTimeAndPasses(force = false) {
+      if (autoSyncInFlight) return false;
+
+      const [status, timeStatus] = await Promise.all([
+        getJson("/api/status"),
+        getJson("/api/time/status")
+      ]);
+
+      const nowMs = Date.now();
+      const driftSeconds = currentPlutoDriftSeconds(status);
+      const needsSync =
+        force ||
+        (timeStatus.state !== "synced") ||
+        (driftSeconds > AUTO_TIME_SYNC_DRIFT_SECONDS);
+
+      if (!needsSync) {
+        return false;
+      }
+
+      if (!force && (nowMs - lastAutoSyncMs) < AUTO_TIME_SYNC_COOLDOWN_MS) {
+        return false;
+      }
+
+      autoSyncInFlight = true;
+      try {
+        await getJson(`/api/time/sync?epoch=${currentBrowserEpochSeconds()}`);
+        lastAutoSyncMs = Date.now();
+
+        const shouldRefreshPasses =
+          force ||
+          (timeStatus.state !== "synced") ||
+          (driftSeconds > AUTO_TIME_SYNC_DRIFT_SECONDS) ||
+          ((Date.now() - lastAutoPassRefreshMs) >= AUTO_PASS_REFRESH_COOLDOWN_MS);
+
+        if (shouldRefreshPasses) {
+          await postJson("/api/refresh/passes", {});
+          lastAutoPassRefreshMs = Date.now();
+        }
+
+        return true;
+      } finally {
+        autoSyncInFlight = false;
+      }
     }
 
     function setPillState(id, text, state) {
@@ -1648,6 +1710,7 @@
       if (refreshInFlight) return;
       refreshInFlight = true;
       try {
+        await autoSyncTimeAndPasses(false);
         await refresh();
       } catch (_error) {
       } finally {
@@ -1900,11 +1963,14 @@
     }
 
     async function syncPlutoTime(button) {
-      const epoch = Math.floor(Date.now() / 1000);
+      const epoch = currentBrowserEpochSeconds();
       button.disabled = true;
       button.textContent = "Syncing...";
       try {
         await getJson(`/api/time/sync?epoch=${epoch}`);
+        await postJson("/api/refresh/passes", {});
+        lastAutoSyncMs = Date.now();
+        lastAutoPassRefreshMs = Date.now();
         button.textContent = "Synced";
         await refresh();
       } catch (error) {
@@ -2600,10 +2666,209 @@
       }
     });
 
-    refresh().catch((error) => {
-      setPillState("status", "Backend unavailable", "stopped");
-      document.getElementById("passes").textContent = error.message;
-    });
+    (async () => {
+      try {
+        await autoSyncTimeAndPasses(true);
+      } catch (error) {
+        const statusNode = document.getElementById("status");
+        if (statusNode) {
+          statusNode.textContent = `Auto time sync failed: ${error.message}`;
+        }
+      }
+
+      try {
+        await refresh();
+      } catch (error) {
+        setPillState("status", "Backend unavailable", "stopped");
+        document.getElementById("passes").textContent = error.message;
+      }
+    })();
+
+    // UI_BROWSER_TIME_QUICK_FULL_REFRESH_V3_APPEND
+    // Browser-owned startup recovery for standalone Pluto operation.
+    // The browser is the time source: sync Pluto UTC, publish a quick pass
+    // preview, and let the full 24-hour pass rebuild complete in the background.
+    (function installBrowserTimeQuickFullRefreshV3() {
+      if (window.__plutoBrowserTimeQuickFullRefreshV3Installed) return;
+      window.__plutoBrowserTimeQuickFullRefreshV3Installed = true;
+
+      let browserRefreshPollTimerId = 0;
+      let browserBootstrapStarted = false;
+      let originalPostJson = null;
+
+      function browserEpochSeconds() {
+        return Math.floor(Date.now() / 1000);
+      }
+
+      function isoEpochSeconds(value) {
+        const millis = Date.parse(value || "");
+        return Number.isFinite(millis) ? Math.floor(millis / 1000) : 0;
+      }
+
+      function passPayloadNeedsBrowserRefresh(payload) {
+        const passes = (payload && payload.passes) || [];
+        const startEpoch = isoEpochSeconds(payload && payload.start_utc);
+        const nowEpoch = browserEpochSeconds();
+        if (!passes.length || !startEpoch) return true;
+        return Math.abs(nowEpoch - startEpoch) > 15 * 60;
+      }
+
+      function setBrowserStatus(text, state) {
+        try {
+          if (typeof setPillState === "function") {
+            setPillState("status", text, state || "pending");
+          } else {
+            const status = document.getElementById("status");
+            if (status) status.textContent = text;
+          }
+        } catch (_error) {
+        }
+      }
+
+      async function syncPlutoTimeFromBrowserV3() {
+        const result = await getJson(`/api/time/sync?epoch=${browserEpochSeconds()}`);
+        try {
+          if (typeof setPillState === "function") setPillState("timePill", "Time synced", "running");
+        } catch (_error) {
+        }
+        return result;
+      }
+
+      function scheduleFullRefreshPollV3() {
+        if (browserRefreshPollTimerId) {
+          window.clearInterval(browserRefreshPollTimerId);
+        }
+        const startedAt = Date.now();
+        browserRefreshPollTimerId = window.setInterval(async () => {
+          try {
+            await refresh();
+            const passesPayload = await getJson("/api/passes");
+            const refreshStatus = await getJson("/api/refresh/status");
+            const hours = Number((passesPayload && passesPayload.hours) ||
+              (refreshStatus && refreshStatus.summary && refreshStatus.summary.prediction_hours) || 0);
+            const count = Number((passesPayload && passesPayload.metadata && passesPayload.metadata.pass_count) ||
+              ((passesPayload && passesPayload.passes) || []).length || 0);
+            if ((refreshStatus.state || "") === "ok" && hours >= 23 && count >= 20 && !passPayloadNeedsBrowserRefresh(passesPayload)) {
+              window.clearInterval(browserRefreshPollTimerId);
+              browserRefreshPollTimerId = 0;
+              setBrowserStatus("Backend online", "running");
+            }
+            if (Date.now() - startedAt > 15 * 60 * 1000) {
+              window.clearInterval(browserRefreshPollTimerId);
+              browserRefreshPollTimerId = 0;
+            }
+          } catch (_error) {
+          }
+        }, 6000);
+      }
+
+      async function triggerBrowserOwnedPassRefreshV3() {
+        await syncPlutoTimeFromBrowserV3();
+        const poster = originalPostJson || postJson;
+        const result = await poster("/api/refresh/passes", {});
+        scheduleFullRefreshPollV3();
+        return result;
+      }
+
+      async function bootstrapBrowserTimeRefreshV3() {
+        if (browserBootstrapStarted) return;
+        browserBootstrapStarted = true;
+        try {
+          setBrowserStatus("Syncing browser time...", "pending");
+          await syncPlutoTimeFromBrowserV3();
+          await refresh();
+          const passesPayload = await getJson("/api/passes");
+          if (passPayloadNeedsBrowserRefresh(passesPayload)) {
+            setBrowserStatus("Loading quick pass preview...", "pending");
+            await triggerBrowserOwnedPassRefreshV3();
+            await refresh();
+          }
+        } catch (error) {
+          setBrowserStatus("Startup refresh failed", "stopped");
+          const passesNode = document.getElementById("passes");
+          if (passesNode) passesNode.textContent = error.message || String(error);
+        } finally {
+          browserBootstrapStarted = false;
+        }
+      }
+
+      try {
+        originalPostJson = postJson;
+        postJson = async function browserTimePostJsonWrapperV3(url, payload) {
+          if (url === "/api/refresh/passes" || url === "/api/refresh/all") {
+            await syncPlutoTimeFromBrowserV3();
+            const result = await originalPostJson(url, payload);
+            scheduleFullRefreshPollV3();
+            return result;
+          }
+          return originalPostJson(url, payload);
+        };
+      } catch (_error) {
+      }
+
+      try {
+        syncPlutoTime = async function syncPlutoTime(button) {
+          button.disabled = true;
+          button.textContent = "Syncing...";
+          try {
+            await syncPlutoTimeFromBrowserV3();
+            button.textContent = "Synced";
+            await refresh();
+          } catch (error) {
+            button.textContent = "Sync failed";
+            throw error;
+          } finally {
+            setTimeout(() => {
+              button.disabled = false;
+              button.textContent = "Sync Time";
+            }, 1200);
+          }
+        };
+      } catch (_error) {
+      }
+
+      try {
+        const previousRunDataRefresh = runDataRefresh;
+        runDataRefresh = async function runDataRefresh(target, button) {
+          if (target !== "passes" && target !== "all") {
+            return previousRunDataRefresh(target, button);
+          }
+          const originalText = button.textContent;
+          button.disabled = true;
+          button.textContent = "Syncing time...";
+          try {
+            await syncPlutoTimeFromBrowserV3();
+            button.textContent = "Loading preview...";
+            await (originalPostJson || postJson)(`/api/refresh/${target}`, {});
+            scheduleFullRefreshPollV3();
+            button.textContent = "Done";
+            await refresh();
+          } catch (error) {
+            button.textContent = "Failed";
+            await refresh().catch(() => {});
+            throw error;
+          } finally {
+            setTimeout(() => {
+              button.disabled = false;
+              button.textContent = originalText;
+            }, 1200);
+          }
+        };
+      } catch (_error) {
+      }
+
+      window.plutoBrowserTimeQuickFullRefreshV3 = {
+        syncTime: syncPlutoTimeFromBrowserV3,
+        triggerPassRefresh: triggerBrowserOwnedPassRefreshV3,
+        bootstrap: bootstrapBrowserTimeRefreshV3,
+        scheduleFullPoll: scheduleFullRefreshPollV3
+      };
+
+      window.setTimeout(() => {
+        bootstrapBrowserTimeRefreshV3();
+      }, 300);
+    })();
+
   </script>
 </body>
 </html>

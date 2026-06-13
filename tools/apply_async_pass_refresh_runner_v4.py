@@ -1,4 +1,19 @@
-#!/bin/sh
+#!/usr/bin/env python3
+"""Apply v4 non-blocking pass refresh runner for Pluto Satellite Tracker.
+
+This patch changes tools/pluto_refresh_data.sh so MODE=passes queues a
+background quick-preview/full-refresh worker and returns immediately. The UI can
+then poll /api/refresh/status and /api/passes without the HTTP request blocking.
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+from pathlib import Path
+
+MARKER = "ASYNC_PASS_REFRESH_RUNNER_V4"
+
+PLUTO_REFRESH_DATA_SH = r'''#!/bin/sh
 # ASYNC_PASS_REFRESH_RUNNER_V4
 # Refresh Pluto satellite catalog/pass data.
 #
@@ -308,3 +323,36 @@ case "$MODE" in
     fail "unknown refresh target: $MODE"
     ;;
 esac
+'''
+
+
+def utc_stamp() -> str:
+    return dt.datetime.now(dt.UTC).strftime("%Y%m%d%H%M%S")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("repo", nargs="?", default=".", help="Repository root")
+    args = parser.parse_args()
+
+    root = Path(args.repo).resolve()
+    target = root / "tools" / "pluto_refresh_data.sh"
+    if not target.exists():
+        raise SystemExit(f"ERROR: not found: {target}")
+
+    current = target.read_text(encoding="utf-8", errors="replace")
+    if MARKER in current:
+        print(f"PASS: {target} already contains {MARKER}")
+        return 0
+
+    backup = target.with_name(target.name + f".bak-{utc_stamp()}")
+    backup.write_text(current, encoding="utf-8")
+    target.write_text(PLUTO_REFRESH_DATA_SH, encoding="utf-8", newline="\n")
+    target.chmod(0o755)
+    print(f"PASS: wrote {target}")
+    print(f"Backup: {backup}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
