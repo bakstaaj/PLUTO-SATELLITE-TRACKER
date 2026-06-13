@@ -15,6 +15,7 @@ DEPLOY_DIR="${PLUTO_DEPLOY_DIR:-/mnt/jffs2/pluto_sat_tracker}"
 SD_ROOT="${PLUTO_SD_ROOT:-/media/mmcblk0p1/pluto_sat_tracker}"
 
 BIN="$ROOT_DIR/dist/pluto_sat_tracker"
+FM_HELPER="$ROOT_DIR/dist/pluto_fm_receiver"
 RUNTIME="$ROOT_DIR/tools/pluto_runtime.sh"
 WEB_HTML="$ROOT_DIR/web/index.html"
 OBSERVER_CONFIG="$ROOT_DIR/config/observer.example.json"
@@ -22,13 +23,14 @@ REPOSITORIES="$ROOT_DIR/data/repositories.json"
 SATELLITES="$ROOT_DIR/data/satellites.json"
 PASSES="$ROOT_DIR/data/passes.json"
 REFRESH_RUNNER="$ROOT_DIR/tools/pluto_refresh_data.sh"
+PASS_REFRESH_LOOP="$ROOT_DIR/tools/pluto_pass_refresh_loop.sh"
 PASS_UPDATER="$ROOT_DIR/tools/update_pass_predictions.py"
 CATALOG_UPDATER="$ROOT_DIR/tools/update_satellite_catalog.py"
 REFRESH_STATUS_WRITER="$ROOT_DIR/tools/write_refresh_status.py"
 SGP4_PACKAGE="$ROOT_DIR/.python-deps/sgp4"
 PYTHON_RUNTIME_TARBALL="${PLUTO_PYTHON_RUNTIME_TARBALL:-$ROOT_DIR/runtime/python-pluto-armhf.tar.gz}"
 
-for required in "$BIN" "$RUNTIME" "$WEB_HTML" "$OBSERVER_CONFIG" "$REPOSITORIES" "$SATELLITES" "$PASSES" "$REFRESH_RUNNER" "$PASS_UPDATER" "$CATALOG_UPDATER" "$REFRESH_STATUS_WRITER"; do
+for required in "$BIN" "$FM_HELPER" "$RUNTIME" "$WEB_HTML" "$OBSERVER_CONFIG" "$REPOSITORIES" "$SATELLITES" "$PASSES" "$REFRESH_RUNNER" "$PASS_REFRESH_LOOP" "$PASS_UPDATER" "$CATALOG_UPDATER" "$REFRESH_STATUS_WRITER"; do
   if [[ ! -f "$required" ]]; then
     echo "Missing required deploy file: $required"
     exit 1
@@ -53,10 +55,16 @@ fi
 
 SSH_OPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
 SSHPASS=(sshpass -p "$PLUTO_PASS")
+DEPLOY_SEED_DATA="${PLUTO_DEPLOY_SEED_DATA:-0}"
 
 echo "== Deploying Pluto Satellite Tracker =="
 echo "Runtime: ${PLUTO_USER}@${PLUTO_IP}:${DEPLOY_DIR}"
 echo "SD data: ${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}"
+if [[ "$DEPLOY_SEED_DATA" == "1" ]]; then
+  echo "Seed data: enabled (host catalog/passes will overwrite on-device copies)"
+else
+  echo "Seed data: disabled (preserving on-device catalog/passes)"
+fi
 if [[ -f "$PYTHON_RUNTIME_TARBALL" ]]; then
   echo "Python runtime: $PYTHON_RUNTIME_TARBALL"
 else
@@ -77,6 +85,9 @@ fi
   "$BIN" "${PLUTO_USER}@${PLUTO_IP}:${DEPLOY_DIR}/pluto_sat_tracker.tmp"
 
 "${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
+  "$FM_HELPER" "${PLUTO_USER}@${PLUTO_IP}:${DEPLOY_DIR}/pluto_fm_receiver.tmp"
+
+"${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
   "$RUNTIME" "${PLUTO_USER}@${PLUTO_IP}:${DEPLOY_DIR}/run_tracker.sh.tmp"
 
 "${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
@@ -88,14 +99,19 @@ fi
 "${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
   "$REPOSITORIES" "${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}/data/repositories.json.tmp"
 
-"${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
-  "$SATELLITES" "${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}/data/satellites.json.tmp"
+if [[ "$DEPLOY_SEED_DATA" == "1" ]]; then
+  "${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
+    "$SATELLITES" "${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}/data/satellites.json.tmp"
 
-"${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
-  "$PASSES" "${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}/data/passes.json.tmp"
+  "${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
+    "$PASSES" "${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}/data/passes.json.tmp"
+fi
 
 "${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
   "$REFRESH_RUNNER" "${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}/tools/pluto_refresh_data.sh.tmp"
+
+"${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
+  "$PASS_REFRESH_LOOP" "${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}/tools/pluto_pass_refresh_loop.sh.tmp"
 
 "${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
   "$PASS_UPDATER" "${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}/tools/update_pass_predictions.py.tmp"
@@ -122,9 +138,10 @@ fi
 
 "${SSHPASS[@]}" ssh "${SSH_OPTS[@]}" "${PLUTO_USER}@${PLUTO_IP}" "
   set -e
-  chmod +x '${DEPLOY_DIR}/pluto_sat_tracker.tmp' '${DEPLOY_DIR}/run_tracker.sh.tmp'
-  chmod +x '${SD_ROOT}/tools/pluto_refresh_data.sh.tmp'
+  chmod +x '${DEPLOY_DIR}/pluto_sat_tracker.tmp' '${DEPLOY_DIR}/pluto_fm_receiver.tmp' '${DEPLOY_DIR}/run_tracker.sh.tmp'
+  chmod +x '${SD_ROOT}/tools/pluto_refresh_data.sh.tmp' '${SD_ROOT}/tools/pluto_pass_refresh_loop.sh.tmp'
   mv '${DEPLOY_DIR}/pluto_sat_tracker.tmp' '${DEPLOY_DIR}/pluto_sat_tracker'
+  mv '${DEPLOY_DIR}/pluto_fm_receiver.tmp' '${DEPLOY_DIR}/pluto_fm_receiver'
   mv '${DEPLOY_DIR}/run_tracker.sh.tmp' '${DEPLOY_DIR}/run_tracker.sh'
   mv '${DEPLOY_DIR}/web/index.html.tmp' '${DEPLOY_DIR}/web/index.html'
   if [ -f '${DEPLOY_DIR}/config/observer.json' ]; then
@@ -133,9 +150,14 @@ fi
     mv '${DEPLOY_DIR}/config/observer.json.tmp' '${DEPLOY_DIR}/config/observer.json'
   fi
   mv '${SD_ROOT}/data/repositories.json.tmp' '${SD_ROOT}/data/repositories.json'
-  mv '${SD_ROOT}/data/satellites.json.tmp' '${SD_ROOT}/data/satellites.json'
-  mv '${SD_ROOT}/data/passes.json.tmp' '${SD_ROOT}/data/passes.json'
+  if [ -f '${SD_ROOT}/data/satellites.json.tmp' ]; then
+    mv '${SD_ROOT}/data/satellites.json.tmp' '${SD_ROOT}/data/satellites.json'
+  fi
+  if [ -f '${SD_ROOT}/data/passes.json.tmp' ]; then
+    mv '${SD_ROOT}/data/passes.json.tmp' '${SD_ROOT}/data/passes.json'
+  fi
   mv '${SD_ROOT}/tools/pluto_refresh_data.sh.tmp' '${SD_ROOT}/tools/pluto_refresh_data.sh'
+  mv '${SD_ROOT}/tools/pluto_pass_refresh_loop.sh.tmp' '${SD_ROOT}/tools/pluto_pass_refresh_loop.sh'
   mv '${SD_ROOT}/tools/update_pass_predictions.py.tmp' '${SD_ROOT}/tools/update_pass_predictions.py'
   mv '${SD_ROOT}/tools/update_satellite_catalog.py.tmp' '${SD_ROOT}/tools/update_satellite_catalog.py'
   mv '${SD_ROOT}/tools/write_refresh_status.py.tmp' '${SD_ROOT}/tools/write_refresh_status.py'
@@ -156,6 +178,7 @@ fi
   sync
   echo '== Remote files =='
   ls -lh '${DEPLOY_DIR}/pluto_sat_tracker' \
+         '${DEPLOY_DIR}/pluto_fm_receiver' \
          '${DEPLOY_DIR}/run_tracker.sh' \
          '${DEPLOY_DIR}/web/index.html' \
          '${DEPLOY_DIR}/config/observer.json' \
@@ -163,6 +186,7 @@ fi
          '${SD_ROOT}/data/satellites.json' \
          '${SD_ROOT}/data/passes.json' \
          '${SD_ROOT}/tools/pluto_refresh_data.sh' \
+         '${SD_ROOT}/tools/pluto_pass_refresh_loop.sh' \
          '${SD_ROOT}/tools/update_pass_predictions.py' \
          '${SD_ROOT}/tools/update_satellite_catalog.py' \
          '${SD_ROOT}/tools/write_refresh_status.py'

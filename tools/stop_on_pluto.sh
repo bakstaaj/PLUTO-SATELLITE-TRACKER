@@ -23,9 +23,9 @@ SSHPASS=(sshpass -p "$PLUTO_PASS")
 echo "Stopping Pluto Satellite Tracker on ${PLUTO_IP}..."
 
 "${SSHPASS[@]}" ssh "${SSH_OPTS[@]}" "${PLUTO_USER}@${PLUTO_IP}" '
-  PIDS="$(pidof pluto_sat_tracker 2>/dev/null || true)"
+  PIDS="$(pidof pluto_sat_tracker pluto_fm_receiver 2>/dev/null || true)"
   if [ -z "$PIDS" ]; then
-    PIDS="$(ps | awk "/pluto_sat_tracker/ && !/awk/ { print \$1 }")"
+    PIDS="$(ps | awk "/pluto_sat_tracker|pluto_fm_receiver/ && !/awk/ { print \$1 }")"
   fi
   if [ -z "$PIDS" ]; then
     echo "No pluto_sat_tracker process found."
@@ -35,9 +35,9 @@ echo "Stopping Pluto Satellite Tracker on ${PLUTO_IP}..."
   kill $PIDS
   sleep 1
 
-  LEFTOVERS="$(pidof pluto_sat_tracker 2>/dev/null || true)"
+  LEFTOVERS="$(pidof pluto_sat_tracker pluto_fm_receiver 2>/dev/null || true)"
   if [ -z "$LEFTOVERS" ]; then
-    LEFTOVERS="$(ps | awk "/pluto_sat_tracker/ && !/awk/ { print \$1 }")"
+    LEFTOVERS="$(ps | awk "/pluto_sat_tracker|pluto_fm_receiver/ && !/awk/ { print \$1 }")"
   fi
   if [ -n "$LEFTOVERS" ]; then
     echo "Force killing: $LEFTOVERS"

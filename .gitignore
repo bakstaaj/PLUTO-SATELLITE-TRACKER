@@ -2,6 +2,7 @@
 dist/
 build/
 pluto_sat_tracker
+pluto_fm_receiver
 *.o
 *.exe
 *.log

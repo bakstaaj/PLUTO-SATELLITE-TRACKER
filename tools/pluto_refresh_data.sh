@@ -6,10 +6,10 @@ DATA_DIR="${SD_ROOT}/data"
 TOOLS_DIR="${SD_ROOT}/tools"
 PYTHON_DIR="${SD_ROOT}/python"
 PYTHON_RUNTIME_DIR="${SD_ROOT}/python-runtime"
+MODE="${1:-passes}"
 STATUS_FILE="${DATA_DIR}/refresh_status.json"
 STATUS_UPDATER="${TOOLS_DIR}/write_refresh_status.py"
-
-MODE="${1:-passes}"
+LOCK_DIR="/tmp/pluto_refresh_${MODE}.lock"
 
 json_clean() {
   printf "%s" "$1" | tr '\r\n"' '   ' | cut -c 1-240
@@ -32,6 +32,15 @@ write_status() {
 }
 EOF
   mv "${STATUS_FILE}.tmp" "$STATUS_FILE"
+}
+
+acquire_lock() {
+  if mkdir "$LOCK_DIR" 2>/dev/null; then
+    trap 'rmdir "$LOCK_DIR" >/dev/null 2>&1 || true' EXIT INT TERM
+    return 0
+  fi
+  write_status "running" "$MODE" "Refresh already in progress"
+  exit 0
 }
 
 fail() {
@@ -82,6 +91,7 @@ run_python() {
 }
 
 mkdir -p "$DATA_DIR" "$TOOLS_DIR" "$PYTHON_DIR"
+acquire_lock
 
 case "$MODE" in
   passes)

@@ -15,10 +15,12 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <math.h>
 #include <time.h>
 #include <ctype.h>
 #include <unistd.h>
 #include <limits.h>
+#include <stdint.h>
 #include <pthread.h>
 
 #define APP_VERSION "0.1.0"
@@ -32,11 +34,24 @@
 #define PATH_BUF_SIZE 1024
 #define PLUTO_MIN_HZ 70000000LL
 #define PLUTO_MAX_HZ 6000000000LL
+#define AUDIO_SAMPLE_RATE 24000
+#define AUDIO_IQ_SAMPLE_RATE 2400000
+#define AUDIO_DECIMATION 100
+#define AUDIO_PCM_CHUNK_SAMPLES 4800
+#define AUDIO_IIO_BUFFER_SAMPLES 24000
+#define AUDIO_CAPTURE_IQ_SAMPLES 2400000
+#define AUDIO_LIVE_MIN_BLOCK_SAMPLES 1200
+#define AUDIO_LIVE_DEFAULT_BLOCK_SAMPLES 12000
+#define AUDIO_LIVE_MAX_BLOCK_SAMPLES 48000
+#define AUDIO_LIVE_PCM_PATH "/tmp/pluto_live_audio.pcm"
 
 static volatile sig_atomic_t g_running = 1;
 static pthread_mutex_t g_track_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_t g_track_thread;
 static int g_track_auto_running = 0;
+static pthread_mutex_t g_radio_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t g_audio_live_lock = PTHREAD_MUTEX_INITIALIZER;
+static const char *g_audio_debug_log = "/tmp/pluto_audio_debug.log";
 
 struct app_config {
     const char *bind_addr;
@@ -47,10 +62,35 @@ struct app_config {
     int interactive;
 };
 
+struct client_job {
+    int fd;
+    const struct app_config *cfg;
+};
+
+struct fm_demod_state {
+    long long acc;
+    int acc_count;
+    double prev_i;
+    double prev_q;
+    double prev_demod;
+    double dc_y;
+    int have_prev;
+};
+
+struct live_audio_state {
+    pid_t pid;
+    int running;
+    long long frequency_hz;
+    time_t started_epoch;
+};
+
 static int query_param(const char *query, const char *name, char *out, size_t out_size);
 static void json_escape(char *dst, size_t dst_size, const char *src);
 static int json_string_value(const char *json, const char *key, char *out, size_t out_size);
 static int json_double_value(const char *json, const char *key, double *out);
+static int send_wav_stream(int fd, const struct app_config *cfg, const char *query);
+static void append_audio_debug(const char *message);
+static struct live_audio_state g_live_audio = {0};
 
 static void on_signal(int signum)
 {
@@ -171,6 +211,208 @@ static void send_redirect(int fd, const char *location)
     if (n > 0) {
         send_all(fd, header, (size_t)n);
     }
+}
+
+static int send_bytes(int fd, const void *buf, size_t len)
+{
+    return send_all(fd, (const char *)buf, len);
+}
+
+static int send_chunk(int fd, const void *buf, size_t len)
+{
+    char header[32];
+    int n = snprintf(header, sizeof(header), "%lx\r\n", (unsigned long)len);
+    if (n <= 0) {
+        return -1;
+    }
+    if (send_bytes(fd, header, (size_t)n) != 0) {
+        return -1;
+    }
+    if (len > 0 && send_bytes(fd, buf, len) != 0) {
+        return -1;
+    }
+    return send_bytes(fd, "\r\n", 2);
+}
+
+static int finish_chunked_response(int fd)
+{
+    return send_bytes(fd, "0\r\n\r\n", 5);
+}
+
+static int send_audio_header(int fd)
+{
+    const char *header =
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: audio/wav\r\n"
+        "Cache-Control: no-store\r\n"
+        "Connection: close\r\n"
+        "Transfer-Encoding: chunked\r\n"
+        "\r\n";
+    return send_bytes(fd, header, strlen(header));
+}
+
+static int send_pcm_buffer_response(int fd, const short *samples, size_t sample_count)
+{
+    char header[256];
+    size_t body_len = sample_count * sizeof(short);
+    int n = snprintf(header, sizeof(header),
+                     "HTTP/1.1 200 OK\r\n"
+                     "Content-Type: application/octet-stream\r\n"
+                     "Content-Length: %lu\r\n"
+                     "Cache-Control: no-store\r\n"
+                     "Connection: close\r\n"
+                     "\r\n",
+                     (unsigned long)body_len);
+    if (n <= 0) {
+        return -1;
+    }
+    if (send_bytes(fd, header, (size_t)n) != 0) {
+        return -1;
+    }
+    if (body_len > 0 && send_bytes(fd, samples, body_len) != 0) {
+        return -1;
+    }
+    return 0;
+}
+
+static void send_empty_response(int fd, int status, const char *reason,
+                                const char *content_type, const char *extra_headers)
+{
+    char header[512];
+    int n = snprintf(header, sizeof(header),
+                     "HTTP/1.1 %d %s\r\n"
+                     "Content-Type: %s\r\n"
+                     "Content-Length: 0\r\n"
+                     "Cache-Control: no-store\r\n"
+                     "%s"
+                     "Connection: close\r\n"
+                     "\r\n",
+                     status, reason, content_type ? content_type : "application/octet-stream",
+                     extra_headers ? extra_headers : "");
+    if (n > 0) {
+        send_all(fd, header, (size_t)n);
+    }
+}
+
+static void write_le16(unsigned char *dst, unsigned int value)
+{
+    dst[0] = (unsigned char)(value & 0xffu);
+    dst[1] = (unsigned char)((value >> 8) & 0xffu);
+}
+
+static void write_le32(unsigned char *dst, unsigned int value)
+{
+    dst[0] = (unsigned char)(value & 0xffu);
+    dst[1] = (unsigned char)((value >> 8) & 0xffu);
+    dst[2] = (unsigned char)((value >> 16) & 0xffu);
+    dst[3] = (unsigned char)((value >> 24) & 0xffu);
+}
+
+static int send_wav_header_chunk(int fd, int sample_rate, int channels, int bits_per_sample)
+{
+    unsigned char wav[44];
+    unsigned int block_align = (unsigned int)(channels * (bits_per_sample / 8));
+    unsigned int byte_rate = (unsigned int)sample_rate * block_align;
+    unsigned int data_len = 0xffffffffu - 36u;
+
+    memset(wav, 0, sizeof(wav));
+    memcpy(wav, "RIFF", 4);
+    write_le32(wav + 4, 36u + data_len);
+    memcpy(wav + 8, "WAVEfmt ", 8);
+    write_le32(wav + 16, 16u);
+    write_le16(wav + 20, 1u);
+    write_le16(wav + 22, (unsigned int)channels);
+    write_le32(wav + 24, (unsigned int)sample_rate);
+    write_le32(wav + 28, byte_rate);
+    write_le16(wav + 32, block_align);
+    write_le16(wav + 34, (unsigned int)bits_per_sample);
+    memcpy(wav + 36, "data", 4);
+    write_le32(wav + 40, data_len);
+
+    return send_chunk(fd, wav, sizeof(wav));
+}
+
+static int send_wav_block_response(int fd, const short *samples, size_t sample_count,
+                                   size_t from_sample, size_t available_samples)
+{
+    unsigned char wav[44];
+    char header[512];
+    size_t pcm_len = sample_count * sizeof(short);
+    size_t total_len = sizeof(wav) + pcm_len;
+    unsigned int block_align = 2u;
+    unsigned int byte_rate = (unsigned int)AUDIO_SAMPLE_RATE * block_align;
+    int n;
+
+    memset(wav, 0, sizeof(wav));
+    memcpy(wav, "RIFF", 4);
+    write_le32(wav + 4, (unsigned int)(36u + pcm_len));
+    memcpy(wav + 8, "WAVEfmt ", 8);
+    write_le32(wav + 16, 16u);
+    write_le16(wav + 20, 1u);
+    write_le16(wav + 22, 1u);
+    write_le32(wav + 24, (unsigned int)AUDIO_SAMPLE_RATE);
+    write_le32(wav + 28, byte_rate);
+    write_le16(wav + 32, block_align);
+    write_le16(wav + 34, 16u);
+    memcpy(wav + 36, "data", 4);
+    write_le32(wav + 40, (unsigned int)pcm_len);
+
+    n = snprintf(header, sizeof(header),
+                 "HTTP/1.1 200 OK\r\n"
+                 "Content-Type: audio/wav\r\n"
+                 "Content-Length: %lu\r\n"
+                 "Cache-Control: no-store\r\n"
+                 "X-Source-Samples: %lu\r\n"
+                 "X-Audio-From-Sample: %lu\r\n"
+                 "X-Audio-Available-Samples: %lu\r\n"
+                 "Connection: close\r\n"
+                 "\r\n",
+                 (unsigned long)total_len,
+                 (unsigned long)sample_count,
+                 (unsigned long)from_sample,
+                 (unsigned long)available_samples);
+    if (n <= 0) {
+        return -1;
+    }
+    if (send_bytes(fd, header, (size_t)n) != 0) {
+        return -1;
+    }
+    if (send_bytes(fd, wav, sizeof(wav)) != 0) {
+        return -1;
+    }
+    if (pcm_len > 0 && send_bytes(fd, samples, pcm_len) != 0) {
+        return -1;
+    }
+    return 0;
+}
+
+static void append_audio_debug(const char *message)
+{
+    FILE *f = fopen(g_audio_debug_log, "ab");
+    if (!f) {
+        return;
+    }
+    if (message) {
+        fputs(message, f);
+    }
+    fputc('\n', f);
+    fclose(f);
+}
+
+static int send_pcm_silence_chunk(int fd, size_t sample_count)
+{
+    short silence[960];
+    size_t remaining = sample_count;
+
+    memset(silence, 0, sizeof(silence));
+    while (remaining > 0) {
+        size_t chunk = remaining > 960 ? 960 : remaining;
+        if (send_chunk(fd, silence, chunk * sizeof(short)) != 0) {
+            return -1;
+        }
+        remaining -= chunk;
+    }
+    return 0;
 }
 
 static const char *content_type_for(const char *path)
@@ -1033,6 +1275,875 @@ static int write_rx_lo_frequency(long long frequency_hz, char *path_used, size_t
     }
 
     return 0;
+}
+
+static int configure_rx_audio_path(long long frequency_hz)
+{
+    char command[512];
+    int result;
+
+    if (frequency_hz < PLUTO_MIN_HZ || frequency_hz > PLUTO_MAX_HZ) {
+        return 0;
+    }
+
+    if (snprintf(command, sizeof(command),
+                 "/usr/bin/iio_attr -u local: -c ad9361-phy voltage0 sampling_frequency %d >/dev/null 2>&1",
+                 AUDIO_IQ_SAMPLE_RATE) >= (int)sizeof(command)) {
+        return 0;
+    }
+    result = system(command);
+    if (result == -1 || !WIFEXITED(result) || WEXITSTATUS(result) != 0) {
+        return 0;
+    }
+
+    if (snprintf(command, sizeof(command),
+                 "/usr/bin/iio_attr -u local: -c ad9361-phy voltage0 rf_bandwidth 200000 >/dev/null 2>&1") >= (int)sizeof(command)) {
+        return 0;
+    }
+    result = system(command);
+    if (result == -1 || !WIFEXITED(result) || WEXITSTATUS(result) != 0) {
+        return 0;
+    }
+
+    if (snprintf(command, sizeof(command),
+                 "/usr/bin/iio_attr -u local: -c ad9361-phy voltage0 gain_control_mode slow_attack >/dev/null 2>&1") >= (int)sizeof(command)) {
+        return 0;
+    }
+    result = system(command);
+    if (result == -1 || !WIFEXITED(result) || WEXITSTATUS(result) != 0) {
+        return 0;
+    }
+
+    return write_rx_lo_frequency(frequency_hz, command, sizeof(command));
+}
+
+static int read_active_audio_frequency_hz(const struct app_config *cfg, long long *out_hz)
+{
+    char path[PATH_BUF_SIZE];
+    char *body = NULL;
+    size_t body_len = 0;
+    long long hz = 0;
+
+    if (!out_hz) {
+        return 0;
+    }
+
+    join_path(path, sizeof(path), cfg->data_dir, "radio_target.json");
+    if (read_file_to_string(path, &body, &body_len) == 0) {
+        (void)body_len;
+        if (json_long_long_after(body, "downlink_hz", &hz) && hz >= PLUTO_MIN_HZ && hz <= PLUTO_MAX_HZ) {
+            free(body);
+            *out_hz = hz;
+            return 1;
+        }
+        free(body);
+    }
+
+    return 0;
+}
+
+static int send_audio_error_json(int fd, int status, const char *reason, const char *message)
+{
+    char body[512];
+    snprintf(body, sizeof(body), "{\"ok\":false,\"error\":\"%s\"}\n", message);
+    send_text(fd, status, reason, "application/json; charset=utf-8", body);
+    return -1;
+}
+
+static int stream_fm_audio(FILE *pipe, int fd, struct fm_demod_state *state)
+{
+    unsigned char iq_bytes[AUDIO_IIO_BUFFER_SAMPLES * 4];
+    short pcm[AUDIO_PCM_CHUNK_SAMPLES];
+    char debug_line[128];
+    size_t pcm_count = 0;
+
+    while (g_running) {
+        size_t got = fread(iq_bytes, 1, sizeof(iq_bytes), pipe);
+        size_t sample_pairs;
+        size_t sample_index;
+
+        if (got == 0) {
+            if (feof(pipe)) {
+                append_audio_debug("stream_fm_audio eof");
+                break;
+            }
+            if (ferror(pipe)) {
+                append_audio_debug("stream_fm_audio ferror");
+                return -1;
+            }
+            continue;
+        }
+
+        snprintf(debug_line, sizeof(debug_line), "stream_fm_audio got=%lu", (unsigned long)got);
+        append_audio_debug(debug_line);
+
+        sample_pairs = got / 4;
+        for (sample_index = 0; sample_index < sample_pairs; sample_index++) {
+            int offset = (int)(sample_index * 4);
+            short i_raw = (short)((unsigned short)iq_bytes[offset] | ((unsigned short)iq_bytes[offset + 1] << 8));
+            short q_raw = (short)((unsigned short)iq_bytes[offset + 2] | ((unsigned short)iq_bytes[offset + 3] << 8));
+            double i_now = (double)i_raw;
+            double q_now = (double)q_raw;
+            double demod = 0.0;
+
+            if (state->have_prev) {
+                double cross = state->prev_i * q_now - state->prev_q * i_now;
+                double dot = state->prev_i * i_now + state->prev_q * q_now;
+                demod = atan2(cross, dot);
+            }
+
+            state->have_prev = 1;
+            state->prev_i = i_now;
+            state->prev_q = q_now;
+
+            state->dc_y = (demod - state->prev_demod) + 0.995 * state->dc_y;
+            state->prev_demod = demod;
+
+            state->acc += (long long)lrint(state->dc_y * 12000.0);
+            state->acc_count++;
+
+            if (state->acc_count >= AUDIO_DECIMATION) {
+                long long averaged = state->acc / AUDIO_DECIMATION;
+                if (averaged > 32767) {
+                    averaged = 32767;
+                } else if (averaged < -32768) {
+                    averaged = -32768;
+                }
+
+                pcm[pcm_count++] = (short)averaged;
+                state->acc = 0;
+                state->acc_count = 0;
+
+                if (pcm_count >= AUDIO_PCM_CHUNK_SAMPLES) {
+                    append_audio_debug("stream_fm_audio send_chunk pcm=960");
+                    if (send_chunk(fd, pcm, pcm_count * sizeof(short)) != 0) {
+                        append_audio_debug("stream_fm_audio send_chunk failed");
+                        return -1;
+                    }
+                    pcm_count = 0;
+                }
+            }
+        }
+    }
+
+    if (pcm_count > 0) {
+        snprintf(debug_line, sizeof(debug_line), "stream_fm_audio flush pcm=%lu", (unsigned long)pcm_count);
+        append_audio_debug(debug_line);
+        if (send_chunk(fd, pcm, pcm_count * sizeof(short)) != 0) {
+            append_audio_debug("stream_fm_audio flush failed");
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+static int stream_fm_audio_to_file(FILE *pipe, FILE *output, struct fm_demod_state *state)
+{
+    (void)pipe;
+    (void)output;
+    (void)state;
+    return -1;
+}
+
+static int capture_fm_audio_buffer(FILE *pipe, short *pcm_out, size_t pcm_capacity, size_t *pcm_written, struct fm_demod_state *state)
+{
+    unsigned char iq_bytes[AUDIO_IIO_BUFFER_SAMPLES * 4];
+    size_t out_count = 0;
+
+    if (!pcm_out || !pcm_written || !state) {
+        return -1;
+    }
+
+    while (g_running) {
+        size_t got = fread(iq_bytes, 1, sizeof(iq_bytes), pipe);
+        size_t sample_pairs;
+        size_t sample_index;
+
+        if (got == 0) {
+            if (feof(pipe)) {
+                break;
+            }
+            if (ferror(pipe)) {
+                return -1;
+            }
+            continue;
+        }
+
+        sample_pairs = got / 4;
+        for (sample_index = 0; sample_index < sample_pairs; sample_index++) {
+            int offset = (int)(sample_index * 4);
+            short i_raw = (short)((unsigned short)iq_bytes[offset] | ((unsigned short)iq_bytes[offset + 1] << 8));
+            short q_raw = (short)((unsigned short)iq_bytes[offset + 2] | ((unsigned short)iq_bytes[offset + 3] << 8));
+            double i_now = (double)i_raw;
+            double q_now = (double)q_raw;
+            double demod = 0.0;
+
+            if (state->have_prev) {
+                double cross = state->prev_i * q_now - state->prev_q * i_now;
+                double dot = state->prev_i * i_now + state->prev_q * q_now;
+                demod = atan2(cross, dot);
+            }
+
+            state->have_prev = 1;
+            state->prev_i = i_now;
+            state->prev_q = q_now;
+            state->dc_y = (demod - state->prev_demod) + 0.995 * state->dc_y;
+            state->prev_demod = demod;
+            state->acc += (long long)lrint(state->dc_y * 12000.0);
+            state->acc_count++;
+
+            if (state->acc_count >= AUDIO_DECIMATION) {
+                long long averaged = state->acc / AUDIO_DECIMATION;
+                if (averaged > 32767) {
+                    averaged = 32767;
+                } else if (averaged < -32768) {
+                    averaged = -32768;
+                }
+                if (out_count >= pcm_capacity) {
+                    *pcm_written = out_count;
+                    return 0;
+                }
+                pcm_out[out_count++] = (short)averaged;
+                state->acc = 0;
+                state->acc_count = 0;
+            }
+        }
+    }
+
+    *pcm_written = out_count;
+    return 0;
+}
+
+static int capture_fm_audio_once(short *pcm_out, size_t pcm_capacity, size_t *pcm_written,
+                                 struct fm_demod_state *state)
+{
+    const char *capture_path = "/tmp/pluto_audio_iq.bin";
+    char command[512];
+    FILE *input;
+    int result;
+    int capture_result;
+
+    if (snprintf(command, sizeof(command),
+                 "/usr/bin/iio_readdev -u local: -b %d -s %d cf-ad9361-lpc > %s 2>/dev/null",
+                 AUDIO_IIO_BUFFER_SAMPLES,
+                 AUDIO_CAPTURE_IQ_SAMPLES,
+                 capture_path) >= (int)sizeof(command)) {
+        return -1;
+    }
+
+    result = system(command);
+    if (result == -1 || !WIFEXITED(result) || WEXITSTATUS(result) != 0) {
+        unlink(capture_path);
+        return -1;
+    }
+
+    input = fopen(capture_path, "rb");
+    if (!input) {
+        unlink(capture_path);
+        return -1;
+    }
+
+    capture_result = capture_fm_audio_buffer(input, pcm_out, pcm_capacity, pcm_written, state);
+    fclose(input);
+    unlink(capture_path);
+    return capture_result;
+}
+
+static FILE *start_iio_read_stream(pid_t *child_pid)
+{
+    int pipe_fds[2];
+    pid_t pid;
+    char buffer_text[32];
+
+    if (!child_pid) {
+        return NULL;
+    }
+
+    if (pipe(pipe_fds) != 0) {
+        return NULL;
+    }
+
+    pid = fork();
+    if (pid < 0) {
+        close(pipe_fds[0]);
+        close(pipe_fds[1]);
+        return NULL;
+    }
+
+    if (pid == 0) {
+        snprintf(buffer_text, sizeof(buffer_text), "%d", AUDIO_IIO_BUFFER_SAMPLES);
+        dup2(pipe_fds[1], STDOUT_FILENO);
+        close(pipe_fds[0]);
+        close(pipe_fds[1]);
+        execl("/usr/bin/iio_readdev",
+              "iio_readdev",
+              "-u", "local:",
+              "-b", buffer_text,
+              "-s", "0",
+              "cf-ad9361-lpc",
+              (char *)NULL);
+        _exit(127);
+    }
+
+    close(pipe_fds[1]);
+    *child_pid = pid;
+    return fdopen(pipe_fds[0], "rb");
+}
+
+static size_t live_audio_available_samples(void)
+{
+    struct stat st;
+
+    if (stat(AUDIO_LIVE_PCM_PATH, &st) != 0 || st.st_size <= 0) {
+        return 0;
+    }
+    return (size_t)(st.st_size / 2);
+}
+
+static int parse_size_param(const char *value, size_t *out)
+{
+    char *end = NULL;
+    unsigned long long parsed;
+
+    if (!value || !*value || !out) {
+        return 0;
+    }
+
+    errno = 0;
+    parsed = strtoull(value, &end, 10);
+    if (errno != 0 || !end || *end != '\0') {
+        return 0;
+    }
+
+    *out = (size_t)parsed;
+    return 1;
+}
+
+static void helper_binary_path(const struct app_config *cfg, char *out, size_t out_size)
+{
+    char parent[PATH_BUF_SIZE];
+    const char *web_dir = cfg && cfg->web_dir ? cfg->web_dir : DEFAULT_WEB_DIR;
+    size_t len = strlen(web_dir);
+
+    snprintf(parent, sizeof(parent), "%s", web_dir);
+    while (len > 0) {
+        if (parent[len - 1] == '/' || parent[len - 1] == '\\') {
+            parent[len - 1] = '\0';
+            len--;
+            continue;
+        }
+        break;
+    }
+    while (len > 0) {
+        if (parent[len - 1] == '/' || parent[len - 1] == '\\') {
+            parent[len - 1] = '\0';
+            break;
+        }
+        len--;
+    }
+
+    join_path(out, out_size, parent[0] ? parent : ".", "pluto_fm_receiver");
+}
+
+static int refresh_live_audio_process_locked(void)
+{
+    int status = 0;
+    pid_t result;
+
+    if (!g_live_audio.running || g_live_audio.pid <= 0) {
+        g_live_audio.running = 0;
+        g_live_audio.pid = 0;
+        return 0;
+    }
+
+    result = waitpid(g_live_audio.pid, &status, WNOHANG);
+    if (result == 0) {
+        return 1;
+    }
+
+    g_live_audio.running = 0;
+    g_live_audio.pid = 0;
+    return 0;
+}
+
+static void *live_audio_worker(void *arg)
+{
+    (void)arg;
+    return NULL;
+}
+
+static int stop_live_audio_session(void)
+{
+    pid_t pid = 0;
+    int was_running = 0;
+
+    pthread_mutex_lock(&g_audio_live_lock);
+    if (refresh_live_audio_process_locked()) {
+        pid = g_live_audio.pid;
+        was_running = 1;
+        g_live_audio.running = 0;
+        g_live_audio.pid = 0;
+    }
+    pthread_mutex_unlock(&g_audio_live_lock);
+
+    if (pid > 0) {
+        kill(pid, SIGTERM);
+        waitpid(pid, NULL, 0);
+    }
+
+    unlink(AUDIO_LIVE_PCM_PATH);
+    return was_running;
+}
+
+static int start_live_audio_session(const struct app_config *cfg, long long frequency_hz)
+{
+    char helper_path[PATH_BUF_SIZE];
+    char frequency_text[64];
+    pid_t pid;
+
+    helper_binary_path(cfg, helper_path, sizeof(helper_path));
+    stop_live_audio_session();
+    unlink(AUDIO_LIVE_PCM_PATH);
+
+    snprintf(frequency_text, sizeof(frequency_text), "%lld", frequency_hz);
+    pid = fork();
+    if (pid < 0) {
+        return 0;
+    }
+
+    if (pid == 0) {
+        execl(helper_path,
+              helper_path,
+              "--freq-hz", frequency_text,
+              "--output", AUDIO_LIVE_PCM_PATH,
+              (char *)NULL);
+        _exit(127);
+    }
+
+    pthread_mutex_lock(&g_audio_live_lock);
+    g_live_audio.pid = pid;
+    g_live_audio.running = 1;
+    g_live_audio.frequency_hz = frequency_hz;
+    g_live_audio.started_epoch = time(NULL);
+    pthread_mutex_unlock(&g_audio_live_lock);
+    return 1;
+}
+
+static int send_wav_stream(int fd, const struct app_config *cfg, const char *query)
+{
+    char frequency_text[64] = "";
+    char command[512];
+    char debug_line[256];
+    long long frequency_hz = 0;
+    struct fm_demod_state demod_state;
+
+    query_param(query, "downlink_hz", frequency_text, sizeof(frequency_text));
+    if (frequency_text[0]) {
+        if (!parse_frequency_hz(frequency_text, &frequency_hz)) {
+            return send_audio_error_json(fd, 400, "Bad Request", "valid downlink_hz is required");
+        }
+    } else if (!read_active_audio_frequency_hz(cfg, &frequency_hz)) {
+        return send_audio_error_json(fd, 409, "Conflict", "plan or tune a satellite first, or pass downlink_hz");
+    }
+
+    if (pthread_mutex_trylock(&g_radio_lock) != 0) {
+        append_audio_debug("send_wav_stream radio busy");
+        return send_audio_error_json(fd, 409, "Conflict", "radio is busy with another hardware operation");
+    }
+
+    if (!configure_rx_audio_path(frequency_hz)) {
+        append_audio_debug("send_wav_stream configure failed");
+        pthread_mutex_unlock(&g_radio_lock);
+        return send_audio_error_json(fd, 500, "Internal Server Error", "could not configure Pluto RX path for audio");
+    }
+
+    if (send_audio_header(fd) != 0 || send_wav_header_chunk(fd, AUDIO_SAMPLE_RATE, 1, 16) != 0) {
+        append_audio_debug("send_wav_stream header failed");
+        pthread_mutex_unlock(&g_radio_lock);
+        return -1;
+    }
+
+    snprintf(debug_line, sizeof(debug_line), "send_wav_stream start hz=%lld", frequency_hz);
+    append_audio_debug(debug_line);
+
+    memset(&demod_state, 0, sizeof(demod_state));
+
+    if (snprintf(command, sizeof(command),
+                 "/usr/bin/iio_readdev -u local: -b %d -s %d cf-ad9361-lpc 2>/dev/null",
+                 AUDIO_IIO_BUFFER_SAMPLES,
+                 AUDIO_CAPTURE_IQ_SAMPLES) >= (int)sizeof(command)) {
+        pthread_mutex_unlock(&g_radio_lock);
+        return send_audio_error_json(fd, 500, "Internal Server Error", "audio capture command is too long");
+    }
+
+    while (g_running) {
+        FILE *pipe = popen(command, "rb");
+        int stream_result;
+        int close_status;
+
+        if (!pipe) {
+            append_audio_debug("send_wav_stream popen failed");
+            pthread_mutex_unlock(&g_radio_lock);
+            return send_audio_error_json(fd, 500, "Internal Server Error", "could not start Pluto audio capture");
+        }
+
+        append_audio_debug("send_wav_stream popen ok");
+        stream_result = stream_fm_audio(pipe, fd, &demod_state);
+        close_status = pclose(pipe);
+        snprintf(debug_line, sizeof(debug_line), "send_wav_stream loop done stream=%d close=%d", stream_result, close_status);
+        append_audio_debug(debug_line);
+
+        if (stream_result != 0) {
+            pthread_mutex_unlock(&g_radio_lock);
+            return -1;
+        }
+        if (close_status == -1) {
+            pthread_mutex_unlock(&g_radio_lock);
+            return -1;
+        }
+    }
+
+    pthread_mutex_unlock(&g_radio_lock);
+    return finish_chunked_response(fd);
+}
+
+static int send_pcm_stream(int fd, const struct app_config *cfg, const char *query)
+{
+    char frequency_text[64] = "";
+    long long frequency_hz = 0;
+    struct fm_demod_state demod_state;
+    short *pcm_buffer = NULL;
+    size_t pcm_capacity = (size_t)(AUDIO_CAPTURE_IQ_SAMPLES / AUDIO_DECIMATION + 8);
+    size_t pcm_written = 0;
+
+    query_param(query, "downlink_hz", frequency_text, sizeof(frequency_text));
+    if (frequency_text[0]) {
+        if (!parse_frequency_hz(frequency_text, &frequency_hz)) {
+            return send_audio_error_json(fd, 400, "Bad Request", "valid downlink_hz is required");
+        }
+    } else if (!read_active_audio_frequency_hz(cfg, &frequency_hz)) {
+        return send_audio_error_json(fd, 409, "Conflict", "plan or tune a satellite first, or pass downlink_hz");
+    }
+
+    if (pthread_mutex_trylock(&g_radio_lock) != 0) {
+        return send_audio_error_json(fd, 409, "Conflict", "radio is busy with another hardware operation");
+    }
+
+    if (!configure_rx_audio_path(frequency_hz)) {
+        pthread_mutex_unlock(&g_radio_lock);
+        return send_audio_error_json(fd, 500, "Internal Server Error", "could not configure Pluto RX path for audio");
+    }
+
+    memset(&demod_state, 0, sizeof(demod_state));
+    pcm_buffer = (short *)malloc(pcm_capacity * sizeof(short));
+    if (!pcm_buffer) {
+        pthread_mutex_unlock(&g_radio_lock);
+        return send_audio_error_json(fd, 500, "Internal Server Error", "could not allocate audio buffer");
+    }
+
+    {
+        int capture_result;
+        int send_result;
+
+        capture_result = capture_fm_audio_once(pcm_buffer, pcm_capacity, &pcm_written, &demod_state);
+        pthread_mutex_unlock(&g_radio_lock);
+
+        if (capture_result != 0) {
+            free(pcm_buffer);
+            return send_audio_error_json(fd, 500, "Internal Server Error", "could not capture Pluto audio");
+        }
+
+        send_result = send_pcm_buffer_response(fd, pcm_buffer, pcm_written);
+        free(pcm_buffer);
+        return send_result;
+    }
+}
+
+static int send_pcm_live_stream(int fd, const struct app_config *cfg, const char *query)
+{
+    char frequency_text[64] = "";
+    char header[256];
+    long long frequency_hz = 0;
+    struct fm_demod_state demod_state;
+    FILE *pipe = NULL;
+    pid_t child_pid = -1;
+    int stream_result;
+    int wait_status = 0;
+    int header_len;
+
+    query_param(query, "downlink_hz", frequency_text, sizeof(frequency_text));
+    if (frequency_text[0]) {
+        if (!parse_frequency_hz(frequency_text, &frequency_hz)) {
+            return send_audio_error_json(fd, 400, "Bad Request", "valid downlink_hz is required");
+        }
+    } else if (!read_active_audio_frequency_hz(cfg, &frequency_hz)) {
+        return send_audio_error_json(fd, 409, "Conflict", "plan or tune a satellite first, or pass downlink_hz");
+    }
+
+    if (pthread_mutex_trylock(&g_radio_lock) != 0) {
+        return send_audio_error_json(fd, 409, "Conflict", "radio is busy with another hardware operation");
+    }
+
+    if (!configure_rx_audio_path(frequency_hz)) {
+        pthread_mutex_unlock(&g_radio_lock);
+        return send_audio_error_json(fd, 500, "Internal Server Error", "could not configure Pluto RX path for audio");
+    }
+
+    header_len = snprintf(header, sizeof(header),
+                          "HTTP/1.1 200 OK\r\n"
+                          "Content-Type: application/octet-stream\r\n"
+                          "Cache-Control: no-store\r\n"
+                          "Connection: close\r\n"
+                          "Transfer-Encoding: chunked\r\n"
+                          "\r\n");
+    if (header_len <= 0 || send_bytes(fd, header, (size_t)header_len) != 0) {
+        pthread_mutex_unlock(&g_radio_lock);
+        return -1;
+    }
+
+    memset(&demod_state, 0, sizeof(demod_state));
+    pipe = start_iio_read_stream(&child_pid);
+    if (!pipe) {
+        pthread_mutex_unlock(&g_radio_lock);
+        return send_audio_error_json(fd, 500, "Internal Server Error", "could not start continuous Pluto audio capture");
+    }
+
+    stream_result = stream_fm_audio(pipe, fd, &demod_state);
+    fclose(pipe);
+    pipe = NULL;
+    if (child_pid > 0) {
+        kill(child_pid, SIGTERM);
+        waitpid(child_pid, &wait_status, 0);
+    }
+    pthread_mutex_unlock(&g_radio_lock);
+    if (stream_result == 0) {
+        finish_chunked_response(fd);
+    }
+    return stream_result;
+}
+
+static int send_audio_chunk_json(int fd, const struct app_config *cfg, const char *query)
+{
+    char frequency_text[64] = "";
+    char debug_line[256];
+    long long frequency_hz = 0;
+    struct fm_demod_state demod_state;
+    short *pcm_buffer = NULL;
+    char *body = NULL;
+    size_t pcm_capacity = (size_t)(AUDIO_CAPTURE_IQ_SAMPLES / AUDIO_DECIMATION + 8);
+    size_t pcm_written = 0;
+    size_t body_cap;
+    size_t body_len = 0;
+
+    query_param(query, "downlink_hz", frequency_text, sizeof(frequency_text));
+    if (frequency_text[0]) {
+        if (!parse_frequency_hz(frequency_text, &frequency_hz)) {
+            append_audio_debug("fm_chunk invalid downlink_hz");
+            return send_audio_error_json(fd, 400, "Bad Request", "valid downlink_hz is required");
+        }
+    } else if (!read_active_audio_frequency_hz(cfg, &frequency_hz)) {
+        append_audio_debug("fm_chunk no active frequency");
+        return send_audio_error_json(fd, 409, "Conflict", "plan or tune a satellite first, or pass downlink_hz");
+    }
+
+    snprintf(debug_line, sizeof(debug_line), "fm_chunk start hz=%lld", frequency_hz);
+    append_audio_debug(debug_line);
+
+    if (pthread_mutex_trylock(&g_radio_lock) != 0) {
+        append_audio_debug("fm_chunk radio lock busy");
+        return send_audio_error_json(fd, 409, "Conflict", "radio is busy with another hardware operation");
+    }
+
+    if (!configure_rx_audio_path(frequency_hz)) {
+        append_audio_debug("fm_chunk configure_rx_audio_path failed");
+        pthread_mutex_unlock(&g_radio_lock);
+        return send_audio_error_json(fd, 500, "Internal Server Error", "could not configure Pluto RX path for audio");
+    }
+
+    memset(&demod_state, 0, sizeof(demod_state));
+    pcm_buffer = (short *)malloc(pcm_capacity * sizeof(short));
+    if (!pcm_buffer) {
+        append_audio_debug("fm_chunk pcm buffer alloc failed");
+        pthread_mutex_unlock(&g_radio_lock);
+        return send_audio_error_json(fd, 500, "Internal Server Error", "could not allocate audio buffer");
+    }
+
+    {
+        int capture_result;
+        size_t i;
+
+        capture_result = capture_fm_audio_once(pcm_buffer, pcm_capacity, &pcm_written, &demod_state);
+        pthread_mutex_unlock(&g_radio_lock);
+
+        snprintf(debug_line, sizeof(debug_line),
+                 "fm_chunk capture_result=%d pcm_written=%lu",
+                 capture_result, (unsigned long)pcm_written);
+        append_audio_debug(debug_line);
+
+        if (capture_result != 0) {
+            free(pcm_buffer);
+            return send_audio_error_json(fd, 500, "Internal Server Error", "could not capture Pluto audio");
+        }
+
+        body_cap = 128 + pcm_written * 8;
+        body = (char *)malloc(body_cap);
+        if (!body) {
+            append_audio_debug("fm_chunk json alloc failed");
+            free(pcm_buffer);
+            return send_audio_error_json(fd, 500, "Internal Server Error", "could not allocate audio JSON");
+        }
+
+        body_len += (size_t)snprintf(body + body_len, body_cap - body_len,
+                                     "{\"ok\":true,\"sample_rate\":%d,\"downlink_hz\":%lld,\"samples\":[",
+                                     AUDIO_SAMPLE_RATE, frequency_hz);
+        for (i = 0; i < pcm_written; i++) {
+            body_len += (size_t)snprintf(body + body_len, body_cap - body_len,
+                                         "%s%d",
+                                         (i == 0) ? "" : ",",
+                                         (int)pcm_buffer[i]);
+        }
+        body_len += (size_t)snprintf(body + body_len, body_cap - body_len, "]}\n");
+        snprintf(debug_line, sizeof(debug_line),
+                 "fm_chunk send body_len=%lu body_cap=%lu",
+                 (unsigned long)body_len, (unsigned long)body_cap);
+        append_audio_debug(debug_line);
+        send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
+        free(body);
+        free(pcm_buffer);
+        return 0;
+    }
+}
+
+static void send_live_audio_start(int fd, const struct app_config *cfg, const char *query)
+{
+    char frequency_text[64] = "";
+    char body[256];
+    long long frequency_hz = 0;
+
+    query_param(query, "downlink_hz", frequency_text, sizeof(frequency_text));
+    if (frequency_text[0]) {
+        if (!parse_frequency_hz(frequency_text, &frequency_hz)) {
+            send_audio_error_json(fd, 400, "Bad Request", "valid downlink_hz is required");
+            return;
+        }
+    } else if (!read_active_audio_frequency_hz(cfg, &frequency_hz)) {
+        send_audio_error_json(fd, 409, "Conflict", "plan or tune a satellite first, or pass downlink_hz");
+        return;
+    }
+
+    if (!start_live_audio_session(cfg, frequency_hz)) {
+        send_audio_error_json(fd, 500, "Internal Server Error", "could not start live Pluto audio");
+        return;
+    }
+
+    snprintf(body, sizeof(body),
+             "{\"ok\":true,\"state\":\"running\",\"downlink_hz\":%lld}\n",
+             frequency_hz);
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
+}
+
+static void send_live_audio_stop(int fd)
+{
+    int stopped = stop_live_audio_session();
+    char body[128];
+
+    snprintf(body, sizeof(body),
+             "{\"ok\":true,\"stopped\":%s}\n",
+             stopped ? "true" : "false");
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
+}
+
+static void send_live_audio_block(int fd, const char *query)
+{
+    char from_text[64] = "";
+    char samples_text[64] = "";
+    char extra_headers[128];
+    short *pcm_buffer = NULL;
+    FILE *input = NULL;
+    size_t from_sample = 0;
+    size_t requested_samples = AUDIO_LIVE_DEFAULT_BLOCK_SAMPLES;
+    size_t available_samples;
+    size_t sample_count;
+    char body[256];
+
+    pthread_mutex_lock(&g_audio_live_lock);
+    if (!refresh_live_audio_process_locked()) {
+        pthread_mutex_unlock(&g_audio_live_lock);
+        send_audio_error_json(fd, 409, "Conflict", "live analog audio is not running");
+        return;
+    }
+    pthread_mutex_unlock(&g_audio_live_lock);
+
+    query_param(query, "from", from_text, sizeof(from_text));
+    if (from_text[0] && !parse_size_param(from_text, &from_sample)) {
+        send_audio_error_json(fd, 400, "Bad Request", "valid from cursor is required");
+        return;
+    }
+
+    query_param(query, "samples", samples_text, sizeof(samples_text));
+    if (samples_text[0] && !parse_size_param(samples_text, &requested_samples)) {
+        send_audio_error_json(fd, 400, "Bad Request", "valid samples count is required");
+        return;
+    }
+
+    if (requested_samples < AUDIO_LIVE_MIN_BLOCK_SAMPLES) {
+        requested_samples = AUDIO_LIVE_MIN_BLOCK_SAMPLES;
+    } else if (requested_samples > AUDIO_LIVE_MAX_BLOCK_SAMPLES) {
+        requested_samples = AUDIO_LIVE_MAX_BLOCK_SAMPLES;
+    }
+
+    available_samples = live_audio_available_samples();
+    if (from_sample > available_samples) {
+        snprintf(body, sizeof(body),
+                 "{\"ok\":false,\"error\":\"requested cursor beyond available audio\",\"available_samples\":%lu}\n",
+                 (unsigned long)available_samples);
+        send_text(fd, 416, "Requested Range Not Satisfiable", "application/json; charset=utf-8", body);
+        return;
+    }
+
+    sample_count = requested_samples;
+    if (sample_count > available_samples - from_sample) {
+        sample_count = available_samples - from_sample;
+    }
+
+    if (sample_count < AUDIO_LIVE_MIN_BLOCK_SAMPLES) {
+        snprintf(extra_headers, sizeof(extra_headers),
+                 "X-Audio-Available-Samples: %lu\r\n",
+                 (unsigned long)available_samples);
+        send_empty_response(fd, 204, "No Content", "audio/wav", extra_headers);
+        return;
+    }
+
+    input = fopen(AUDIO_LIVE_PCM_PATH, "rb");
+    if (!input) {
+        send_audio_error_json(fd, 500, "Internal Server Error", "could not open live audio buffer");
+        return;
+    }
+    if (fseek(input, (long)(from_sample * 2), SEEK_SET) != 0) {
+        fclose(input);
+        send_audio_error_json(fd, 500, "Internal Server Error", "could not seek live audio buffer");
+        return;
+    }
+
+    pcm_buffer = (short *)malloc(sample_count * sizeof(short));
+    if (!pcm_buffer) {
+        fclose(input);
+        send_audio_error_json(fd, 500, "Internal Server Error", "could not allocate live audio block");
+        return;
+    }
+
+    sample_count = fread(pcm_buffer, sizeof(short), sample_count, input);
+    fclose(input);
+
+    if (sample_count == 0) {
+        free(pcm_buffer);
+        send_empty_response(fd, 204, "No Content", "audio/wav", NULL);
+        return;
+    }
+
+    send_wav_block_response(fd, pcm_buffer, sample_count, from_sample, available_samples);
+    free(pcm_buffer);
 }
 
 static int contains_nocase(const char *haystack, const char *needle)
@@ -2002,6 +3113,10 @@ static void handle_request(
     if (strcmp(method, "POST") == 0) {
         if (strcmp(path, "/api/radio/track/plan") == 0) {
             send_radio_track_plan(fd, cfg, body);
+        } else if (strcmp(path, "/api/radio/audio/live/start") == 0) {
+            send_live_audio_start(fd, cfg, query);
+        } else if (strcmp(path, "/api/radio/audio/live/stop") == 0) {
+            send_live_audio_stop(fd);
         } else if (strcmp(path, "/api/config") == 0) {
             send_config_save(fd, cfg, body);
         } else if (strcmp(path, "/api/refresh/passes") == 0) {
@@ -2067,6 +3182,16 @@ static void handle_request(
         send_radio_track_auto_stop(fd, cfg);
     } else if (strcmp(path, "/api/radio/hardware") == 0) {
         send_radio_hardware(fd, cfg);
+    } else if (strcmp(path, "/api/radio/audio/fm.wav") == 0) {
+        send_wav_stream(fd, cfg, query);
+    } else if (strcmp(path, "/api/radio/audio/fm.pcm") == 0) {
+        send_pcm_stream(fd, cfg, query);
+    } else if (strcmp(path, "/api/radio/audio/live.pcm") == 0) {
+        send_pcm_live_stream(fd, cfg, query);
+    } else if (strcmp(path, "/api/radio/audio/fm_chunk") == 0) {
+        send_audio_chunk_json(fd, cfg, query);
+    } else if (strcmp(path, "/api/radio/audio/live.wav") == 0) {
+        send_live_audio_block(fd, query);
     } else if (strcmp(path, "/api/radio/plan") == 0) {
         send_radio_plan(fd, cfg, query);
     } else if (strcmp(path, "/api/radio/tune") == 0) {
@@ -2189,6 +3314,20 @@ static void serve_client(int fd, const struct app_config *cfg)
     handle_request(fd, cfg, method, target, query_copy, body);
 }
 
+static void *client_worker(void *arg)
+{
+    struct client_job *job = (struct client_job *)arg;
+
+    if (!job) {
+        return NULL;
+    }
+
+    serve_client(job->fd, job->cfg);
+    close(job->fd);
+    free(job);
+    return NULL;
+}
+
 static int create_server_socket(const struct app_config *cfg)
 {
     int fd;
@@ -2263,9 +3402,26 @@ int main(int argc, char **argv)
             perror("accept");
             break;
         }
+        {
+            struct client_job *job = (struct client_job *)malloc(sizeof(*job));
+            pthread_t client_thread;
+            int create_result;
 
-        serve_client(client_fd, &cfg);
-        close(client_fd);
+            if (!job) {
+                close(client_fd);
+                continue;
+            }
+
+            job->fd = client_fd;
+            job->cfg = &cfg;
+            create_result = pthread_create(&client_thread, NULL, client_worker, job);
+            if (create_result != 0) {
+                close(client_fd);
+                free(job);
+                continue;
+            }
+            pthread_detach(client_thread);
+        }
     }
 
     close(server_fd);

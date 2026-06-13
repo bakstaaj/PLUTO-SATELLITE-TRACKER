@@ -99,12 +99,16 @@ MSYS_NO_PATHCONV=1 "$DOCKER" run --rm \
 
     mkdir -p dist
     cp pluto_sat_tracker dist/pluto_sat_tracker
+    cp pluto_fm_receiver dist/pluto_fm_receiver
     arm-linux-gnueabihf-strip dist/pluto_sat_tracker || true
+    arm-linux-gnueabihf-strip dist/pluto_fm_receiver || true
 
     echo
     echo '== Built binary =='
     file dist/pluto_sat_tracker
+    file dist/pluto_fm_receiver
     ls -lh dist/pluto_sat_tracker
+    ls -lh dist/pluto_fm_receiver
   "
 
 echo

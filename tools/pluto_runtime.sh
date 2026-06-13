@@ -4,10 +4,12 @@ DEPLOY_DIR="${PLUTO_DEPLOY_DIR:-/mnt/jffs2/pluto_sat_tracker}"
 SD_ROOT="${PLUTO_SD_ROOT:-/media/mmcblk0p1/pluto_sat_tracker}"
 BIN="${DEPLOY_DIR}/pluto_sat_tracker"
 REFRESH_RUNNER="${SD_ROOT}/tools/pluto_refresh_data.sh"
+PASS_REFRESH_LOOP="${SD_ROOT}/tools/pluto_pass_refresh_loop.sh"
 OBSERVER_FILE="${DEPLOY_DIR}/config/observer.json"
 CATALOG_FILE="${SD_ROOT}/data/satellites.json"
 PASSES_FILE="${SD_ROOT}/data/passes.json"
 STARTUP_REFRESH_LOG="${SD_ROOT}/logs/startup_pass_refresh.log"
+PASS_REFRESH_LOOP_LOG="${SD_ROOT}/logs/pass_refresh_loop.log"
 
 TIME_EPOCH_FILE="${DEPLOY_DIR}/last_time_epoch.txt"
 TIME_UTC_FILE="${DEPLOY_DIR}/last_time_utc.txt"
@@ -84,6 +86,18 @@ maybe_refresh_passes() {
   ) >"$STARTUP_REFRESH_LOG" 2>&1 &
 }
 
+start_pass_refresh_loop() {
+  if [ ! -x "$PASS_REFRESH_LOOP" ] && [ ! -r "$PASS_REFRESH_LOOP" ]; then
+    echo "Background pass refresh loop: runner not available"
+    return 0
+  fi
+
+  echo "Background pass refresh loop: starting"
+  (
+    /bin/sh "$PASS_REFRESH_LOOP"
+  ) >"$PASS_REFRESH_LOOP_LOG" 2>&1 &
+}
+
 try_host_time() {
   if [ -n "$HOST_UTC" ]; then
     if set_utc_string "$HOST_UTC"; then
@@ -158,6 +172,7 @@ fi
 
 echo "Current Pluto UTC time: $(date -u 2>/dev/null || true)"
 maybe_refresh_passes
+start_pass_refresh_loop
 echo "Starting: $BIN --web-dir $DEPLOY_DIR/web --config-dir $DEPLOY_DIR/config --data-dir $SD_ROOT/data $TRACKER_ARGS"
 echo
 
