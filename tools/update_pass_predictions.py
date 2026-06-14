@@ -7,6 +7,7 @@ import argparse
 import datetime as dt
 import json
 import math
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -281,12 +282,67 @@ def refine_crossing(
     return high
 
 
+
+# HIGH_RESOLUTION_PASS_SAMPLES_V1
+def build_visible_pass_samples(
+    satrec: Satrec,
+    lat: float,
+    lon: float,
+    alt_m: float,
+    aos: dt.datetime,
+    los: dt.datetime,
+    sample_seconds: int,
+) -> list[dict[str, Any]]:
+    sample_seconds = max(1, int(sample_seconds or 5))
+    step = dt.timedelta(seconds=sample_seconds)
+    samples: list[dict[str, Any]] = []
+
+    when = aos
+    while when <= los:
+        sat_pos = propagate(satrec, when)
+        if sat_pos is not None:
+            az, el, range_km = look_angles(sat_pos, lat, lon, alt_m, when)
+            sat_lat_deg, sat_lon_deg, sat_alt_km = eci_to_geodetic(sat_pos, when)
+            samples.append(
+                {
+                    "time": when,
+                    "azimuth_deg": az,
+                    "elevation_deg": el,
+                    "range_km": range_km,
+                    "sat_latitude_deg": sat_lat_deg,
+                    "sat_longitude_deg": sat_lon_deg,
+                    "sat_altitude_km": sat_alt_km,
+                }
+            )
+        when += step
+
+    if not samples or samples[-1]["time"] != los:
+        sat_pos = propagate(satrec, los)
+        if sat_pos is not None:
+            az, el, range_km = look_angles(sat_pos, lat, lon, alt_m, los)
+            sat_lat_deg, sat_lon_deg, sat_alt_km = eci_to_geodetic(sat_pos, los)
+            samples.append(
+                {
+                    "time": los,
+                    "azimuth_deg": az,
+                    "elevation_deg": el,
+                    "range_km": range_km,
+                    "sat_latitude_deg": sat_lat_deg,
+                    "sat_longitude_deg": sat_lon_deg,
+                    "sat_altitude_km": sat_alt_km,
+                }
+            )
+
+    return samples
+
+
 def predict_satellite_passes(
     satellite: dict[str, Any],
     observer: dict[str, Any],
     start: dt.datetime,
     hours: float,
     step_seconds: int,
+    pass_sample_seconds: int,
 ) -> list[dict[str, Any]]:
     tle = satellite.get("tle") or {}
     line1 = tle.get("line1")
@@ -361,6 +417,15 @@ def predict_satellite_passes(
             current["los_utc"] = los
             duration_s = max(0, int((current["los_utc"] - current["aos_utc"]).total_seconds()))
             if duration_s >= 60:
+                current["samples"] = build_visible_pass_samples(
+                    satrec,
+                    lat,
+                    lon,
+                    alt_m,
+                    current["aos_utc"],
+                    current["los_utc"],
+                    pass_sample_seconds,
+                )
                 passes.append(format_pass(satellite, current, duration_s))
             current = None
             in_pass = False
@@ -372,6 +437,15 @@ def predict_satellite_passes(
     if in_pass and current is not None:
         duration_s = max(0, int((current["los_utc"] - current["aos_utc"]).total_seconds()))
         if duration_s >= 60:
+            current["samples"] = build_visible_pass_samples(
+                satrec,
+                lat,
+                lon,
+                alt_m,
+                current["aos_utc"],
+                current["los_utc"],
+                pass_sample_seconds,
+            )
             passes.append(format_pass(satellite, current, duration_s))
 
     return passes
@@ -428,6 +502,7 @@ def build_predictions(args: argparse.Namespace) -> dict[str, Any]:
                 start,
                 args.hours,
                 args.step_seconds,
+                args.pass_sample_seconds,
             )
         )
 
@@ -446,6 +521,7 @@ def build_predictions(args: argparse.Namespace) -> dict[str, Any]:
             "satellite_count": len(catalog.get("satellites", [])),
             "pass_count": len(passes),
             "step_seconds": args.step_seconds,
+            "pass_sample_seconds": args.pass_sample_seconds,
         },
         "passes": passes,
     }
@@ -459,6 +535,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--hours", type=float, default=24.0)
     parser.add_argument("--limit", type=int, default=80)
     parser.add_argument("--step-seconds", type=int, default=30)
+    parser.add_argument("--pass-sample-seconds", type=int, default=5)
     parser.add_argument("--start-utc", default=None)
     return parser.parse_args()
 
@@ -468,7 +545,28 @@ def main() -> int:
     predictions = build_predictions(args)
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(predictions, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    # PASS_JSON_ATOMIC_REFRESH_V1:
+    # Never expose a partially written passes.json to the HTTP backend.
+    # The UI polls /api/passes while refreshes are running, so direct writes can
+    # produce transient or persistent invalid JSON. Build and validate the full
+    # JSON document first, then atomically replace the final file.
+    body = json.dumps(predictions, indent=2, sort_keys=True) + "\n"
+    json.loads(body)
+
+    tmp_output = output.with_name(output.name + ".tmp")
+    try:
+        with tmp_output.open("w", encoding="utf-8") as handle:
+            handle.write(body)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_output, output)
+    except Exception:
+        try:
+            tmp_output.unlink()
+        except FileNotFoundError:
+            pass
+        raise
     meta = predictions["metadata"]
     print(f"wrote {output}")
     print(f"passes: {meta['pass_count']}")
