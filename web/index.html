@@ -1260,6 +1260,53 @@
 
     /* DYNAMIC_MAP_INFO_REMOVE_SKY_READOUT_V1B */
     /* REMOVE_STALE_CURRENT_LOOK_ANGLE_V1C */
+    /* LIVE_RX_FREQUENCY_ACTUAL_V2 */
+    /* LISTEN_FOLLOWS_DOPPLER_PLAN_V1 */
+
+    /* COMPACT_MAP_INFO_ROW_V1 */
+    .map-info {
+      grid-template-columns:
+        minmax(112px, 1.25fr)
+        minmax(130px, 1.35fr)
+        minmax(120px, 1.25fr)
+        minmax(82px, 0.85fr)
+        minmax(96px, 0.95fr) !important;
+      gap: 3px 6px !important;
+      padding: 5px 7px !important;
+      font-size: 9.8px !important;
+      line-height: 1.08 !important;
+      align-items: center !important;
+    }
+
+    .map-info div {
+      min-width: 0 !important;
+      white-space: nowrap !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+    }
+
+    .map-info strong {
+      display: inline !important;
+      color: var(--muted);
+      font-size: 9px !important;
+      font-weight: 650 !important;
+      margin-right: 3px !important;
+      white-space: nowrap !important;
+    }
+
+    @media (max-width: 760px) {
+      .map-info {
+        grid-template-columns:
+          minmax(92px, 1.05fr)
+          minmax(108px, 1.15fr)
+          minmax(104px, 1.15fr)
+          minmax(70px, 0.75fr)
+          minmax(86px, 0.9fr) !important;
+        overflow-x: auto !important;
+        scrollbar-width: thin;
+      }
+    }
+
     @media (max-width: 760px) {
       main {
         grid-template-columns: 1fr;
@@ -2411,6 +2458,13 @@
       return "";
     }
 
+
+    /* LIVE_RX_FREQUENCY_ACTUAL_V2 */
+    function liveRxLabelForMapInfoActualV2(point) {
+      const rxHz = Number((lastTrackState && lastTrackState.rx_hz) || (point && point.rx_hz) || 0);
+      return Number.isFinite(rxHz) && rxHz > 0 ? formatHz(rxHz) : "-";
+    }
+
     function renderMapPanel(pass, config) {
       const node = document.getElementById("mapPanel");
       if (!config) {
@@ -2506,6 +2560,7 @@
               <div><strong>Ground Point</strong>${escapeHtml(`${livePoint.latitude_deg.toFixed(3)} deg, ${livePoint.longitude_deg.toFixed(3)} deg`)}</div>
               <div><strong>Look Angles</strong>${escapeHtml(`Az ${livePoint.azimuth_deg} deg, El ${livePoint.elevation_deg} deg`)}</div>
               <div><strong>Altitude</strong>${escapeHtml(`${livePoint.altitude_km} km`)}</div>
+              <div><strong>Live RX</strong>${escapeHtml(liveRxLabelForMapInfoActualV2(livePoint))}</div>
             </div>
           ` : ""}
         </div>
@@ -3051,12 +3106,41 @@
       return buffer;
     }
 
+
+    /* LISTEN_FOLLOWS_DOPPLER_PLAN_V1 */
+    function passHasAudioDopplerPlanV1(pass) {
+      return Boolean(pass && pass.doppler_plan && (pass.doppler_plan.points || []).length);
+    }
+
+    async function stageAudioDopplerPlanForListenV1(pass, statusNode) {
+      if (!passHasAudioDopplerPlanV1(pass)) {
+        throw new Error("No Doppler band plan is available for this pass. Refresh passes or choose a pass with a downlink plan.");
+      }
+      if (statusNode?.isConnected) statusNode.textContent = "Loading selected pass Doppler band plan...";
+      await postJson("/api/radio/track/plan", dopplerTrackPayload(pass));
+    }
+
+    async function startAudioDopplerTrackingForListenV1(pass, statusNode) {
+      await stageAudioDopplerPlanForListenV1(pass, statusNode);
+      if (statusNode?.isConnected) statusNode.textContent = "Starting Doppler auto tracking for live audio...";
+      await getJson("/api/radio/track/auto/start");
+      if (statusNode?.isConnected) statusNode.textContent = "Doppler tracking active; opening backend audio stream...";
+    }
+
+    async function stopAudioDopplerTrackingForListenV1() {
+      try {
+        await getJson("/api/radio/track/auto/stop");
+      } catch (_error) {
+      }
+    }
+
     async function stopAnalogAudio(reason = "Analog monitor stopped.") {
       const session = analogAudioSession;
       analogAudioSession = null;
       if (!session) return;
 
       session.stopped = true;
+      await stopAudioDopplerTrackingForListenV1();
       if (session.reconnectTimer) {
         window.clearTimeout(session.reconnectTimer);
         session.reconnectTimer = 0;
@@ -3121,17 +3205,11 @@
         // Continue: live/start can still tune directly by downlink_hz.
       }
 
-      if (pass.doppler_plan && (pass.doppler_plan.points || []).length) {
-        try {
-          await postJson("/api/radio/track/plan", dopplerTrackPayload(pass));
-          await getJson("/api/radio/track/auto/start");
-        } catch (_error) {
-          // Continue with fixed-frequency audio if auto tracking cannot start.
-        }
-      }
+      await stageAudioDopplerPlanForListenV1(pass, statusNode);
 
       statusNode.textContent = "Starting backend audio DSP...";
       await postJson(audioUrls.startUrl, {});
+      await startAudioDopplerTrackingForListenV1(pass, statusNode);
 
       const context = new AudioCtx({ sampleRate });
       await context.resume();
@@ -3178,7 +3256,7 @@
 
         const bufferedSeconds = Math.max(0, session.nextTime - context.currentTime);
         if (statusNode?.isConnected) {
-          statusNode.textContent = `Playing backend decoded audio from Pluto (${bufferedSeconds.toFixed(1)}s buffered, reconnects ${session.reconnectCount}).`;
+          statusNode.textContent = `Playing live audio with Doppler tracking (${bufferedSeconds.toFixed(1)}s buffered, reconnects ${session.reconnectCount}).`;
         }
       };
 
@@ -3275,11 +3353,16 @@ function bindAnalogAudio(pass, node) {
       const button = node.querySelector("#analogAudioToggleButton");
       const status = node.querySelector("#analogAudioStatus");
       const audioUrls = analogAudioUrl(pass);
+      const dopplerReady = passHasAudioDopplerPlanV1(pass);
       if (!button || !status) return;
 
-      button.disabled = !audioUrls;
+      button.disabled = !audioUrls || !dopplerReady;
       if (!audioUrls) {
         status.textContent = "No downlink is available for this pass.";
+        return;
+      }
+      if (!dopplerReady) {
+        status.textContent = "No Doppler band plan is available for this pass.";
         return;
       }
 
@@ -3294,7 +3377,7 @@ function bindAnalogAudio(pass, node) {
         button.textContent = "Stop";
         status.textContent = "Streaming live analog FM audio from Pluto...";
       } else {
-        setIdle("Ready to listen to this pass.");
+        setIdle("Ready to listen with Doppler tracking.");
       }
 
       button.addEventListener("click", async () => {
@@ -3304,7 +3387,7 @@ function bindAnalogAudio(pass, node) {
         }
 
         try {
-          status.textContent = "Connecting to Pluto FM audio stream...";
+          status.textContent = "Starting Pluto audio with Doppler tracking...";
           await startAnalogAudio(pass, button, status);
         } catch (error) {
           await stopAnalogAudio();
