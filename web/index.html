@@ -743,6 +743,523 @@
       }
     }
 
+
+    /* MAP_LIVE_SATELLITE_FIT_ICON_V3 */
+    .satellite-live-icon {
+      width: 28px !important;
+      height: 28px !important;
+      margin-left: -14px !important;
+      margin-top: -14px !important;
+      pointer-events: auto;
+      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
+    }
+
+    .satellite-live-icon svg {
+      display: block;
+      width: 28px;
+      height: 28px;
+    }
+
+
+    /* MAP_PICK_CONTROL_SKY_LABELS_V1 */
+    .map-pick-leaflet-control {
+      margin-top: 6px !important;
+    }
+
+    .map-pick-map-button {
+      width: 34px;
+      height: 34px;
+      border: 0;
+      border-bottom: 1px solid #ccc;
+      background: #fff;
+      color: #1e495f;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+    }
+
+    .map-pick-map-button:hover {
+      background: #f3f7fb;
+    }
+
+    .map-pick-map-button.map-pick-enabled {
+      background: #1e91b6;
+      color: #fff;
+    }
+
+    .map-pick-map-button svg {
+      width: 21px;
+      height: 21px;
+      display: block;
+    }
+
+    .sky-live-readout {
+      font-size: 11px;
+      line-height: 1.25;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sky-live-readout strong {
+      font-size: 11px;
+      margin-right: 4px;
+    }
+
+    .sky-live-readout span {
+      font-size: 10.5px;
+      white-space: nowrap;
+    }
+
+    .map-info {
+      font-size: 12px;
+    }
+
+
+    /* MAP_PICK_ICON_CONTRAST_V1 */
+    .leaflet-control .map-pick-map-button {
+      background: #ffffff !important;
+      color: #1e495f !important;
+      border-color: #c9d6df !important;
+    }
+
+    .leaflet-control .map-pick-map-button svg,
+    .leaflet-control .map-pick-map-button svg line,
+    .leaflet-control .map-pick-map-button svg circle {
+      color: #1e495f !important;
+      stroke: #1e495f !important;
+    }
+
+    .leaflet-control .map-pick-map-button svg circle[fill="currentColor"] {
+      fill: #1e495f !important;
+    }
+
+    .leaflet-control .map-pick-map-button.map-pick-enabled {
+      background: #1e91b6 !important;
+      color: #ffffff !important;
+    }
+
+    .leaflet-control .map-pick-map-button.map-pick-enabled svg,
+    .leaflet-control .map-pick-map-button.map-pick-enabled svg line,
+    .leaflet-control .map-pick-map-button.map-pick-enabled svg circle {
+      color: #ffffff !important;
+      stroke: #ffffff !important;
+    }
+
+    .leaflet-control .map-pick-map-button.map-pick-enabled svg circle[fill="currentColor"] {
+      fill: #ffffff !important;
+    }
+
+
+    /* MAP_PICK_BUTTON_CONNECTED_ICON_V2 */
+    .leaflet-top .leaflet-control.map-pick-leaflet-control {
+      margin-top: 0 !important;
+    }
+
+    .leaflet-control.map-pick-leaflet-control {
+      margin-top: 0 !important;
+      border-top: 0 !important;
+    }
+
+    .leaflet-control.map-pick-leaflet-control .map-pick-map-button {
+      width: 30px !important;
+      height: 30px !important;
+      line-height: 30px !important;
+      background: #ffffff !important;
+      color: #1e495f !important;
+      border: 0 !important;
+      border-top: 1px solid #ccc !important;
+      border-radius: 0 0 4px 4px !important;
+      box-sizing: border-box !important;
+    }
+
+    .leaflet-control.map-pick-leaflet-control .map-pick-map-button svg {
+      display: block !important;
+      width: 20px !important;
+      height: 20px !important;
+      color: #1e495f !important;
+      stroke: #1e495f !important;
+      fill: none !important;
+      margin: 0 auto !important;
+    }
+
+    .leaflet-control.map-pick-leaflet-control .map-pick-map-button svg line,
+    .leaflet-control.map-pick-leaflet-control .map-pick-map-button svg circle {
+      stroke: #1e495f !important;
+    }
+
+    .leaflet-control.map-pick-leaflet-control .map-pick-map-button svg .map-pick-center-dot {
+      fill: #1e495f !important;
+      stroke: none !important;
+    }
+
+    .leaflet-control.map-pick-leaflet-control .map-pick-map-button.map-pick-enabled {
+      background: #1e91b6 !important;
+      color: #ffffff !important;
+    }
+
+    .leaflet-control.map-pick-leaflet-control .map-pick-map-button.map-pick-enabled svg,
+    .leaflet-control.map-pick-leaflet-control .map-pick-map-button.map-pick-enabled svg line,
+    .leaflet-control.map-pick-leaflet-control .map-pick-map-button.map-pick-enabled svg circle {
+      color: #ffffff !important;
+      stroke: #ffffff !important;
+    }
+
+    .leaflet-control.map-pick-leaflet-control .map-pick-map-button.map-pick-enabled svg .map-pick-center-dot {
+      fill: #ffffff !important;
+      stroke: none !important;
+    }
+
+
+    /* COMPACT_MAP_LAYOUT_CLEANUP_V1 */
+    .pass-list {
+      gap: 4px;
+    }
+
+    .pass-row {
+      grid-template-columns: minmax(0, 1.15fr) minmax(72px, 0.7fr) minmax(92px, 0.9fr);
+      gap: 6px;
+      padding: 5px 0;
+      font-size: 11px;
+      line-height: 1.2;
+    }
+
+    .pass-row strong {
+      font-size: 11.5px;
+      line-height: 1.2;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .pass-row > div {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .pass-row .freq,
+    .pass-row .radio-ok,
+    .pass-row .radio-warn {
+      white-space: nowrap;
+      font-size: 10.5px;
+    }
+
+    #passes .meta {
+      font-size: 11px;
+      margin-bottom: 6px;
+    }
+
+    .map-frame {
+      display: grid;
+      gap: 4px;
+    }
+
+    .map-legend {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 5px 8px;
+      align-items: center;
+      overflow: hidden;
+      color: var(--muted);
+      font-size: 9.5px;
+      line-height: 1.1;
+      padding: 4px 6px 5px;
+      background: #0f1d2a;
+      border-top: 1px solid var(--line);
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      white-space: nowrap;
+      flex: 0 1 auto;
+      min-width: 0;
+    }
+
+    .legend-swatch {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      display: inline-block;
+      flex: 0 0 auto;
+    }
+
+    .map-note {
+      font-size: 11px;
+      line-height: 1.25;
+    }
+
+    .map-info {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 5px 8px;
+      padding: 7px 9px;
+      font-size: 11px;
+      line-height: 1.2;
+    }
+
+    .map-info strong {
+      font-size: 10.5px;
+    }
+
+    /* COMPACT_MAP_LAYOUT_CLEANUP_V1B */
+    /* COMPACT_MAP_LAYOUT_CLEANUP_V1C */
+    /* REMOVE_MAP_NOTE_V1 */
+
+    /* PASS_DETAIL_MODAL_LISTEN_V1B */
+    .pass-row {
+      grid-template-columns: minmax(0, 1.05fr) minmax(76px, 0.58fr) minmax(92px, 0.75fr) auto;
+      align-items: center;
+    }
+
+    .pass-detail-button {
+      padding: 4px 7px;
+      font-size: 10.5px;
+      line-height: 1.1;
+      white-space: nowrap;
+      border-radius: 5px;
+    }
+
+    .pass-detail-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 2500;
+      background: rgba(0, 0, 0, 0.62);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+    }
+
+    .pass-detail-backdrop[hidden] {
+      display: none;
+    }
+
+    .pass-detail-modal {
+      width: min(860px, 96vw);
+      max-height: min(760px, 92vh);
+      overflow: auto;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+    }
+
+    .pass-detail-modal-header {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      background: #0c1824;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .pass-detail-modal-header h2 {
+      margin: 0;
+      font-size: 14px;
+    }
+
+    .pass-detail-close-button {
+      padding: 4px 8px;
+      font-size: 12px;
+    }
+
+    .pass-detail-modal-body {
+      padding: 12px;
+    }
+
+    .pass-detail-compact .detail-title {
+      font-size: 15px;
+      margin-bottom: 2px;
+    }
+
+    .pass-detail-compact .detail-subtitle {
+      font-size: 11px;
+      margin-bottom: 8px;
+    }
+
+    .pass-detail-compact .detail-grid {
+      gap: 8px;
+    }
+
+    .pass-detail-compact h3 {
+      font-size: 12px;
+      margin: 0 0 5px;
+    }
+
+    .pass-detail-compact dl {
+      gap: 4px 8px;
+      font-size: 11px;
+      line-height: 1.25;
+    }
+
+    .pass-detail-compact dt {
+      white-space: nowrap;
+    }
+
+    .pass-detail-compact dd {
+      overflow-wrap: normal;
+      word-break: normal;
+    }
+
+    .pass-detail-compact .doppler-table {
+      font-size: 10.5px;
+    }
+
+    .pass-detail-compact .doppler-table th,
+    .pass-detail-compact .doppler-table td {
+      padding: 3px 4px;
+      white-space: nowrap;
+    }
+
+    .pass-detail-compact .doppler-note {
+      font-size: 10.5px;
+      margin-top: 4px;
+    }
+
+    .listen-panel {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 8px;
+      border-top: 1px solid var(--line);
+      background: var(--panel2);
+    }
+
+    .listen-panel button {
+      padding: 4px 10px;
+      font-size: 11px;
+      line-height: 1.1;
+      min-width: 58px;
+    }
+
+    .listen-panel span {
+      min-width: 0;
+      color: var(--muted);
+      font-size: 10.5px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* PASS_DETAIL_MODAL_LISTEN_V1C */
+
+    /* NEXT_PASSES_SCROLL_PANEL_V1 */
+    #passes.pass-list,
+    #passes.pass-loading,
+    #passes.empty {
+      max-height: calc(100vh - 155px);
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding-right: 4px;
+      overscroll-behavior: contain;
+      scrollbar-width: thin;
+    }
+
+    #passes.pass-list {
+      align-content: start;
+    }
+
+    #passes.pass-list .filter-row {
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      margin-bottom: 4px;
+      padding: 0 0 6px;
+      background: var(--panel);
+    }
+
+    #passes::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    #passes::-webkit-scrollbar-track {
+      background: #0f1d2a;
+      border-radius: 999px;
+    }
+
+    #passes::-webkit-scrollbar-thumb {
+      background: var(--line);
+      border-radius: 999px;
+    }
+
+    #passes::-webkit-scrollbar-thumb:hover {
+      background: var(--muted);
+    }
+
+    /* RENAME_SUBSAT_GROUND_POINT_V1 */
+
+    /* SKY_PLOT_LEGEND_COLORS_SAT_ICON_V1 */
+    .sky-pass-path {
+      stroke: #c4471c;
+    }
+
+    .sky-pass-progress {
+      stroke: #00a7c7;
+    }
+
+    .sky-look-line {
+      stroke: #3e6b85;
+    }
+
+    .sky-focus-dot {
+      fill: #102030;
+      stroke: #ffffff;
+    }
+
+    .sky-sample-dot {
+      fill: #c4471c;
+      stroke: #ffffff;
+    }
+
+    .sky-satellite-icon .satellite-body {
+      fill: #00a7c7;
+      stroke: #ffffff;
+      stroke-width: 1.4;
+    }
+
+    .sky-satellite-icon .satellite-panel {
+      fill: #00a7c7;
+      stroke: #ffffff;
+      stroke-width: 1;
+    }
+
+    .sky-satellite-icon .satellite-boom {
+      stroke: #ffffff;
+      stroke-width: 1.2;
+      stroke-linecap: round;
+    }
+
+
+    /* SKY_PLOT_AOS_TCA_LOS_COLORS_V1 */
+    .sky-aos-dot {
+      fill: #1a7f37 !important;
+      stroke: #ffffff !important;
+    }
+
+    .sky-tca-dot {
+      fill: #a15c00 !important;
+      stroke: #ffffff !important;
+    }
+
+    .sky-los-dot {
+      fill: #7d3ad3 !important;
+      stroke: #ffffff !important;
+    }
+
+    .sky-special-dot {
+      r: 5.2;
+    }
+
+    /* DYNAMIC_MAP_INFO_REMOVE_SKY_READOUT_V1B */
+    /* REMOVE_STALE_CURRENT_LOOK_ANGLE_V1C */
     @media (max-width: 760px) {
       main {
         grid-template-columns: 1fr;
@@ -824,8 +1341,8 @@
               <ol>
                 <li>Select a pass from <code>Next Passes</code>.</li>
                 <li>Inspect the map, sky plot, and Doppler preview.</li>
-                <li>For fixed tuning, use <code>Plan Radio Target</code> then <code>Tune Receiver</code>.</li>
-                <li>For tracking, use <code>Plan Doppler Track</code>, then <code>Start Track</code> or <code>Auto Track</code>.</li>
+                <li>Use <code>Details</code> to inspect pass timing, geometry, radio, and Doppler preview.</li>
+                <li>Use <code>Listen</code> under the sky plot to start or stop analog audio for the selected pass.</li>
               </ol>
             </div>
           </div>
@@ -843,11 +1360,11 @@
               </ul>
             </div>
             <div class="help-card">
-              <h3>Focused Sample Buttons</h3>
+              <h3>Map Reading</h3>
               <ul>
-                <li><code>Tune Focused RX</code> tunes the exact Doppler-corrected sample frequency.</li>
-                <li><code>Step Track Now</code> applies the selected track point immediately.</li>
-                <li><code>Follow Live Point</code> returns focus to the live/current tracking point.</li>
+                <li>The map shows the full visible pass path and the live observer look line.</li>
+                <li>The sky plot shows azimuth direction and elevation rings.</li>
+                <li>Select a pass from <code>Next Passes</code> to update the map and radio preview.</li>
               </ul>
             </div>
           </div>
@@ -970,28 +1487,6 @@
     </aside>
 
     <main>
-      <section class="span-2">
-        <div class="summary-strip">
-          <div class="summary-card">
-            <b>Observer</b>
-            <span id="summaryObserver">Loading...</span>
-          </div>
-          <div class="summary-card">
-            <b>Pass Window</b>
-            <span id="summaryPasses">Loading...</span>
-          </div>
-          <div class="summary-card">
-            <b>Time Sync</b>
-            <span id="summaryTime">Loading...</span>
-          </div>
-          <div class="summary-card">
-            <b>Tracking</b>
-            <span id="summaryTrack">Loading...</span>
-          </div>
-        </div>
-        <div class="dashboard-note">Open the menu for setup, refresh, help, catalog, and detailed system information.</div>
-      </section>
-
       <section>
         <h2>Next Passes</h2>
         <div id="passes" class="pass-loading">
@@ -1006,12 +1501,16 @@
       <section>
         <div id="mapPanel" class="empty">Loading map...</div>
       </section>
-
-      <section class="span-2">
-        <h2>Selected Pass</h2>
-        <div id="passDetail" class="empty">Select a pass to see radio and tracking details.</div>
-      </section>
     </main>
+    <div id="passDetailModal" class="pass-detail-backdrop" hidden>
+      <div class="pass-detail-modal" role="dialog" aria-modal="true" aria-labelledby="passDetailModalTitle">
+        <div class="pass-detail-modal-header">
+          <h2 id="passDetailModalTitle">Pass Details</h2>
+          <button id="passDetailCloseButton" type="button" class="pass-detail-close-button secondary">Close</button>
+        </div>
+        <div id="passDetail" class="pass-detail-modal-body empty">Select Details from Next Passes.</div>
+      </div>
+    </div>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -1277,7 +1776,9 @@
       }
     }
 
+        /* MAP_FINAL_POLISH_V2 */
     function passTimingState(pass) {
+      if (!pass) return "unknown";
       const now = Date.now();
       const aos = Date.parse(pass.aos_utc || "");
       const los = Date.parse(pass.los_utc || "");
@@ -1286,7 +1787,6 @@
       if (Number.isFinite(los) && now <= los) return "active";
       return "unknown";
     }
-
     function passReadiness(pass) {
       const timing = passTimingState(pass);
       if (timing === "stale") return { state: timing, label: "Stale", actionable: false };
@@ -1464,17 +1964,35 @@
       renderMapPanel(currentSelectedPass, currentObserverConfig);
     }
 
+        /* MAP_PICK_CONTROL_SKY_LABELS_V1 */
+        /* MAP_PICK_BUTTON_CONNECTED_ICON_V2 */
     function setMapLocationPickEnabled(enabled) {
       mapLocationPickEnabled = Boolean(enabled);
-      const button = document.getElementById("mapPickLocationButton");
-      if (button) {
-        button.textContent = mapLocationPickEnabled ? "Map Pick: On" : "Map Pick: Off";
+
+      const applyButtonState = (button) => {
+        if (!button) return;
+
+        /*
+         * Do not set textContent on the Leaflet map button. That button is an
+         * SVG-only control, and textContent="" deletes the crosshair markup.
+         */
+        if (button.id === "mapPickLocationButton") {
+          button.textContent = mapLocationPickEnabled ? "Map Pick: On" : "Map Pick: Off";
+        }
+
         button.classList.toggle("map-pick-enabled", mapLocationPickEnabled);
         button.setAttribute("aria-pressed", mapLocationPickEnabled ? "true" : "false");
         button.title = mapLocationPickEnabled
-          ? "Map clicks will set a pending receiver location. Click a map point or toggle off."
-          : "Toggle on before clicking the map to change receiver location.";
-      }
+          ? "Map Pick is ON. Click the map once to set receiver location."
+          : "Turn on Map Pick, then click the map once to set receiver location.";
+        if (button.id === "mapPickMapButton") {
+          button.setAttribute("aria-label", mapLocationPickEnabled ? "Map Pick on" : "Map Pick off");
+        }
+      };
+
+      applyButtonState(document.getElementById("mapPickLocationButton"));
+      applyButtonState(document.getElementById("mapPickMapButton"));
+
       const hint = document.getElementById("mapPickHint");
       if (hint) {
         hint.textContent = mapLocationPickEnabled
@@ -1482,7 +2000,6 @@
           : "Map Pick is OFF: map clicks will not change receiver location.";
       }
     }
-
     function toggleMapLocationPick() {
       setMapLocationPickEnabled(!mapLocationPickEnabled);
     }
@@ -1510,20 +2027,28 @@
     }
 
         /* MAP_NULL_PASS_STARTUP_FIX_V1 */
+        /* MAP_FINAL_POLISH_V2 */
     function liveLookPointForPass(pass, activeTrackPoint, focusPoint) {
       if (activeTrackPoint) return activeTrackPoint;
-      if (!pass) return focusPoint || null;
+      if (!pass) return null;
 
       const trackPoints = (pass && pass.ground_track) || [];
-      if (!trackPoints.length) return focusPoint || null;
+      if (!trackPoints.length) return null;
 
       const timing = passTimingState(pass);
       if (timing === "active") {
-        return findNearestTrackPoint(pass, new Date().toISOString()) || focusPoint || trackPoints[0] || null;
+        return findNearestTrackPoint(pass, new Date().toISOString()) || trackPoints[0] || null;
       }
-      return focusPoint || trackPoints[0] || null;
-    }
+      if (timing === "stale") {
+        return trackPoints[trackPoints.length - 1] || null;
+      }
 
+      /*
+       * Upcoming/unknown passes should not show an AOS-to-TCA progress line or
+       * a misleading "Now" marker. The full visible pass path still auto-fits.
+       */
+      return null;
+    }
     function pathThroughPoint(points, point) {
       const index = trackPointIndexForPoint(points, point);
       if (index < 0) return [];
@@ -1533,6 +2058,104 @@
     function formatLookAngleValue(value) {
       if (!Number.isFinite(Number(value))) return "-";
       return `${Number(value).toFixed(1)} deg`;
+    }
+
+    /* MAP_LIVE_SATELLITE_FIT_ICON_V3 */
+    function satelliteLiveIconV3() {
+      if (!window.L) return null;
+      return L.divIcon({
+        className: "satellite-live-icon",
+        html: `
+          <svg viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+            <g transform="rotate(-25 32 32)">
+              <rect x="25" y="24" width="14" height="16" rx="3" fill="#00a7c7" stroke="#ffffff" stroke-width="3"/>
+              <rect x="7" y="25" width="16" height="14" rx="2" fill="#17435b" stroke="#ffffff" stroke-width="2"/>
+              <rect x="41" y="25" width="16" height="14" rx="2" fill="#17435b" stroke="#ffffff" stroke-width="2"/>
+              <line x1="23" y1="32" x2="25" y2="32" stroke="#ffffff" stroke-width="3"/>
+              <line x1="39" y1="32" x2="41" y2="32" stroke="#ffffff" stroke-width="3"/>
+              <circle cx="32" cy="32" r="3" fill="#ffffff"/>
+              <path d="M32 18 L36 9" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+              <circle cx="37" cy="7" r="3" fill="#ffcc33" stroke="#ffffff" stroke-width="1.5"/>
+            </g>
+          </svg>
+        `,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+        popupAnchor: [0, -14]
+      });
+    }
+
+    function fitLeafletToCurrentPassV3(map, bounds) {
+      if (!map || !(bounds || []).length) return;
+
+      const validBounds = bounds.filter((latLng) =>
+        Array.isArray(latLng) &&
+        Number.isFinite(Number(latLng[0])) &&
+        Number.isFinite(Number(latLng[1]))
+      );
+
+      if (validBounds.length > 1) {
+        const applyFit = () => {
+          try {
+            map.invalidateSize(false);
+            map.fitBounds(validBounds, {
+              paddingTopLeft: [28, 28],
+              paddingBottomRight: [28, 42],
+              maxZoom: 7,
+              animate: false
+            });
+          } catch (_error) {
+          }
+        };
+        applyFit();
+        window.setTimeout(applyFit, 80);
+        window.setTimeout(applyFit, 350);
+      } else if (validBounds.length === 1) {
+        map.setView(validBounds[0], 4, { animate: false });
+        window.setTimeout(() => map.invalidateSize(false), 80);
+      }
+    }
+
+
+    /* MAP_PICK_CONTROL_SKY_LABELS_V1 */
+    function addLeafletMapPickControlV1(map) {
+      if (!map || !window.L) return;
+
+      const PickControl = L.Control.extend({
+        options: { position: "topright" },
+        onAdd: function onAdd() {
+          const container = L.DomUtil.create("div", "leaflet-bar leaflet-control map-pick-leaflet-control");
+          const button = L.DomUtil.create("button", "map-pick-map-button", container);
+          button.type = "button";
+          button.id = "mapPickMapButton";
+          button.setAttribute("aria-pressed", mapLocationPickEnabled ? "true" : "false");
+          button.setAttribute("aria-label", mapLocationPickEnabled ? "Map Pick on" : "Map Pick off");
+          button.title = mapLocationPickEnabled
+            ? "Map Pick is ON. Click the map once to set receiver location."
+            : "Turn on Map Pick, then click the map once to set receiver location.";
+          button.innerHTML = `
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="2"/>
+              <line x1="12" y1="2.5" x2="12" y2="7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <line x1="12" y1="17" x2="12" y2="21.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <line x1="2.5" y1="12" x2="7" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <line x1="17" y1="12" x2="21.5" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <circle class="map-pick-center-dot" cx="12" cy="12" r="2" fill="currentColor"/>
+            </svg>
+          `;
+
+          L.DomEvent.disableClickPropagation(container);
+          L.DomEvent.disableScrollPropagation(container);
+          L.DomEvent.on(button, "click", (event) => {
+            L.DomEvent.stop(event);
+            toggleMapLocationPick();
+          });
+          return container;
+        }
+      });
+
+      new PickControl().addTo(map);
+      window.setTimeout(() => setMapLocationPickEnabled(mapLocationPickEnabled), 0);
     }
 
     function renderLeafletMap(pass, config, focusPoint, activeTrackPoint) {
@@ -1562,6 +2185,7 @@
       currentLeafletMap.doubleClickZoom.disable();
 
       L.control.zoom({ position: "topright" }).addTo(currentLeafletMap);
+      addLeafletMapPickControlV1(currentLeafletMap);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         minZoom: 2,
         maxZoom: 19,
@@ -1638,7 +2262,7 @@
           fillOpacity: 1,
           bubblingMouseEvents: false
         }).addTo(currentLeafletMap)
-          .bindPopup(formatMapPopup(point, isFocus ? "Focused sample" : "Pass sample"))
+          .bindPopup(formatMapPopup(point, isFocus ? "Focus" : "Pass sample"))
           .on("mouseover", () => {
             currentMapFocusTime = point.time_utc || "";
             renderMapPanel(currentSelectedPass, currentObserverConfig);
@@ -1652,8 +2276,7 @@
       [
         { point: trackPoints[0], label: "AOS", color: "#1a7f37" },
         { point: trackPoints.length ? trackPoints[Math.floor(trackPoints.length / 2)] : null, label: "TCA", color: "#a15c00" },
-        { point: trackPoints.length ? trackPoints[trackPoints.length - 1] : null, label: "LOS", color: "#7d3ad3" },
-        { point: livePoint, label: "Now", color: "#00a7c7" }
+        { point: trackPoints.length ? trackPoints[trackPoints.length - 1] : null, label: "LOS", color: "#7d3ad3" }
       ].forEach(({ point, label, color }) => {
         if (!point) return;
         const latLng = [Number(point.latitude_deg || 0), normalizeLongitude(point.longitude_deg)];
@@ -1666,6 +2289,28 @@
           bubblingMouseEvents: false
         }).addTo(currentLeafletMap).bindPopup(formatMapPopup(point, label));
       });
+
+      if (livePoint) {
+        const liveLatLng = [Number(livePoint.latitude_deg || 0), normalizeLongitude(livePoint.longitude_deg)];
+        const liveIcon = satelliteLiveIconV3();
+        if (liveIcon) {
+          L.marker(liveLatLng, {
+            icon: liveIcon,
+            zIndexOffset: 1000,
+            bubblingMouseEvents: false,
+            title: "Satellite position"
+          }).addTo(currentLeafletMap).bindPopup(formatMapPopup(livePoint, "Satellite position"));
+        } else {
+          L.circleMarker(liveLatLng, {
+            radius: 8,
+            color: "#ffffff",
+            weight: 2,
+            fillColor: "#00a7c7",
+            fillOpacity: 1,
+            bubblingMouseEvents: false
+          }).addTo(currentLeafletMap).bindPopup(formatMapPopup(livePoint, "Satellite position"));
+        }
+      }
 
       if (livePoint) {
         const focusLatLng = [Number(livePoint.latitude_deg || 0), normalizeLongitude(livePoint.longitude_deg)];
@@ -1701,13 +2346,69 @@
 
       currentLeafletPassKey = passKeyValue;
       currentLeafletView = null;
-      if (overlayBounds.length > 1) {
-        currentLeafletMap.fitBounds(overlayBounds, { padding: [28, 28], maxZoom: 6 });
-      } else {
-        currentLeafletMap.setView(observerLatLng, 4);
+      fitLeafletToCurrentPassV3(currentLeafletMap, overlayBounds);
+    }
+
+
+    /* SKY_PLOT_LEGEND_COLORS_SAT_ICON_V1 */
+    function renderSkySatelliteIcon(point) {
+      if (!point) return "";
+      const x = Number(point.x || 0).toFixed(1);
+      const y = Number(point.y || 0).toFixed(1);
+      return `
+        <g class="sky-satellite-icon" transform="translate(${x} ${y}) rotate(-25)">
+          <line class="satellite-boom" x1="-10" y1="0" x2="10" y2="0" />
+          <rect class="satellite-panel" x="-17" y="-5" width="8" height="10" rx="1.2" />
+          <rect class="satellite-panel" x="9" y="-5" width="8" height="10" rx="1.2" />
+          <rect class="satellite-body" x="-6" y="-6" width="12" height="12" rx="2" />
+          <line class="satellite-boom" x1="0" y1="-8" x2="0" y2="-13" />
+        </g>
+      `;
+    }
+
+
+    /* SKY_PLOT_AOS_TCA_LOS_COLORS_V1 */
+    function skySpecialMarkerClassForPoint(pass, point, index, total) {
+      if (!point || !pass) return "";
+      const pointTime = point.time_utc || "";
+
+      if (index === 0 || pointTime === pass.aos_utc) {
+        return "sky-aos-dot sky-special-dot";
       }
 
-      window.setTimeout(() => currentLeafletMap && currentLeafletMap.invalidateSize(), 0);
+      if (index === total - 1 || pointTime === pass.los_utc) {
+        return "sky-los-dot sky-special-dot";
+      }
+
+      if (pass.tca_utc && pointTime === pass.tca_utc) {
+        return "sky-tca-dot sky-special-dot";
+      }
+
+      /*
+       * High-resolution sample generation can mean the exact TCA timestamp is
+       * not one of the sample times. In that case, make the sample nearest TCA
+       * carry the TCA color.
+       */
+      const target = Date.parse(pass.tca_utc || "");
+      if (Number.isFinite(target)) {
+        const points = (pass.ground_track || []);
+        let bestIndex = -1;
+        let bestDelta = Infinity;
+        points.forEach((candidate, candidateIndex) => {
+          const candidateTime = Date.parse(candidate.time_utc || "");
+          if (!Number.isFinite(candidateTime)) return;
+          const delta = Math.abs(candidateTime - target);
+          if (delta < bestDelta) {
+            bestDelta = delta;
+            bestIndex = candidateIndex;
+          }
+        });
+        if (index === bestIndex) {
+          return "sky-tca-dot sky-special-dot";
+        }
+      }
+
+      return "";
     }
 
     function renderMapPanel(pass, config) {
@@ -1733,16 +2434,22 @@
         const xy = projectSkyPoint(point.azimuth_deg, point.elevation_deg, skySize);
         return `${xy.x.toFixed(1)},${xy.y.toFixed(1)}`;
       }).join(" ");
-      const skyTrackDots = trackPoints.map((point) => {
+      const skyTrackDots = trackPoints.map((point, index) => {
         const xy = projectSkyPoint(point.azimuth_deg, point.elevation_deg, skySize);
         const isFocus = focusPoint && point.time_utc === focusPoint.time_utc;
-        return `<circle class="track-sample-dot" data-time="${escapeHtml(point.time_utc)}" cx="${xy.x.toFixed(1)}" cy="${xy.y.toFixed(1)}" r="${isFocus ? "5.5" : "3.2"}" fill="${isFocus ? "#102030" : "#c4471c"}" stroke="#fff" stroke-width="${isFocus ? "2" : "1.2"}" />`;
+        const specialClass = skySpecialMarkerClassForPoint(pass, point, index, trackPoints.length);
+        const className = specialClass || (isFocus ? "sky-focus-dot" : "sky-sample-dot");
+        const radius = specialClass ? "5.2" : (isFocus ? "5.5" : "3.2");
+        const strokeWidth = specialClass || isFocus ? "2" : "1.2";
+        return `<circle class="${className} track-sample-dot" data-time="${escapeHtml(point.time_utc)}" cx="${xy.x.toFixed(1)}" cy="${xy.y.toFixed(1)}" r="${radius}" fill="${isFocus && !specialClass ? "#102030" : "#c4471c"}" stroke="#fff" stroke-width="${strokeWidth}" />`;
       }).join("");
       const focusSky = focusPoint ? projectSkyPoint(focusPoint.azimuth_deg, focusPoint.elevation_deg, skySize) : null;
       const liveSky = livePoint ? projectSkyPoint(livePoint.azimuth_deg, livePoint.elevation_deg, skySize) : null;
-      const liveLabel = livePoint
-        ? `${formatDateTime(livePoint.time_utc)} | Az ${formatLookAngleValue(livePoint.azimuth_deg)} | El ${formatLookAngleValue(livePoint.elevation_deg)}`
-        : "No live look angle available.";
+      const readoutPoint = livePoint || focusPoint;
+      const readoutTitle = livePoint ? "Live sample" : "Selected sample look angle";
+      const liveLabel = readoutPoint
+        ? `${formatDateTime(readoutPoint.time_utc)} | Az ${formatLookAngleValue(readoutPoint.azimuth_deg)} | El ${formatLookAngleValue(readoutPoint.elevation_deg)}`
+        : "No look angle available.";
       const title = pass
         ? `${pass.name || "Selected pass"} visible ground track`
         : `${config.name || "Observer"} location`;
@@ -1753,6 +2460,17 @@
           <div class="map-views">
             <div class="map-frame">
               <div id="trackerLeafletMap" class="map-canvas" role="img" aria-label="${escapeHtml(title)}"></div>
+              <div class="map-legend">
+                <span class="legend-item"><span class="legend-swatch" style="background:#006f9f"></span>Observer</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#c4471c"></span>Path</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#00a7c7"></span>Progress</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#3e6b85"></span>Look</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#102030"></span>Focus</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#00a7c7"></span>Satellite</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#1a7f37"></span>AOS</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#a15c00"></span>TCA</span>
+                <span class="legend-item"><span class="legend-swatch" style="background:#7d3ad3"></span>LOS</span>
+              </div>
             </div>
             <div class="sky-frame">
               <svg viewBox="0 0 ${skySize} ${skySize}" role="img" aria-label="Polar sky plot">
@@ -1766,96 +2484,41 @@
                 <text x="${skySize - 24}" y="${skyCenter + 5}" text-anchor="middle" font-size="13" fill="#526173">E</text>
                 <text x="${skyCenter}" y="${skySize - 18}" text-anchor="middle" font-size="13" fill="#526173">S</text>
                 <text x="24" y="${skyCenter + 5}" text-anchor="middle" font-size="13" fill="#526173">W</text>
-                <text x="${skyCenter + 6}" y="${skyCenter - (((skySize / 2) - 12) * (2 / 3)) + 2}" font-size="11" fill="#7b8797">60</text>
-                <text x="${skyCenter + 6}" y="${skyCenter - (((skySize / 2) - 12) * (1 / 3)) + 2}" font-size="11" fill="#7b8797">30</text>
-                <text x="${skyCenter + 6}" y="${skyCenter + 12}" font-size="11" fill="#7b8797">90</text>
-                ${trackPoints.length ? `<polyline fill="none" stroke="#c4471c" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="${skyPath}" />` : ""}
-                ${skyProgressPath ? `<polyline fill="none" stroke="#00a7c7" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="8 6" points="${skyProgressPath}" />` : ""}
-                ${liveSky ? `<line x1="${skyCenter}" y1="${skyCenter}" x2="${liveSky.x.toFixed(1)}" y2="${liveSky.y.toFixed(1)}" stroke="#3e6b85" stroke-width="2" stroke-dasharray="5 4" />` : ""}
+                <text x="${skyCenter + 6}" y="${skyCenter - (((skySize / 2) - 12) * (2 / 3)) + 2}" font-size="9.5" fill="#7b8797">30° el</text>
+                <text x="${skyCenter + 6}" y="${skyCenter - (((skySize / 2) - 12) * (1 / 3)) + 2}" font-size="9.5" fill="#7b8797">60°</text>
+                <text x="${skyCenter + 6}" y="${skyCenter + 12}" font-size="9.5" fill="#7b8797">90°</text>
+                ${trackPoints.length ? `<polyline class="sky-pass-path" fill="none" stroke="#c4471c" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="${skyPath}" />` : ""}
+                ${skyProgressPath ? `<polyline class="sky-pass-progress" fill="none" stroke="#00a7c7" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="8 6" points="${skyProgressPath}" />` : ""}
+                ${liveSky ? `<line class="sky-look-line" x1="${skyCenter}" y1="${skyCenter}" x2="${liveSky.x.toFixed(1)}" y2="${liveSky.y.toFixed(1)}" stroke="#3e6b85" stroke-width="2" stroke-dasharray="5 4" />` : ""}
                 ${skyTrackDots}
-                ${focusSky ? `<circle cx="${focusSky.x.toFixed(1)}" cy="${focusSky.y.toFixed(1)}" r="6" fill="#102030" stroke="#fff" stroke-width="2" />` : ""}
-                ${liveSky ? `<circle cx="${liveSky.x.toFixed(1)}" cy="${liveSky.y.toFixed(1)}" r="6" fill="#00a7c7" stroke="#fff" stroke-width="2" />` : ""}
+                ${focusSky ? `<circle class="sky-focus-dot" cx="${focusSky.x.toFixed(1)}" cy="${focusSky.y.toFixed(1)}" r="6" fill="#102030" stroke="#fff" stroke-width="2" />` : ""}
+                ${renderSkySatelliteIcon(liveSky)}
               </svg>
-              <div id="skyLiveReadout" class="sky-live-readout">
-                <strong>Current look angle</strong>
-                <span>${escapeHtml(liveLabel)}</span>
+              <div class="listen-panel">
+                <button id="analogAudioToggleButton" type="button">Listen</button>
+                <span id="analogAudioStatus">Select a pass to listen.</span>
               </div>
             </div>
           </div>
-          <div class="map-toolbar">
-            <div id="mapPickHint" class="map-hint">${mapLocationPickEnabled ? "Map Pick is ON: click the map once to prefill receiver latitude and longitude." : "Map Pick is OFF: map clicks will not change receiver location."}</div>
-            <div class="button-row">
-              <button id="mapPickLocationButton" type="button" class="${mapLocationPickEnabled ? "map-pick-enabled" : ""}" aria-pressed="${mapLocationPickEnabled ? "true" : "false"}">${mapLocationPickEnabled ? "Map Pick: On" : "Map Pick: Off"}</button>
-              <button id="mapResetViewButton" type="button" title="Fit selected pass path">Fit Path</button>
-            </div>
-          </div>
-          ${focusPoint ? `
+          ${livePoint ? `
             <div class="map-info">
-              <div><strong>Sample</strong>${escapeHtml(formatDateTime(focusPoint.time_utc))}</div>
-              <div><strong>Subsat</strong>${escapeHtml(`${focusPoint.latitude_deg.toFixed(3)} deg, ${focusPoint.longitude_deg.toFixed(3)} deg`)}</div>
-              <div><strong>Look Angles</strong>${escapeHtml(`Az ${focusPoint.azimuth_deg} deg, El ${focusPoint.elevation_deg} deg`)}</div>
-              <div><strong>Altitude</strong>${escapeHtml(`${focusPoint.altitude_km} km`)}</div>
-              <div class="full-width">
-                <div class="button-row">
-                  <button id="tuneFocusButton" type="button">Tune Focused RX</button>
-                  <button id="trackFocusStepButton" type="button">Step Track Now</button>
-                  <button id="followLivePointButton" type="button">Follow Live Point</button>
-                </div>
-              </div>
+              <div><strong>Sample</strong>${escapeHtml(formatDateTime(livePoint.time_utc))}</div>
+              <div><strong>Ground Point</strong>${escapeHtml(`${livePoint.latitude_deg.toFixed(3)} deg, ${livePoint.longitude_deg.toFixed(3)} deg`)}</div>
+              <div><strong>Look Angles</strong>${escapeHtml(`Az ${livePoint.azimuth_deg} deg, El ${livePoint.elevation_deg} deg`)}</div>
+              <div><strong>Altitude</strong>${escapeHtml(`${livePoint.altitude_km} km`)}</div>
             </div>
           ` : ""}
-          <div class="map-legend">
-            <span class="legend-item"><span class="legend-swatch" style="background:#006f9f"></span>Observer</span>
-            <span class="legend-item"><span class="legend-swatch" style="background:#c4471c"></span>Visible pass path</span>
-            <span class="legend-item"><span class="legend-swatch" style="background:#00a7c7"></span>AOS-to-now progress</span>
-            <span class="legend-item"><span class="legend-swatch" style="background:#3e6b85"></span>Observer look line</span>
-            <span class="legend-item"><span class="legend-swatch" style="background:#102030"></span>Focused sample</span>
-            <span class="legend-item"><span class="legend-swatch" style="background:#00a7c7"></span>Current track point</span>
-            <span class="legend-item"><span class="legend-swatch" style="background:#1a7f37"></span>AOS</span>
-            <span class="legend-item"><span class="legend-swatch" style="background:#a15c00"></span>TCA</span>
-            <span class="legend-item"><span class="legend-swatch" style="background:#7d3ad3"></span>LOS</span>
-          </div>
-          <div class="map-note">
-            ${pass ? "The map auto-fits the selected active or next pass path. Wheel and double-click zoom are disabled; use the map zoom buttons when needed. The right polar plot shows live azimuth/elevation geometry." : "Select a pass to overlay its flyover path."}${pendingMapLocation ? " The dashed marker is your unsaved observer selection." : ""} Basemap tiles come from OpenStreetMap and require browser internet access.
-          </div>
         </div>
       `;
 
       renderLeafletMap(pass, config, focusPoint, activeTrackPoint);
-      document.getElementById("mapResetViewButton").addEventListener("click", () => resetMapView());
-      const mapPickButton = document.getElementById("mapPickLocationButton");
-      if (mapPickButton) {
-        mapPickButton.addEventListener("click", () => toggleMapLocationPick());
-        setMapLocationPickEnabled(mapLocationPickEnabled);
-      }
-      const tuneFocusButton = document.getElementById("tuneFocusButton");
-      if (tuneFocusButton && pass && focusPoint) {
-        tuneFocusButton.addEventListener("click", () => {
-          tuneFocusedSample(pass, focusPoint, tuneFocusButton).catch((error) => {
-            document.getElementById("status").textContent = error.message;
-          });
-        });
-      }
-      const trackFocusStepButton = document.getElementById("trackFocusStepButton");
-      if (trackFocusStepButton && pass && focusPoint) {
-        trackFocusStepButton.addEventListener("click", () => {
-          stepFocusedSample(pass, focusPoint, trackFocusStepButton).catch((error) => {
-            document.getElementById("status").textContent = error.message;
-          });
-        });
-      }
-      const followLivePointButton = document.getElementById("followLivePointButton");
-      if (followLivePointButton) {
-        followLivePointButton.addEventListener("click", () => {
-          currentMapFocusTime = "";
-          renderMapPanel(currentSelectedPass, currentObserverConfig);
-        });
-      }
+      bindAnalogAudio(pass, node);
+      setMapLocationPickEnabled(mapLocationPickEnabled);
     }
 
     async function tuneFocusedSample(pass, focusPoint, button) {
       if (!focusPoint || !focusPoint.time_utc) {
-        throw new Error("Focused sample does not have a usable time.");
+        throw new Error("Focus does not have a usable time.");
       }
       await ensureSelectedTrack(pass);
       const params = new URLSearchParams({ time_utc: focusPoint.time_utc });
@@ -1925,7 +2588,7 @@
 
     async function stepFocusedSample(pass, focusPoint, button) {
       if (!focusPoint || !focusPoint.time_utc) {
-        throw new Error("Focused sample does not have a usable time.");
+        throw new Error("Focus does not have a usable time.");
       }
       await ensureSelectedTrack(pass);
       button.disabled = true;
@@ -2029,7 +2692,7 @@
       } finally {
         setTimeout(() => {
           button.disabled = false;
-          button.textContent = "Plan Radio Target";
+          button.textContent = "Details";
         }, 1200);
       }
     }
@@ -2061,14 +2724,111 @@
       } finally {
         setTimeout(() => {
           button.disabled = false;
-          button.textContent = "Tune Receiver";
+          button.textContent = "Listen";
         }, 1200);
       }
     }
 
+    /* DENSE_DOPPLER_RADIO_PLAN_V1 */
+    const RADIO_DOPPLER_STEP_SECONDS_V1 = 5;
+
+    function interpolateNumberDopplerV1(a, b, ratio) {
+      const av = Number(a);
+      const bv = Number(b);
+      if (!Number.isFinite(av) && !Number.isFinite(bv)) return undefined;
+      if (!Number.isFinite(av)) return bv;
+      if (!Number.isFinite(bv)) return av;
+      return av + ((bv - av) * ratio);
+    }
+
+    function roundHzDopplerV1(value) {
+      if (!Number.isFinite(Number(value))) return undefined;
+      return Math.round(Number(value));
+    }
+
+    function isoWithoutMillisDopplerV1(epochMs) {
+      return new Date(epochMs).toISOString().replace(".000Z", "Z");
+    }
+
+    function interpolateDopplerPointV1(a, b, epochMs) {
+      const aMs = Date.parse(a.time_utc || "");
+      const bMs = Date.parse(b.time_utc || "");
+      const span = bMs - aMs;
+      const ratio = span > 0 ? Math.max(0, Math.min(1, (epochMs - aMs) / span)) : 0;
+      const point = {
+        ...a,
+        time_utc: isoWithoutMillisDopplerV1(epochMs),
+        interpolated: true
+      };
+
+      for (const key of [
+        "rx_hz",
+        "tx_hz",
+        "rx_offset_hz",
+        "tx_offset_hz",
+        "range_rate_m_s",
+        "range_km",
+        "azimuth_deg",
+        "elevation_deg"
+      ]) {
+        const value = interpolateNumberDopplerV1(a[key], b[key], ratio);
+        if (value === undefined) continue;
+        point[key] = key.endsWith("_hz") ? roundHzDopplerV1(value) : Number(value.toFixed(6));
+      }
+
+      return point;
+    }
+
+    function densifyDopplerPlanForRadioV1(plan, stepSeconds = RADIO_DOPPLER_STEP_SECONDS_V1) {
+      const points = (plan && plan.points) || [];
+      if (points.length < 2) return plan || { points: [] };
+
+      const sorted = points
+        .map((point) => ({ point, epochMs: Date.parse(point.time_utc || "") }))
+        .filter((item) => Number.isFinite(item.epochMs))
+        .sort((a, b) => a.epochMs - b.epochMs);
+
+      if (sorted.length < 2) return plan;
+
+      const stepMs = Math.max(1000, Number(stepSeconds || 5) * 1000);
+      const densePoints = [];
+      const pushUnique = (point) => {
+        if (!point || !point.time_utc) return;
+        if (densePoints.length && densePoints[densePoints.length - 1].time_utc === point.time_utc) return;
+        densePoints.push(point);
+      };
+
+      for (let index = 0; index < sorted.length - 1; index += 1) {
+        const current = sorted[index];
+        const next = sorted[index + 1];
+        pushUnique({ ...current.point, interpolated: false });
+
+        for (let epochMs = current.epochMs + stepMs; epochMs < next.epochMs; epochMs += stepMs) {
+          pushUnique(interpolateDopplerPointV1(current.point, next.point, epochMs));
+        }
+      }
+
+      pushUnique({ ...sorted[sorted.length - 1].point, interpolated: false });
+
+      return {
+        ...(plan || {}),
+        points: densePoints,
+        original_point_count: points.length,
+        dense_point_count: densePoints.length,
+        dense_step_seconds: Math.round(stepMs / 1000),
+        dense_generated_by: "browser"
+      };
+    }
+
+    function denseDopplerPointCountTextV1(plan) {
+      if (!plan || !plan.dense_point_count) return "";
+      return ` | radio plan ${plan.dense_point_count} pts @ ${plan.dense_step_seconds || RADIO_DOPPLER_STEP_SECONDS_V1}s`;
+    }
+
+
     async function planDopplerTrack(pass, button) {
       const radio = pass.radio || {};
-      const plan = pass.doppler_plan;
+      const plan = densifyDopplerPlanForRadioV1(pass.doppler_plan);
       if (!plan || !(plan.points || []).length) return;
 
       const payload = {
@@ -2089,7 +2849,7 @@
       button.textContent = "Planning...";
       try {
         await postJson("/api/radio/track/plan", payload);
-        button.textContent = "Track planned";
+        button.textContent = `Track planned${denseDopplerPointCountTextV1(plan)}`;
         await refreshRadioStatus();
       } catch (error) {
         button.textContent = "Plan failed";
@@ -2097,7 +2857,7 @@
       } finally {
         setTimeout(() => {
           button.disabled = false;
-          button.textContent = "Plan Doppler Track";
+          button.textContent = "Doppler Preview";
         }, 1200);
       }
     }
@@ -2123,7 +2883,7 @@
 
     function dopplerTrackPayload(pass) {
       const radio = pass.radio || {};
-      const plan = pass.doppler_plan;
+      const plan = densifyDopplerPlanForRadioV1(pass.doppler_plan);
       return {
         ok: true,
         state: "track_planned",
@@ -2326,7 +3086,7 @@
       }
 
       if (session.button?.isConnected) {
-        session.button.textContent = "Start Analog Audio";
+        session.button.textContent = "Listen";
       }
       if (session.statusNode?.isConnected) {
         session.statusNode.textContent = reason;
@@ -2393,7 +3153,7 @@
       };
       analogAudioSession = session;
 
-      button.textContent = "Stop Analog Audio";
+      button.textContent = "Stop";
       statusNode.textContent = "Opening backend decoded audio stream...";
 
       const schedulePcmBytes = (pcmBytes) => {
@@ -2524,17 +3284,17 @@ function bindAnalogAudio(pass, node) {
       }
 
       const setIdle = (message) => {
-        button.textContent = "Start Analog Audio";
+        button.textContent = "Listen";
         status.textContent = message;
       };
 
       if (analogAudioSession && analogAudioSession.passKey === passKey(pass)) {
         analogAudioSession.button = button;
         analogAudioSession.statusNode = status;
-        button.textContent = "Stop Analog Audio";
+        button.textContent = "Stop";
         status.textContent = "Streaming live analog FM audio from Pluto...";
       } else {
-        setIdle("Tune the receiver, then start live FM audio.");
+        setIdle("Ready to listen to this pass.");
       }
 
       button.addEventListener("click", async () => {
@@ -2555,18 +3315,35 @@ function bindAnalogAudio(pass, node) {
     }
 
 
+        /* PASS_DETAIL_MODAL_LISTEN_V1B */
+
+    /* PASS_DETAIL_MODAL_LISTEN_V1B */
+    function openPassDetailModal(pass) {
+      renderPassDetail(pass);
+      const modal = document.getElementById("passDetailModal");
+      if (modal) modal.hidden = false;
+    }
+
+    function closePassDetailModal() {
+      const modal = document.getElementById("passDetailModal");
+      if (modal) modal.hidden = true;
+    }
+
     function renderPassDetail(pass) {
       const node = document.getElementById("passDetail");
       if (analogAudioSession && analogAudioSession.passKey !== passKey(pass)) {
         stopAnalogAudio();
       }
+
       currentSelectedPass = pass || null;
       currentSelectedPassKey = passKey(pass);
       currentMapFocusTime = "";
       renderMapPanel(currentSelectedPass, currentObserverConfig);
+
+      if (!node) return;
       if (!pass) {
-        node.className = "empty";
-        node.textContent = "Select a pass to see radio and tracking details.";
+        node.className = "pass-detail-modal-body empty";
+        node.textContent = "Select Details from Next Passes.";
         return;
       }
 
@@ -2576,9 +3353,8 @@ function bindAnalogAudio(pass, node) {
       const tunable = isPassTunable(pass) ? "Yes" : "No";
       const description = radio.description || "-";
       const readiness = passReadiness(pass);
-      const timeSynced = (lastTimeStatus && lastTimeStatus.state) === "synced";
 
-      node.className = "";
+      node.className = "pass-detail-modal-body pass-detail-compact";
       node.innerHTML = `
         <div class="detail-title"></div>
         <div class="detail-subtitle"></div>
@@ -2595,39 +3371,24 @@ function bindAnalogAudio(pass, node) {
           <div>
             <h3>Geometry</h3>
             <dl>
-              <dt>Max elevation</dt><dd></dd>
-              <dt>AOS azimuth</dt><dd></dd>
-              <dt>LOS azimuth</dt><dd></dd>
+              <dt>Max el</dt><dd></dd>
+              <dt>AOS az</dt><dd></dd>
+              <dt>LOS az</dt><dd></dd>
               <dt>TCA range</dt><dd></dd>
             </dl>
           </div>
           <div class="full-width">
-            <h3>Radio Target</h3>
+            <h3>Radio</h3>
             <dl>
               <dt>Downlink</dt><dd></dd>
               <dt>Uplink</dt><dd></dd>
               <dt>Mode</dt><dd></dd>
               <dt>Type</dt><dd></dd>
               <dt>Status</dt><dd></dd>
-              <dt>Pluto tunable</dt><dd></dd>
-              <dt>Track status</dt><dd></dd>
+              <dt>Tunable</dt><dd></dd>
+              <dt>Pass state</dt><dd></dd>
               <dt>Description</dt><dd></dd>
             </dl>
-            <button id="planRadioButton" type="button">Plan Radio Target</button>
-            <button id="tuneRadioButton" type="button">Tune Receiver</button>
-            <button id="planDopplerButton" type="button">Plan Doppler Track</button>
-            <button id="startDopplerButton" type="button">Start Track</button>
-            <button id="stepDopplerButton" type="button">Step Now</button>
-            <button id="stopDopplerButton" type="button">Stop Track</button>
-            <button id="autoStartDopplerButton" type="button">Auto Track</button>
-            <button id="autoStopDopplerButton" type="button">Stop Auto</button>
-            <div class="audio-panel">
-              <h3>Analog Monitor</h3>
-              <p id="analogAudioStatus"></p>
-              <div class="button-row">
-                <button id="analogAudioToggleButton" type="button">Start Analog Audio</button>
-              </div>
-            </div>
           </div>
           <div class="full-width">
             <h3>Doppler Preview</h3>
@@ -2658,59 +3419,12 @@ function bindAnalogAudio(pass, node) {
         description
       ];
       values.forEach((value, index) => {
-        dds[index].textContent = value;
+        if (dds[index]) dds[index].textContent = value;
       });
 
-      const button = node.querySelector("#planRadioButton");
-      button.disabled = !radio.downlink_hz || !readiness.actionable;
-      button.addEventListener("click", () => {
-        planRadioTarget(pass, button).catch((error) => {
-          document.getElementById("status").textContent = error.message;
-        });
-      });
-
-      const tuneButton = node.querySelector("#tuneRadioButton");
-      tuneButton.disabled = !radio.downlink_hz || !readiness.actionable;
-      tuneButton.addEventListener("click", () => {
-        tuneRadioTarget(pass, tuneButton).catch((error) => {
-          document.getElementById("status").textContent = error.message;
-        });
-      });
-
-      const dopplerButton = node.querySelector("#planDopplerButton");
-      dopplerButton.disabled = !readiness.actionable;
-      dopplerButton.addEventListener("click", () => {
-        planDopplerTrack(pass, dopplerButton).catch((error) => {
-          document.getElementById("status").textContent = error.message;
-        });
-      });
-
-      for (const [id, action] of [
-        ["startDopplerButton", "start"],
-        ["stepDopplerButton", "step"],
-        ["stopDopplerButton", "stop"],
-        ["autoStartDopplerButton", "auto/start"],
-        ["autoStopDopplerButton", "auto/stop"]
-      ]) {
-        const trackButton = node.querySelector(`#${id}`);
-        const requiresTimeSync = id === "startDopplerButton" || id === "autoStartDopplerButton";
-        trackButton.disabled =
-          (id !== "stopDopplerButton" && id !== "autoStopDopplerButton" && !readiness.actionable) ||
-          (requiresTimeSync && !timeSynced);
-        if (requiresTimeSync && !timeSynced) {
-          trackButton.title = "Sync Pluto time before starting tracked Doppler control.";
-        }
-        trackButton.addEventListener("click", () => {
-          runSelectedTrackAction(pass, action, trackButton).catch((error) => {
-            document.getElementById("status").textContent = error.message;
-          });
-        });
-      }
-
-      node.querySelector("#dopplerPreview").innerHTML = renderDopplerRows(pass.doppler_plan);
-      bindAnalogAudio(pass, node);
+      const preview = node.querySelector("#dopplerPreview");
+      if (preview) preview.innerHTML = renderDopplerRows(pass.doppler_plan);
     }
-
     /* PASS_LOADING_WATCH_V2 */
     function passPayloadNeedsQuickLoadV2(payload) {
       const passes = (payload && payload.passes) || [];
@@ -2827,6 +3541,7 @@ function bindAnalogAudio(pass, node) {
     }
 
 
+        /* PASS_DETAIL_MODAL_LISTEN_V1B */
     function renderPasses(payload) {
       const node = document.getElementById("passes");
       const passes = payload.passes || [];
@@ -2869,14 +3584,28 @@ function bindAnalogAudio(pass, node) {
         renderPassDetail(null);
         return;
       }
-      const selectedIndex = Math.max(0, visiblePasses.findIndex((pass) => passKey(pass) === currentSelectedPassKey));
+
+      const foundIndex = visiblePasses.findIndex((pass) => passKey(pass) === currentSelectedPassKey);
+      const selectedIndex = foundIndex >= 0 ? foundIndex : 0;
+
+      const selectPass = (pass, row) => {
+        node.querySelectorAll(".pass-row").forEach((item) => item.classList.remove("selected"));
+        if (row) row.classList.add("selected");
+        renderPassDetail(pass);
+      };
+
       for (const [index, pass] of visiblePasses.entries()) {
         const row = document.createElement("div");
         const readiness = passReadiness(pass);
         row.className = index === selectedIndex ? "pass-row selected" : "pass-row";
         row.tabIndex = 0;
         const downlink = (pass.downlinks_hz || [])[0];
-        row.innerHTML = `<div><strong></strong><span></span></div><div></div><div></div>`;
+        row.innerHTML = `
+          <div><strong></strong><span></span></div>
+          <div></div>
+          <div></div>
+          <div><button class="pass-detail-button" type="button">Details</button></div>
+        `;
         row.children[0].querySelector("strong").textContent = pass.name || "";
         row.children[0].querySelector("span").textContent =
           downlink ? `${formatHz(downlink)} ${((pass.modes || [])[0] || "")}` : ((pass.modes || [])[0] || "");
@@ -2885,22 +3614,28 @@ function bindAnalogAudio(pass, node) {
         row.children[2].className = isPassTunable(pass) ? "radio-ok" : "radio-warn";
         row.children[2].textContent = `${readiness.label}: ${renderRadioTarget(pass)}`;
         row.title = `Max ${pass.max_elevation_deg} deg, az ${pass.aos_azimuth_deg}-${pass.los_azimuth_deg}, ${readiness.label}`;
+
+        const detailButton = row.querySelector(".pass-detail-button");
+        detailButton.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          selectPass(pass, row);
+          openPassDetailModal(pass);
+        });
+
         row.addEventListener("click", () => {
-          node.querySelectorAll(".pass-row").forEach((item) => item.classList.remove("selected"));
-          row.classList.add("selected");
-          renderPassDetail(pass);
+          selectPass(pass, row);
         });
         row.addEventListener("keydown", (event) => {
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
-            row.click();
+            selectPass(pass, row);
           }
         });
         node.appendChild(row);
       }
       renderPassDetail(visiblePasses[selectedIndex] || visiblePasses[0]);
     }
-
     async function refresh() {
       const [status, config, catalog, passes, radioStatus, radioHardware, radioTrack, radioTrackState, timeStatus, refreshStatus] = await Promise.all([
         getJson("/api/status"),
@@ -2950,10 +3685,7 @@ function bindAnalogAudio(pass, node) {
         });
       }
       renderMapPanel(currentSelectedPass, currentObserverConfig);
-      document.getElementById("summaryObserver").textContent =
-        `${config.name || "Observer"} | ${Number(config.latitude_deg || 0).toFixed(2)}, ${Number(config.longitude_deg || 0).toFixed(2)}`;
-
-      setDl("storage", [
+setDl("storage", [
         ["Web", status.web_dir],
         ["Config", status.config_dir],
         ["Data", status.data_dir]
@@ -2965,12 +3697,7 @@ function bindAnalogAudio(pass, node) {
         ["Sync state", timeStatus.state || "unknown"],
         ["Last synced", timeStatus.synced_epoch ? formatEpoch(timeStatus.synced_epoch) : "-"]
       ]);
-      document.getElementById("summaryTime").textContent =
-        (timeStatus.state || "unknown") === "synced"
-          ? `Synced ${timeStatus.synced_epoch ? formatEpoch(timeStatus.synced_epoch) : ""}`.trim()
-          : "Sync Pluto time";
-
-      setDl("radioStatus", [
+setDl("radioStatus", [
         ["State", radioStatus.state || "idle"],
         ["Target", radioStatus.name || "-"],
         ["Downlink", radioStatus.downlink_hz ? formatHz(radioStatus.downlink_hz) : "-"],
@@ -2989,12 +3716,7 @@ function bindAnalogAudio(pass, node) {
         ["Track message", radioTrackState.message || "-"],
         ...radioHardwareEntries(radioHardware)
       ]);
-      document.getElementById("summaryTrack").textContent =
-        radioTrackState.state && radioTrackState.state !== "idle"
-          ? `${radioTrackState.state} | ${radioTrackState.rx_hz ? formatHz(radioTrackState.rx_hz) : "no RX"}`
-          : (radioStatus.name ? `Target ${radioStatus.name}` : "Idle");
-
-      const refreshEntries = [
+const refreshEntries = [
         ["State", refreshStatus.state || "idle"],
         ["Target", refreshStatus.target || "-"],
         ["Updated", refreshStatus.updated_utc || "-"],
@@ -3014,10 +3736,7 @@ function bindAnalogAudio(pass, node) {
         renderPasses(passes);
       }
       scheduleRefreshLoop();
-      document.getElementById("summaryPasses").textContent =
-        `${(passes.passes || []).length} passes | ${(refreshStatus.summary && refreshStatus.summary.prediction_hours !== undefined) ? `${refreshStatus.summary.prediction_hours} h window` : "current plan"}`;
-
-      const tbody = document.getElementById("satellites");
+const tbody = document.getElementById("satellites");
       const satellites = catalog.satellites || [];
       const meta = catalog.metadata || {};
       document.getElementById("catalogMeta").textContent =
@@ -3079,6 +3798,18 @@ function bindAnalogAudio(pass, node) {
       closeDrawer();
     });
 
+    const passDetailCloseButton = document.getElementById("passDetailCloseButton");
+    if (passDetailCloseButton) {
+      passDetailCloseButton.addEventListener("click", () => closePassDetailModal());
+    }
+
+    const passDetailModal = document.getElementById("passDetailModal");
+    if (passDetailModal) {
+      passDetailModal.addEventListener("click", (event) => {
+        if (event.target === passDetailModal) closePassDetailModal();
+      });
+    }
+
     for (const id of [
       "observerNameInput",
       "observerLatitudeInput",
@@ -3108,6 +3839,7 @@ function bindAnalogAudio(pass, node) {
 
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
+        closePassDetailModal();
         closeDrawer();
       }
     });
