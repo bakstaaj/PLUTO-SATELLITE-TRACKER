@@ -2038,7 +2038,33 @@
         }, 1200);
       }
     }
-
+    /* UI_BACKEND_AUDIO_PLAYER_V1
+     * Backend-owned audio streaming.
+     *
+     * The old player pulled short WAV blocks and scheduled them with WebAudio.
+     * That caused staccato playback when network/browser timing drifted.
+     *
+     * New model:
+     *   selected pass -> backend DSP start -> browser <audio> streams live.wav?stream=1
+     * The backend owns tuning/DSP/buffering. The browser only plays a single stream.
+     */
+        /* UI_STREAMING_PCM_PLAYER_V2
+     * Backend-owned streaming audio with browser PCM playback.
+     *
+     * Native <audio> rejects some endless WAV streams. This player fetches the
+     * single backend live.wav?stream=1 stream, skips the WAV header, converts
+     * signed 16-bit little-endian PCM to Float32, and schedules it through
+     * WebAudio. The browser does not tune, demodulate, or poll blocks; it only
+     * plays the backend decoded stream.
+     */
+        /* UI_STREAMING_PCM_RECONNECT_V3
+     * Backend-owned streaming audio with browser PCM playback and reconnect.
+     *
+     * Some backend WAV streams close after a short segment. While the session is
+     * active, the browser reopens /api/radio/audio/live.wav?stream=1 instead of
+     * stopping playback. The backend still owns tuning, DSP, and PCM generation;
+     * the browser only plays decoded PCM.
+     */
     function analogAudioUrl(pass) {
       const radio = pass && pass.radio ? pass.radio : {};
       const downlink = radio.downlink_hz || (pass && pass.downlinks_hz ? pass.downlinks_hz[0] : 0);
@@ -2047,33 +2073,66 @@
       return {
         downlink,
         startUrl: `/api/radio/audio/live/start?${params.toString()}`,
-        streamBaseUrl: `/api/radio/audio/live.wav?${params.toString()}`,
+        streamUrl: `/api/radio/audio/live.wav?stream=1&${params.toString()}`,
         stopUrl: `/api/radio/audio/live/stop`
       };
+    }
+
+    function concatUint8Arrays(a, b) {
+      if (!a || !a.length) return b || new Uint8Array();
+      if (!b || !b.length) return a;
+      const out = new Uint8Array(a.length + b.length);
+      out.set(a, 0);
+      out.set(b, a.length);
+      return out;
+    }
+
+    function pcm16ToAudioBuffer(context, bytes, sampleRate) {
+      const sampleCount = Math.floor(bytes.length / 2);
+      const buffer = context.createBuffer(1, sampleCount, sampleRate);
+      const channel = buffer.getChannelData(0);
+      const view = new DataView(bytes.buffer, bytes.byteOffset, sampleCount * 2);
+      for (let i = 0; i < sampleCount; i += 1) {
+        const sample = view.getInt16(i * 2, true);
+        channel[i] = Math.max(-1, Math.min(1, sample / 32768));
+      }
+      return buffer;
     }
 
     async function stopAnalogAudio(reason = "Analog monitor stopped.") {
       const session = analogAudioSession;
       analogAudioSession = null;
       if (!session) return;
+
       session.stopped = true;
-      if (session.pumpTimer) {
-        window.clearTimeout(session.pumpTimer);
+      if (session.reconnectTimer) {
+        window.clearTimeout(session.reconnectTimer);
+        session.reconnectTimer = 0;
       }
       try {
         if (session.controller) session.controller.abort();
       } catch (_error) {
       }
+
+      try {
+        for (const source of session.sources || []) {
+          try { source.stop(); } catch (_error) {}
+        }
+      } catch (_error) {
+      }
+
       try {
         if (session.stopUrl) {
           await postJson(session.stopUrl, {});
         }
       } catch (_error) {
       }
+
       try {
         if (session.context) await session.context.close();
       } catch (_error) {
       }
+
       if (session.button?.isConnected) {
         session.button.textContent = "Start Analog Audio";
       }
@@ -2085,8 +2144,8 @@
     async function startAnalogAudio(pass, button, statusNode) {
       const audioUrls = analogAudioUrl(pass);
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      const analogSampleRate = 24000;
-      const liveBlockSamples = 12000;
+      const sampleRate = 24000;
+      const targetChunkBytes = 4096 * 2;
       if (!AudioCtx) {
         throw new Error("Web Audio is not available in this browser.");
       }
@@ -2095,102 +2154,172 @@
       }
 
       await stopAnalogAudio();
+
+      statusNode.textContent = "Planning backend tuning and Doppler tracking...";
+      try {
+        await getJson(`/api/radio/plan?${new URLSearchParams({
+          name: pass.name || "",
+          norad: String(pass.norad_id || ""),
+          aos: pass.aos_utc || "",
+          downlink: String(audioUrls.downlink),
+          mode: (pass.radio && pass.radio.mode) || (pass.modes || [])[0] || "",
+          description: (pass.radio && pass.radio.description) || ""
+        }).toString()}`);
+      } catch (_error) {
+        // Continue: live/start can still tune directly by downlink_hz.
+      }
+
+      if (pass.doppler_plan && (pass.doppler_plan.points || []).length) {
+        try {
+          await postJson("/api/radio/track/plan", dopplerTrackPayload(pass));
+          await getJson("/api/radio/track/auto/start");
+        } catch (_error) {
+          // Continue with fixed-frequency audio if auto tracking cannot start.
+        }
+      }
+
+      statusNode.textContent = "Starting backend audio DSP...";
       await postJson(audioUrls.startUrl, {});
 
-      const context = new AudioCtx({ sampleRate: analogSampleRate });
+      const context = new AudioCtx({ sampleRate });
       await context.resume();
 
-      const controller = new AbortController();
       const session = {
         button,
         context,
-        controller,
-        cursor: 0,
+        controller: null,
         nextTime: context.currentTime + 0.35,
         passKey: passKey(pass),
-        pumpTimer: 0,
+        reconnectCount: 0,
+        reconnectTimer: 0,
+        sources: [],
         statusNode,
         stopUrl: audioUrls.stopUrl,
-        stopped: false
+        stopped: false,
+        totalBytes: 0,
+        totalBuffers: 0
       };
       analogAudioSession = session;
 
       button.textContent = "Stop Analog Audio";
-      statusNode.textContent = "Streaming live analog FM audio from Pluto...";
+      statusNode.textContent = "Opening backend decoded audio stream...";
 
-      const pumpAnalogAudio = async () => {
-        if (analogAudioSession !== session || session.stopped) return;
+      const schedulePcmBytes = (pcmBytes) => {
+        if (session.stopped || !pcmBytes.length) return;
+        const evenLength = pcmBytes.length - (pcmBytes.length % 2);
+        if (evenLength <= 0) return;
 
-        try {
-          const response = await fetch(`${audioUrls.streamBaseUrl}&from=${session.cursor}&samples=${liveBlockSamples}&request=${Date.now()}`, {
-            cache: "no-store",
-            signal: controller.signal
-          });
-          if (session.stopped) return;
+        const audioBuffer = pcm16ToAudioBuffer(context, pcmBytes.slice(0, evenLength), sampleRate);
+        const source = context.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(context.destination);
+        source.onended = () => {
+          const index = session.sources.indexOf(source);
+          if (index >= 0) session.sources.splice(index, 1);
+        };
 
-          if (response.status === 204) {
-            session.pumpTimer = window.setTimeout(pumpAnalogAudio, 120);
-            return;
+        const startAt = Math.max(context.currentTime + 0.05, session.nextTime);
+        source.start(startAt);
+        session.nextTime = startAt + audioBuffer.duration;
+        session.sources.push(source);
+        session.totalBuffers += 1;
+
+        const bufferedSeconds = Math.max(0, session.nextTime - context.currentTime);
+        if (statusNode?.isConnected) {
+          statusNode.textContent = `Playing backend decoded audio from Pluto (${bufferedSeconds.toFixed(1)}s buffered, reconnects ${session.reconnectCount}).`;
+        }
+      };
+
+      const readOneStreamSegment = async () => {
+        const controller = new AbortController();
+        session.controller = controller;
+        const streamUrl = `${audioUrls.streamUrl}&request=${Date.now()}&reconnect=${session.reconnectCount}`;
+        const response = await fetch(streamUrl, {
+          cache: "no-store",
+          signal: controller.signal
+        });
+
+        if (!response.ok) {
+          throw new Error(`${streamUrl}: ${response.status}`);
+        }
+        if (!response.body || !response.body.getReader) {
+          throw new Error("Browser streaming fetch is not available.");
+        }
+
+        const reader = response.body.getReader();
+        let pending = new Uint8Array();
+        let headerSkipped = false;
+        let segmentBytes = 0;
+
+        const processPending = (force = false) => {
+          if (!headerSkipped) {
+            if (pending.length < 44) return;
+            pending = pending.slice(44);
+            headerSkipped = true;
           }
 
-          if (response.status === 416) {
-            let payload = null;
-            try {
-              payload = await parseJsonResponse(response, audioUrls.streamBaseUrl);
-            } catch (_error) {
+          while (pending.length >= targetChunkBytes || (force && pending.length >= 2)) {
+            const take = force ? pending.length - (pending.length % 2) : targetChunkBytes;
+            const chunk = pending.slice(0, take);
+            pending = pending.slice(take);
+            schedulePcmBytes(chunk);
+          }
+        };
+
+        while (!session.stopped) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (!value || !value.length) continue;
+
+          segmentBytes += value.length;
+          session.totalBytes += value.length;
+          pending = concatUint8Arrays(pending, value);
+          processPending(false);
+
+          if (statusNode?.isConnected && session.totalBuffers === 0) {
+            statusNode.textContent = `Receiving backend audio stream (${session.totalBytes} bytes)...`;
+          }
+        }
+
+        processPending(true);
+        return segmentBytes;
+      };
+
+      const reconnectLoop = async () => {
+        while (!session.stopped && analogAudioSession === session) {
+          try {
+            const segmentBytes = await readOneStreamSegment();
+            if (session.stopped || analogAudioSession !== session) return;
+
+            session.reconnectCount += 1;
+            const bufferedSeconds = Math.max(0, session.nextTime - context.currentTime);
+            if (statusNode?.isConnected) {
+              statusNode.textContent =
+                `Backend stream segment ended after ${segmentBytes} bytes; reconnecting (${bufferedSeconds.toFixed(1)}s buffered).`;
             }
-            session.cursor = Number(payload && payload.available_samples ? payload.available_samples : 0);
-            session.pumpTimer = window.setTimeout(pumpAnalogAudio, 150);
+
+            // Reconnect quickly. If the buffer is empty, reconnect immediately.
+            const delayMs = bufferedSeconds > 0.8 ? 200 : 20;
+            await new Promise((resolve) => {
+              session.reconnectTimer = window.setTimeout(resolve, delayMs);
+            });
+            session.reconnectTimer = 0;
+          } catch (error) {
+            if (session.stopped || analogAudioSession !== session) return;
+            const message = error && error.message ? error.message : "Backend audio stream failed.";
+            if (statusNode?.isConnected) statusNode.textContent = message;
+            const statusBar = document.getElementById("status");
+            if (statusBar) statusBar.textContent = message;
+            await stopAnalogAudio(message);
             return;
-          }
-
-          if (!response.ok) {
-            throw new Error(`${audioUrls.streamBaseUrl}: ${response.status}`);
-          }
-
-          const sourceSamples = Number(response.headers.get("X-Source-Samples") || "0");
-          const wavData = await response.arrayBuffer();
-          if (!wavData.byteLength || sourceSamples <= 0) {
-            session.pumpTimer = window.setTimeout(pumpAnalogAudio, 120);
-            return;
-          }
-
-          const decoded = await context.decodeAudioData(wavData.slice(0));
-
-          const source = context.createBufferSource();
-          source.buffer = decoded;
-          source.connect(context.destination);
-
-          const startAt = Math.max(context.currentTime + 0.04, session.nextTime);
-          source.start(startAt);
-          session.nextTime = startAt + decoded.duration;
-          session.cursor += sourceSamples;
-
-          const bufferedSeconds = session.nextTime - context.currentTime;
-          session.pumpTimer = window.setTimeout(pumpAnalogAudio, bufferedSeconds > 1.0 ? 180 : 25);
-        } catch (error) {
-          if (!session.stopped) {
-            throw error;
           }
         }
       };
 
-      pumpAnalogAudio().catch(async (error) => {
-        if (analogAudioSession === session) {
-          await stopAnalogAudio("Analog monitor stopped.");
-        }
-        const message = error && error.message ? error.message : "Unable to start analog audio.";
-        if (statusNode?.isConnected) {
-          statusNode.textContent = message;
-        }
-        const statusBar = document.getElementById("status");
-        if (statusBar) {
-          statusBar.textContent = message;
-        }
-      });
+      reconnectLoop();
     }
 
-    function bindAnalogAudio(pass, node) {
+function bindAnalogAudio(pass, node) {
       const button = node.querySelector("#analogAudioToggleButton");
       const status = node.querySelector("#analogAudioStatus");
       const audioUrls = analogAudioUrl(pass);

@@ -24,6 +24,8 @@
 #include <pthread.h>
 
 #define APP_VERSION "0.1.0"
+/* BACKEND_STREAMING_AUDIO_STREAM_ROUTE_V1C */
+/* BACKEND_STREAMING_AUDIO_ROUTE_FIX_V1B */
 #define DEFAULT_BIND_ADDR "127.0.0.1"
 #define DEFAULT_NET_BIND_ADDR "0.0.0.0"
 #define DEFAULT_PORT 8080
@@ -2015,6 +2017,105 @@ static int send_audio_chunk_json(int fd, const struct app_config *cfg, const cha
     }
 }
 
+
+
+/* BACKEND_STREAMING_AUDIO_ROUTE_RECOVERY_V1F
+ * Backend-owned continuous audio streaming.
+ * The browser should only attach an <audio> element to the returned WAV stream.
+ */
+static int query_param_is_true(const char *query, const char *name)
+{
+    char value[32] = "";
+    query_param(query, name, value, sizeof(value));
+    return strcmp(value, "1") == 0 ||
+           strcmp(value, "true") == 0 ||
+           strcmp(value, "yes") == 0 ||
+           strcmp(value, "on") == 0;
+}
+
+static int send_live_audio_stream(int fd, const char *query)
+{
+    char from_text[64] = "";
+    size_t cursor_samples = 0;
+    size_t idle_loops = 0;
+
+    (void)query;
+    query_param(query, "from", from_text, sizeof(from_text));
+    if (from_text[0] && !parse_size_param(from_text, &cursor_samples)) {
+        return send_audio_error_json(fd, 400, "Bad Request", "valid from cursor is required");
+    }
+
+    pthread_mutex_lock(&g_audio_live_lock);
+    if (!refresh_live_audio_process_locked()) {
+        pthread_mutex_unlock(&g_audio_live_lock);
+        return send_audio_error_json(fd, 409, "Conflict", "live analog audio is not running");
+    }
+    pthread_mutex_unlock(&g_audio_live_lock);
+
+    if (send_audio_header(fd) != 0 || send_wav_header_chunk(fd, AUDIO_SAMPLE_RATE, 1, 16) != 0) {
+        return -1;
+    }
+
+    while (g_running) {
+        size_t available_samples;
+        size_t sample_count;
+        short pcm[AUDIO_PCM_CHUNK_SAMPLES];
+        FILE *input;
+
+        pthread_mutex_lock(&g_audio_live_lock);
+        if (!refresh_live_audio_process_locked()) {
+            pthread_mutex_unlock(&g_audio_live_lock);
+            break;
+        }
+        pthread_mutex_unlock(&g_audio_live_lock);
+
+        available_samples = live_audio_available_samples();
+        if (cursor_samples >= available_samples) {
+            idle_loops++;
+            usleep(50000);
+            if (idle_loops >= 20) {
+                short silence[480];
+                memset(silence, 0, sizeof(silence));
+                if (send_chunk(fd, silence, sizeof(silence)) != 0) {
+                    return -1;
+                }
+                idle_loops = 0;
+            }
+            continue;
+        }
+        idle_loops = 0;
+
+        sample_count = available_samples - cursor_samples;
+        if (sample_count > AUDIO_PCM_CHUNK_SAMPLES) {
+            sample_count = AUDIO_PCM_CHUNK_SAMPLES;
+        }
+
+        input = fopen(AUDIO_LIVE_PCM_PATH, "rb");
+        if (!input) {
+            usleep(50000);
+            continue;
+        }
+        if (fseek(input, (long)(cursor_samples * sizeof(short)), SEEK_SET) != 0) {
+            fclose(input);
+            return -1;
+        }
+        sample_count = fread(pcm, sizeof(short), sample_count, input);
+        fclose(input);
+
+        if (sample_count == 0) {
+            usleep(50000);
+            continue;
+        }
+
+        if (send_chunk(fd, pcm, sample_count * sizeof(short)) != 0) {
+            return -1;
+        }
+        cursor_samples += sample_count;
+    }
+
+    return finish_chunked_response(fd);
+}
+
 static void send_live_audio_start(int fd, const struct app_config *cfg, const char *query)
 {
     char frequency_text[64] = "";
@@ -2054,8 +2155,297 @@ static void send_live_audio_stop(int fd)
     send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
 }
 
+
+/* BACKEND_AUDIO_EXISTING_LIVE_WAV_STREAM_V1E
+ * Continuous backend-owned WAV stream over the existing /api/radio/audio/live.wav route.
+ * Browser usage: <audio src="/api/radio/audio/live.wav?stream=1">.
+ */
+/* BACKEND_AUDIO_TAIL_STREAM_V1H
+ * Continuous browser audio stream mode.
+ *
+ * The old /api/radio/audio/live.wav endpoint is a block/cursor endpoint and may
+ * legitimately return 204 while the backend DSP file is still filling.  That is
+ * unsuitable for an <audio> element.  This handler keeps the browser side simple:
+ * it emits a normal chunked WAV stream immediately, then tails the backend PCM
+ * file written by pluto_fm_receiver.  If the DSP has not produced samples yet,
+ * it sends short silence chunks instead of returning 204.
+ */
+static void send_live_audio_stream(int fd, const char *query)
+{
+    char seconds_text[64] = "";
+    int max_seconds = 180;
+    time_t started = time(NULL);
+    size_t read_offset = 0;
+    short pcm[AUDIO_PCM_CHUNK_SAMPLES];
+    int idle_loops = 0;
+
+    query_param(query, "seconds", seconds_text, sizeof(seconds_text));
+    if (seconds_text[0]) {
+        char *end = NULL;
+        long parsed = strtol(seconds_text, &end, 10);
+        if (end && *end == '\0' && parsed >= 5 && parsed <= 3600) {
+            max_seconds = (int)parsed;
+        }
+    }
+
+    pthread_mutex_lock(&g_audio_live_lock);
+    if (!refresh_live_audio_process_locked()) {
+        pthread_mutex_unlock(&g_audio_live_lock);
+        send_audio_error_json(fd, 409, "Conflict", "live analog audio is not running");
+        return;
+    }
+    pthread_mutex_unlock(&g_audio_live_lock);
+
+    if (send_audio_header(fd) != 0 || send_wav_header_chunk(fd, AUDIO_SAMPLE_RATE, 1, 16) != 0) {
+        return;
+    }
+
+    while (g_running && (time(NULL) - started) < max_seconds) {
+        size_t available = live_audio_available_samples();
+
+        if (available > read_offset) {
+            FILE *input = fopen(AUDIO_LIVE_PCM_PATH, "rb");
+            if (input) {
+                size_t wanted = available - read_offset;
+                size_t got;
+                if (wanted > AUDIO_PCM_CHUNK_SAMPLES) {
+                    wanted = AUDIO_PCM_CHUNK_SAMPLES;
+                }
+                if (fseek(input, (long)(read_offset * sizeof(short)), SEEK_SET) == 0) {
+                    got = fread(pcm, sizeof(short), wanted, input);
+                    if (got > 0) {
+                        if (send_chunk(fd, pcm, got * sizeof(short)) != 0) {
+                            fclose(input);
+                            return;
+                        }
+                        read_offset += got;
+                        idle_loops = 0;
+                    }
+                }
+                fclose(input);
+                usleep(20000);
+                continue;
+            }
+        }
+
+        pthread_mutex_lock(&g_audio_live_lock);
+        if (!refresh_live_audio_process_locked()) {
+            pthread_mutex_unlock(&g_audio_live_lock);
+            break;
+        }
+        pthread_mutex_unlock(&g_audio_live_lock);
+
+        /* Keep the browser decoder alive while the backend helper warms up. */
+        if (++idle_loops >= 3) {
+            if (send_pcm_silence_chunk(fd, 2400) != 0) {
+                return;
+            }
+            idle_loops = 0;
+        }
+        usleep(100000);
+    }
+
+    finish_chunked_response(fd);
+}
+
+
+/* BACKEND_STREAMING_AUDIO_TAIL_STREAM_V1I
+ * Continuous backend-owned browser stream for the existing live.wav endpoint.
+ * The browser receives one WAV stream; Pluto owns tuning, DSP, buffering, and pacing.
+ */
+static int send_live_audio_tail_stream_v1i(int fd, const char *query)
+{
+    char seconds_text[64] = "";
+    int requested_seconds = 0;
+    time_t started = time(NULL);
+    size_t cursor_samples = 0;
+    int header_sent = 0;
+
+    query_param(query, "seconds", seconds_text, sizeof(seconds_text));
+    if (seconds_text[0]) {
+        char *end = NULL;
+        long parsed = strtol(seconds_text, &end, 10);
+        if (end && *end == '\0' && parsed > 0 && parsed <= 3600) {
+            requested_seconds = (int)parsed;
+        }
+    }
+
+    pthread_mutex_lock(&g_audio_live_lock);
+    if (!refresh_live_audio_process_locked()) {
+        pthread_mutex_unlock(&g_audio_live_lock);
+        return send_audio_error_json(fd, 409, "Conflict", "live analog audio is not running");
+    }
+    pthread_mutex_unlock(&g_audio_live_lock);
+
+    if (send_audio_header(fd) != 0 ||
+        send_wav_header_chunk(fd, AUDIO_SAMPLE_RATE, 1, 16) != 0) {
+        return -1;
+    }
+    header_sent = 1;
+    (void)header_sent;
+
+    while (g_running) {
+        FILE *input = NULL;
+        int sent_pcm = 0;
+        size_t available_samples;
+        size_t to_read;
+        short pcm[2400];
+
+        if (requested_seconds > 0 && (time(NULL) - started) >= requested_seconds) {
+            break;
+        }
+
+        pthread_mutex_lock(&g_audio_live_lock);
+        if (!refresh_live_audio_process_locked()) {
+            pthread_mutex_unlock(&g_audio_live_lock);
+            break;
+        }
+        pthread_mutex_unlock(&g_audio_live_lock);
+
+        available_samples = live_audio_available_samples();
+        if (cursor_samples > available_samples) {
+            cursor_samples = 0;
+        }
+
+        if (available_samples > cursor_samples) {
+            to_read = available_samples - cursor_samples;
+            if (to_read > sizeof(pcm) / sizeof(pcm[0])) {
+                to_read = sizeof(pcm) / sizeof(pcm[0]);
+            }
+
+            input = fopen(AUDIO_LIVE_PCM_PATH, "rb");
+            if (input) {
+                if (fseek(input, (long)(cursor_samples * sizeof(short)), SEEK_SET) == 0) {
+                    size_t got = fread(pcm, sizeof(short), to_read, input);
+                    if (got > 0) {
+                        if (send_chunk(fd, pcm, got * sizeof(short)) != 0) {
+                            fclose(input);
+                            return -1;
+                        }
+                        cursor_samples += got;
+                        sent_pcm = 1;
+                    }
+                }
+                fclose(input);
+            }
+        }
+
+        if (!sent_pcm) {
+            /* Keep the HTTP audio stream alive while pluto_fm_receiver/iio_readdev warms up. */
+            if (send_pcm_silence_chunk(fd, 1200) != 0) {
+                return -1;
+            }
+            usleep(50000);
+        }
+    }
+
+    return finish_chunked_response(fd);
+}
+
+
+/* BACKEND_AUDIO_FORCE_TAIL_STREAM_V1J_BEGIN */
+static int audio_query_stream_enabled_v1j(const char *query)
+{
+    char value[32] = "";
+
+    if (!query || !*query) {
+        return 0;
+    }
+    query_param(query, "stream", value, sizeof(value));
+    return strcmp(value, "1") == 0 ||
+           strcmp(value, "true") == 0 ||
+           strcmp(value, "yes") == 0;
+}
+
+static int audio_query_seconds_v1j(const char *query, int fallback_seconds)
+{
+    char value[32] = "";
+    char *end = NULL;
+    long parsed;
+
+    if (!query || !*query) {
+        return fallback_seconds;
+    }
+    query_param(query, "seconds", value, sizeof(value));
+    if (!value[0]) {
+        return fallback_seconds;
+    }
+    errno = 0;
+    parsed = strtol(value, &end, 10);
+    if (errno != 0 || !end || *end != '\0') {
+        return fallback_seconds;
+    }
+    if (parsed < 1) {
+        parsed = 1;
+    } else if (parsed > 3600) {
+        parsed = 3600;
+    }
+    return (int)parsed;
+}
+
+static int send_live_audio_tail_stream_v1j(int fd, const char *query)
+{
+    short pcm[2400];
+    size_t cursor = 0;
+    int seconds = audio_query_seconds_v1j(query, 0);
+    time_t start_epoch = time(NULL);
+
+    if (send_audio_header(fd) != 0 || send_wav_header_chunk(fd, AUDIO_SAMPLE_RATE, 1, 16) != 0) {
+        return -1;
+    }
+
+    while (g_running) {
+        size_t available = live_audio_available_samples();
+
+        if (seconds > 0 && time(NULL) - start_epoch >= seconds) {
+            break;
+        }
+
+        if (cursor < available) {
+            FILE *input = fopen(AUDIO_LIVE_PCM_PATH, "rb");
+            if (input) {
+                size_t wanted = available - cursor;
+                size_t got = 0;
+                if (wanted > sizeof(pcm) / sizeof(pcm[0])) {
+                    wanted = sizeof(pcm) / sizeof(pcm[0]);
+                }
+                if (fseek(input, (long)(cursor * sizeof(short)), SEEK_SET) == 0) {
+                    got = fread(pcm, sizeof(short), wanted, input);
+                }
+                fclose(input);
+                if (got > 0) {
+                    if (send_chunk(fd, pcm, got * sizeof(short)) != 0) {
+                        return -1;
+                    }
+                    cursor += got;
+                    continue;
+                }
+            }
+        }
+
+        /* Keep the browser decoder alive while the backend DSP warms up. */
+        if (send_pcm_silence_chunk(fd, 1200) != 0) {
+            return -1;
+        }
+        usleep(50000);
+    }
+
+    return finish_chunked_response(fd);
+}
+/* BACKEND_AUDIO_FORCE_TAIL_STREAM_V1J_END */
+
 static void send_live_audio_block(int fd, const char *query)
 {
+
+    {
+        char stream_text[32] = "";
+        query_param(query, "stream", stream_text, sizeof(stream_text));
+        if (strcmp(stream_text, "1") == 0 || strcmp(stream_text, "true") == 0 || strcmp(stream_text, "yes") == 0) {
+            send_live_audio_stream(fd, query);
+            return;
+        }
+    }
+
     char from_text[64] = "";
     char samples_text[64] = "";
     char extra_headers[128];
@@ -2066,8 +2456,35 @@ static void send_live_audio_block(int fd, const char *query)
     size_t available_samples;
     size_t sample_count;
     char body[256];
+    /* BACKEND_AUDIO_FORCE_TAIL_STREAM_V1J_BRANCH_BEGIN */
+    if (audio_query_stream_enabled_v1j(query)) {
+        (void)send_live_audio_tail_stream_v1j(fd, query);
+        return;
+    }
+    /* BACKEND_AUDIO_FORCE_TAIL_STREAM_V1J_BRANCH_END */
 
-    pthread_mutex_lock(&g_audio_live_lock);
+
+    /* BACKEND_AUDIO_EXISTING_LIVE_WAV_STREAM_V1E: use existing live.wav route as a continuous stream when requested. */
+    {
+        char stream_text[32] = "";
+        query_param(query, "stream", stream_text, sizeof(stream_text));
+        if (strcmp(stream_text, "1") == 0 ||
+            strcmp(stream_text, "true") == 0 ||
+            strcmp(stream_text, "yes") == 0) {
+            send_live_audio_stream(fd);
+            return;
+        }
+    }
+
+        /* BACKEND_STREAMING_AUDIO_TAIL_STREAM_V1I_SWITCH
+     * Must run before the old block-reader can return 204 No Content.
+     */
+    if (query && (strstr(query, "stream=1") || strstr(query, "stream=true"))) {
+        (void)send_live_audio_tail_stream_v1i(fd, query);
+        return;
+    }
+
+pthread_mutex_lock(&g_audio_live_lock);
     if (!refresh_live_audio_process_locked()) {
         pthread_mutex_unlock(&g_audio_live_lock);
         send_audio_error_json(fd, 409, "Conflict", "live analog audio is not running");
@@ -2144,6 +2561,112 @@ static void send_live_audio_block(int fd, const char *query)
 
     send_wav_block_response(fd, pcm_buffer, sample_count, from_sample, available_samples);
     free(pcm_buffer);
+}
+
+
+/* BACKEND_STREAMING_AUDIO_V1: continuous backend decoded WAV stream for browser playback. */
+static int send_live_audio_stream(int fd, const struct app_config *cfg, const char *query)
+{
+    char frequency_text[64] = "";
+    char debug_line[256];
+    long long frequency_hz = 0;
+    size_t cursor = 0;
+    size_t idle_loops = 0;
+    int need_start = 1;
+
+    query_param(query, "downlink_hz", frequency_text, sizeof(frequency_text));
+    if (frequency_text[0]) {
+        if (!parse_frequency_hz(frequency_text, &frequency_hz)) {
+            return send_audio_error_json(fd, 400, "Bad Request", "valid downlink_hz is required");
+        }
+    } else if (!read_active_audio_frequency_hz(cfg, &frequency_hz)) {
+        return send_audio_error_json(fd, 409, "Conflict", "plan or tune a satellite first, or pass downlink_hz");
+    }
+
+    pthread_mutex_lock(&g_audio_live_lock);
+    if (refresh_live_audio_process_locked() && g_live_audio.frequency_hz == frequency_hz) {
+        need_start = 0;
+        cursor = live_audio_available_samples();
+        if (cursor > (size_t)AUDIO_SAMPLE_RATE) {
+            cursor -= (size_t)AUDIO_SAMPLE_RATE;
+        } else {
+            cursor = 0;
+        }
+    }
+    pthread_mutex_unlock(&g_audio_live_lock);
+
+    if (need_start) {
+        if (!start_live_audio_session(cfg, frequency_hz)) {
+            return send_audio_error_json(fd, 500, "Internal Server Error", "could not start backend Pluto audio DSP");
+        }
+        cursor = 0;
+    }
+
+    if (send_audio_header(fd) != 0 || send_wav_header_chunk(fd, AUDIO_SAMPLE_RATE, 1, 16) != 0) {
+        append_audio_debug("live_stream header failed");
+        return -1;
+    }
+
+    snprintf(debug_line, sizeof(debug_line), "live_stream start hz=%lld cursor=%lu", frequency_hz, (unsigned long)cursor);
+    append_audio_debug(debug_line);
+
+    while (g_running) {
+        size_t available = live_audio_available_samples();
+        int running;
+
+        pthread_mutex_lock(&g_audio_live_lock);
+        running = refresh_live_audio_process_locked();
+        pthread_mutex_unlock(&g_audio_live_lock);
+
+        if (available > cursor) {
+            size_t sample_count = available - cursor;
+            FILE *input;
+            short *pcm;
+
+            if (sample_count > AUDIO_LIVE_DEFAULT_BLOCK_SAMPLES) {
+                sample_count = AUDIO_LIVE_DEFAULT_BLOCK_SAMPLES;
+            }
+            input = fopen(AUDIO_LIVE_PCM_PATH, "rb");
+            if (!input) {
+                usleep(50000);
+                continue;
+            }
+            if (fseek(input, (long)(cursor * sizeof(short)), SEEK_SET) != 0) {
+                fclose(input);
+                return -1;
+            }
+            pcm = (short *)malloc(sample_count * sizeof(short));
+            if (!pcm) {
+                fclose(input);
+                return -1;
+            }
+            sample_count = fread(pcm, sizeof(short), sample_count, input);
+            fclose(input);
+            if (sample_count > 0) {
+                if (send_chunk(fd, pcm, sample_count * sizeof(short)) != 0) {
+                    free(pcm);
+                    append_audio_debug("live_stream send_chunk failed");
+                    return -1;
+                }
+                cursor += sample_count;
+                idle_loops = 0;
+            }
+            free(pcm);
+            continue;
+        }
+
+        if (!running) {
+            append_audio_debug("live_stream helper stopped");
+            break;
+        }
+        if (++idle_loops > 2400) {
+            append_audio_debug("live_stream timeout waiting for audio samples");
+            break;
+        }
+        usleep(50000);
+    }
+
+    return finish_chunked_response(fd);
 }
 
 static int contains_nocase(const char *haystack, const char *needle)
@@ -3104,6 +3627,12 @@ static void handle_request(
 {
     char file_path[PATH_BUF_SIZE];
 
+    /* BACKEND_STREAMING_AUDIO_STREAM_ROUTE_V1D_EARLY_GUARD: keep continuous browser audio out of fragile router branches. */
+    if (strcmp(path, "/api/radio/audio/live/stream.wav") == 0) {
+        send_live_audio_stream(fd, query);
+        return;
+    }
+
     if (strcmp(method, "GET") != 0 && strcmp(method, "HEAD") != 0 && strcmp(method, "POST") != 0) {
         send_text(fd, 405, "Method Not Allowed", "application/json; charset=utf-8",
                   "{\"ok\":false,\"error\":\"method not allowed\"}\n");
@@ -3190,8 +3719,16 @@ static void handle_request(
         send_pcm_live_stream(fd, cfg, query);
     } else if (strcmp(path, "/api/radio/audio/fm_chunk") == 0) {
         send_audio_chunk_json(fd, cfg, query);
+    } else if (strcmp(path, "/api/radio/audio/live/stream.wav") == 0) {
+        send_live_audio_stream(fd, cfg, query);
+    } else if (strcmp(path, "/api/radio/audio/live/stream.wav") == 0) {
+        send_live_audio_stream(fd, query);
     } else if (strcmp(path, "/api/radio/audio/live.wav") == 0) {
-        send_live_audio_block(fd, query);
+        if (query_param_is_true(query, "stream")) {
+            send_live_audio_stream(fd, query);
+        } else {
+            send_live_audio_block(fd, query);
+        }
     } else if (strcmp(path, "/api/radio/plan") == 0) {
         send_radio_plan(fd, cfg, query);
     } else if (strcmp(path, "/api/radio/tune") == 0) {
