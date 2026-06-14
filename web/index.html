@@ -672,6 +672,77 @@
       font-size: 12px;
     }
 
+
+    /* MAP_UI_CONTROLS_V1 */
+    .map-pick-enabled {
+      background: var(--warn);
+      border-color: var(--warn);
+      color: #261d00;
+    }
+
+    .sky-live-readout {
+      margin-top: 8px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel2);
+      font-size: 13px;
+      color: var(--ink);
+    }
+
+    .sky-live-readout strong {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 3px;
+    }
+
+
+    /* PASS_LOADING_SPINNER_V1 */
+    .pass-loading {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px;
+      border: 1px dashed var(--line);
+      border-radius: 12px;
+      background: var(--panel2);
+      color: var(--ink);
+    }
+
+    .pass-loading-spinner {
+      width: 22px;
+      height: 22px;
+      border: 3px solid rgba(30, 73, 95, 0.18);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: passLoadingSpin 0.9s linear infinite;
+      flex: 0 0 auto;
+    }
+
+    .pass-loading-text {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .pass-loading-title {
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .pass-loading-detail {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    @keyframes passLoadingSpin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
     @media (max-width: 760px) {
       main {
         grid-template-columns: 1fr;
@@ -923,7 +994,13 @@
 
       <section>
         <h2>Next Passes</h2>
-        <div id="passes" class="empty">Loading passes...</div>
+        <div id="passes" class="pass-loading">
+          <div class="pass-loading-spinner" aria-hidden="true"></div>
+          <div class="pass-loading-text">
+            <div class="pass-loading-title">Loading passes...</div>
+            <div class="pass-loading-detail">Connecting to Pluto and preparing the quick pass preview.</div>
+          </div>
+        </div>
       </section>
 
       <section>
@@ -947,6 +1024,7 @@
     let currentSelectedPass = null;
     let currentSelectedPassKey = "";
     let pendingMapLocation = null;
+    let mapLocationPickEnabled = false; // MAP_UI_CONTROLS_V1
     let pendingObserverDraft = null;
     let observerEditLockUntil = 0;
     let observerEditingActive = false;
@@ -1380,9 +1458,81 @@
       return `<div class="map-popup">${details.join("<br>")}</div>`;
     }
 
+
     function resetMapView() {
       currentLeafletView = null;
       renderMapPanel(currentSelectedPass, currentObserverConfig);
+    }
+
+    function setMapLocationPickEnabled(enabled) {
+      mapLocationPickEnabled = Boolean(enabled);
+      const button = document.getElementById("mapPickLocationButton");
+      if (button) {
+        button.textContent = mapLocationPickEnabled ? "Map Pick: On" : "Map Pick: Off";
+        button.classList.toggle("map-pick-enabled", mapLocationPickEnabled);
+        button.setAttribute("aria-pressed", mapLocationPickEnabled ? "true" : "false");
+        button.title = mapLocationPickEnabled
+          ? "Map clicks will set a pending receiver location. Click a map point or toggle off."
+          : "Toggle on before clicking the map to change receiver location.";
+      }
+      const hint = document.getElementById("mapPickHint");
+      if (hint) {
+        hint.textContent = mapLocationPickEnabled
+          ? "Map Pick is ON: click the map once to prefill receiver latitude and longitude."
+          : "Map Pick is OFF: map clicks will not change receiver location.";
+      }
+    }
+
+    function toggleMapLocationPick() {
+      setMapLocationPickEnabled(!mapLocationPickEnabled);
+    }
+
+    function trackPointIndexForPoint(points, point) {
+      if (!point || !(points || []).length) return -1;
+      if (point.time_utc) {
+        const exactIndex = points.findIndex((candidate) => candidate.time_utc === point.time_utc);
+        if (exactIndex >= 0) return exactIndex;
+      }
+      const target = Date.parse(point.time_utc || "");
+      if (!Number.isFinite(target)) return -1;
+      let bestIndex = -1;
+      let bestDelta = Infinity;
+      points.forEach((candidate, index) => {
+        const candidateTime = Date.parse(candidate.time_utc || "");
+        if (!Number.isFinite(candidateTime)) return;
+        const delta = Math.abs(candidateTime - target);
+        if (delta < bestDelta) {
+          bestDelta = delta;
+          bestIndex = index;
+        }
+      });
+      return bestIndex;
+    }
+
+        /* MAP_NULL_PASS_STARTUP_FIX_V1 */
+    function liveLookPointForPass(pass, activeTrackPoint, focusPoint) {
+      if (activeTrackPoint) return activeTrackPoint;
+      if (!pass) return focusPoint || null;
+
+      const trackPoints = (pass && pass.ground_track) || [];
+      if (!trackPoints.length) return focusPoint || null;
+
+      const timing = passTimingState(pass);
+      if (timing === "active") {
+        return findNearestTrackPoint(pass, new Date().toISOString()) || focusPoint || trackPoints[0] || null;
+      }
+      return focusPoint || trackPoints[0] || null;
+    }
+
+    function pathThroughPoint(points, point) {
+      const index = trackPointIndexForPoint(points, point);
+      if (index < 0) return [];
+      return points.slice(0, index + 1);
+    }
+
+    function formatLookAngleValue(value) {
+      if (!Number.isFinite(Number(value))) return "-";
+      return `${Number(value).toFixed(1)} deg`;
     }
 
     function renderLeafletMap(pass, config, focusPoint, activeTrackPoint) {
@@ -1403,8 +1553,13 @@
       const overlayBounds = [observerLatLng];
       currentLeafletMap = L.map(mapNode, {
         zoomControl: false,
+        scrollWheelZoom: false,
+        doubleClickZoom: false,
         worldCopyJump: true
       });
+
+      currentLeafletMap.scrollWheelZoom.disable();
+      currentLeafletMap.doubleClickZoom.disable();
 
       L.control.zoom({ position: "topright" }).addTo(currentLeafletMap);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -1437,6 +1592,8 @@
       }
 
       const trackPoints = (pass && pass.ground_track) || [];
+      const livePoint = liveLookPointForPass(pass, activeTrackPoint, focusPoint);
+      const progressPoints = pathThroughPoint(trackPoints, livePoint);
       const segments = splitTrackSegments(trackPoints);
       segments.forEach((segment) => {
         const latLngs = segment.map((point) => {
@@ -1449,6 +1606,22 @@
             color: "#c4471c",
             weight: 4,
             opacity: 0.9,
+            bubblingMouseEvents: false
+          }).addTo(currentLeafletMap);
+        }
+      });
+
+      const progressSegments = splitTrackSegments(progressPoints);
+      progressSegments.forEach((segment) => {
+        const latLngs = segment.map((point) => [Number(point.latitude_deg || 0), normalizeLongitude(point.longitude_deg)]);
+        if (latLngs.length > 1) {
+          L.polyline(latLngs, {
+            color: "#00a7c7",
+            weight: 5,
+            opacity: 0.95,
+            dashArray: "8 6",
+            lineCap: "round",
+            lineJoin: "round",
             bubblingMouseEvents: false
           }).addTo(currentLeafletMap);
         }
@@ -1480,7 +1653,7 @@
         { point: trackPoints[0], label: "AOS", color: "#1a7f37" },
         { point: trackPoints.length ? trackPoints[Math.floor(trackPoints.length / 2)] : null, label: "TCA", color: "#a15c00" },
         { point: trackPoints.length ? trackPoints[trackPoints.length - 1] : null, label: "LOS", color: "#7d3ad3" },
-        { point: activeTrackPoint, label: "Now", color: "#00a7c7" }
+        { point: livePoint, label: "Now", color: "#00a7c7" }
       ].forEach(({ point, label, color }) => {
         if (!point) return;
         const latLng = [Number(point.latitude_deg || 0), normalizeLongitude(point.longitude_deg)];
@@ -1494,8 +1667,8 @@
         }).addTo(currentLeafletMap).bindPopup(formatMapPopup(point, label));
       });
 
-      if (focusPoint) {
-        const focusLatLng = [Number(focusPoint.latitude_deg || 0), normalizeLongitude(focusPoint.longitude_deg)];
+      if (livePoint) {
+        const focusLatLng = [Number(livePoint.latitude_deg || 0), normalizeLongitude(livePoint.longitude_deg)];
         L.polyline([observerLatLng, focusLatLng], {
           color: "#3e6b85",
           weight: 2,
@@ -1506,6 +1679,12 @@
       }
 
       currentLeafletMap.on("click", (event) => {
+        if (!mapLocationPickEnabled) {
+          const status = document.getElementById("status");
+          if (status) status.textContent = "Map Pick is off. Toggle Map Pick On before clicking the map to change receiver location.";
+          return;
+        }
+
         pendingMapLocation = {
           latitude_deg: event.latlng.lat,
           longitude_deg: event.latlng.lng
@@ -1515,23 +1694,15 @@
           longitude_deg: event.latlng.lng.toFixed(5)
         });
         applyObserverInputs(pendingObserverDraft);
+        setMapLocationPickEnabled(false);
         renderMapPanel(currentSelectedPass, currentObserverConfig);
         document.getElementById("status").textContent = `Map selected ${event.latlng.lat.toFixed(5)}, ${event.latlng.lng.toFixed(5)}. Save Location to apply it.`;
       });
 
-      currentLeafletMap.on("moveend", () => {
-        const center = currentLeafletMap.getCenter();
-        currentLeafletView = {
-          center: [center.lat, center.lng],
-          zoom: currentLeafletMap.getZoom()
-        };
-        currentLeafletPassKey = passKeyValue;
-      });
-
-      if (currentLeafletView && currentLeafletPassKey === passKeyValue) {
-        currentLeafletMap.setView(currentLeafletView.center, currentLeafletView.zoom);
-      } else if (overlayBounds.length > 1) {
-        currentLeafletMap.fitBounds(overlayBounds, { padding: [24, 24] });
+      currentLeafletPassKey = passKeyValue;
+      currentLeafletView = null;
+      if (overlayBounds.length > 1) {
+        currentLeafletMap.fitBounds(overlayBounds, { padding: [28, 28], maxZoom: 6 });
       } else {
         currentLeafletMap.setView(observerLatLng, 4);
       }
@@ -1550,9 +1721,15 @@
       const trackPoints = (pass && pass.ground_track) || [];
       const activeTrackPoint = trackedPointForPass(pass, lastTrackState);
       const focusPoint = focusedMapPoint(pass, lastTrackState);
+      const livePoint = liveLookPointForPass(pass, activeTrackPoint, focusPoint);
+      const progressPoints = pathThroughPoint(trackPoints, livePoint);
       const skySize = 340;
       const skyCenter = skySize / 2;
       const skyPath = trackPoints.map((point) => {
+        const xy = projectSkyPoint(point.azimuth_deg, point.elevation_deg, skySize);
+        return `${xy.x.toFixed(1)},${xy.y.toFixed(1)}`;
+      }).join(" ");
+      const skyProgressPath = progressPoints.map((point) => {
         const xy = projectSkyPoint(point.azimuth_deg, point.elevation_deg, skySize);
         return `${xy.x.toFixed(1)},${xy.y.toFixed(1)}`;
       }).join(" ");
@@ -1562,7 +1739,10 @@
         return `<circle class="track-sample-dot" data-time="${escapeHtml(point.time_utc)}" cx="${xy.x.toFixed(1)}" cy="${xy.y.toFixed(1)}" r="${isFocus ? "5.5" : "3.2"}" fill="${isFocus ? "#102030" : "#c4471c"}" stroke="#fff" stroke-width="${isFocus ? "2" : "1.2"}" />`;
       }).join("");
       const focusSky = focusPoint ? projectSkyPoint(focusPoint.azimuth_deg, focusPoint.elevation_deg, skySize) : null;
-      const activeSky = activeTrackPoint ? projectSkyPoint(activeTrackPoint.azimuth_deg, activeTrackPoint.elevation_deg, skySize) : null;
+      const liveSky = livePoint ? projectSkyPoint(livePoint.azimuth_deg, livePoint.elevation_deg, skySize) : null;
+      const liveLabel = livePoint
+        ? `${formatDateTime(livePoint.time_utc)} | Az ${formatLookAngleValue(livePoint.azimuth_deg)} | El ${formatLookAngleValue(livePoint.elevation_deg)}`
+        : "No live look angle available.";
       const title = pass
         ? `${pass.name || "Selected pass"} visible ground track`
         : `${config.name || "Observer"} location`;
@@ -1590,17 +1770,23 @@
                 <text x="${skyCenter + 6}" y="${skyCenter - (((skySize / 2) - 12) * (1 / 3)) + 2}" font-size="11" fill="#7b8797">30</text>
                 <text x="${skyCenter + 6}" y="${skyCenter + 12}" font-size="11" fill="#7b8797">90</text>
                 ${trackPoints.length ? `<polyline fill="none" stroke="#c4471c" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="${skyPath}" />` : ""}
-                ${focusSky ? `<line x1="${skyCenter}" y1="${skyCenter}" x2="${focusSky.x.toFixed(1)}" y2="${focusSky.y.toFixed(1)}" stroke="#3e6b85" stroke-width="2" stroke-dasharray="5 4" />` : ""}
+                ${skyProgressPath ? `<polyline fill="none" stroke="#00a7c7" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="8 6" points="${skyProgressPath}" />` : ""}
+                ${liveSky ? `<line x1="${skyCenter}" y1="${skyCenter}" x2="${liveSky.x.toFixed(1)}" y2="${liveSky.y.toFixed(1)}" stroke="#3e6b85" stroke-width="2" stroke-dasharray="5 4" />` : ""}
                 ${skyTrackDots}
                 ${focusSky ? `<circle cx="${focusSky.x.toFixed(1)}" cy="${focusSky.y.toFixed(1)}" r="6" fill="#102030" stroke="#fff" stroke-width="2" />` : ""}
-                ${activeSky ? `<circle cx="${activeSky.x.toFixed(1)}" cy="${activeSky.y.toFixed(1)}" r="5" fill="#00a7c7" stroke="#fff" stroke-width="2" />` : ""}
+                ${liveSky ? `<circle cx="${liveSky.x.toFixed(1)}" cy="${liveSky.y.toFixed(1)}" r="6" fill="#00a7c7" stroke="#fff" stroke-width="2" />` : ""}
               </svg>
+              <div id="skyLiveReadout" class="sky-live-readout">
+                <strong>Current look angle</strong>
+                <span>${escapeHtml(liveLabel)}</span>
+              </div>
             </div>
           </div>
           <div class="map-toolbar">
-            <div class="map-hint">Pan and zoom the map. Click it to prefill observer latitude and longitude.</div>
+            <div id="mapPickHint" class="map-hint">${mapLocationPickEnabled ? "Map Pick is ON: click the map once to prefill receiver latitude and longitude." : "Map Pick is OFF: map clicks will not change receiver location."}</div>
             <div class="button-row">
-              <button id="mapResetViewButton" type="button" title="Reset map view">Reset</button>
+              <button id="mapPickLocationButton" type="button" class="${mapLocationPickEnabled ? "map-pick-enabled" : ""}" aria-pressed="${mapLocationPickEnabled ? "true" : "false"}">${mapLocationPickEnabled ? "Map Pick: On" : "Map Pick: Off"}</button>
+              <button id="mapResetViewButton" type="button" title="Fit selected pass path">Fit Path</button>
             </div>
           </div>
           ${focusPoint ? `
@@ -1621,6 +1807,7 @@
           <div class="map-legend">
             <span class="legend-item"><span class="legend-swatch" style="background:#006f9f"></span>Observer</span>
             <span class="legend-item"><span class="legend-swatch" style="background:#c4471c"></span>Visible pass path</span>
+            <span class="legend-item"><span class="legend-swatch" style="background:#00a7c7"></span>AOS-to-now progress</span>
             <span class="legend-item"><span class="legend-swatch" style="background:#3e6b85"></span>Observer look line</span>
             <span class="legend-item"><span class="legend-swatch" style="background:#102030"></span>Focused sample</span>
             <span class="legend-item"><span class="legend-swatch" style="background:#00a7c7"></span>Current track point</span>
@@ -1629,13 +1816,18 @@
             <span class="legend-item"><span class="legend-swatch" style="background:#7d3ad3"></span>LOS</span>
           </div>
           <div class="map-note">
-            ${pass ? "The left panel shows a real basemap with the visible ground track, and the right polar plot shows azimuth/elevation geometry for the same focused sample." : "Select a pass to overlay its flyover path."}${pendingMapLocation ? " The dashed marker is your unsaved observer selection." : ""} Basemap tiles come from OpenStreetMap and require browser internet access.
+            ${pass ? "The map auto-fits the selected active or next pass path. Wheel and double-click zoom are disabled; use the map zoom buttons when needed. The right polar plot shows live azimuth/elevation geometry." : "Select a pass to overlay its flyover path."}${pendingMapLocation ? " The dashed marker is your unsaved observer selection." : ""} Basemap tiles come from OpenStreetMap and require browser internet access.
           </div>
         </div>
       `;
 
       renderLeafletMap(pass, config, focusPoint, activeTrackPoint);
       document.getElementById("mapResetViewButton").addEventListener("click", () => resetMapView());
+      const mapPickButton = document.getElementById("mapPickLocationButton");
+      if (mapPickButton) {
+        mapPickButton.addEventListener("click", () => toggleMapLocationPick());
+        setMapLocationPickEnabled(mapLocationPickEnabled);
+      }
       const tuneFocusButton = document.getElementById("tuneFocusButton");
       if (tuneFocusButton && pass && focusPoint) {
         tuneFocusButton.addEventListener("click", () => {
@@ -2519,6 +2711,122 @@ function bindAnalogAudio(pass, node) {
       bindAnalogAudio(pass, node);
     }
 
+    /* PASS_LOADING_WATCH_V2 */
+    function passPayloadNeedsQuickLoadV2(payload) {
+      const passes = (payload && payload.passes) || [];
+      if (!passes.length) return true;
+      const startMs = Date.parse((payload && payload.start_utc) || "");
+      if (!Number.isFinite(startMs)) return true;
+      return Math.abs(Date.now() - startMs) > (15 * 60 * 1000);
+    }
+
+    function showPassLoadingFeedbackV2(title, detail) {
+      window.__plutoPassLoadingWatchV2 = true;
+      const passesNode = document.getElementById("passes");
+      if (!passesNode) return;
+      passesNode.className = "pass-loading";
+      passesNode.innerHTML = `
+        <div class="pass-loading-spinner" aria-hidden="true"></div>
+        <div class="pass-loading-text">
+          <div class="pass-loading-title">${escapeHtml(title || "Loading passes...")}</div>
+          <div class="pass-loading-detail">${escapeHtml(detail || "Watching Pluto for the quick pass preview.")}</div>
+        </div>
+      `;
+    }
+
+    function shouldKeepPassLoadingSpinnerV2(passesPayload, refreshStatus) {
+      if (!window.__plutoPassLoadingWatchV2) return false;
+      const target = (refreshStatus && refreshStatus.target) || "";
+      const state = (refreshStatus && refreshStatus.state) || "";
+      const running = target === "passes" && !["", "idle", "ok", "failed"].includes(state);
+      return running && passPayloadNeedsQuickLoadV2(passesPayload);
+    }
+
+
+    /* PASS_LOADING_FILE_WATCH_V3 */
+    function passPayloadTimestampV3(payload) {
+      return String((payload && payload.generated_utc) || "");
+    }
+
+    function passPayloadStartMsV3(payload) {
+      const startMs = Date.parse((payload && payload.start_utc) || "");
+      return Number.isFinite(startMs) ? startMs : 0;
+    }
+
+    function rememberPassPayloadStampV3(payload) {
+      const generated = passPayloadTimestampV3(payload);
+      const startUtc = String((payload && payload.start_utc) || "");
+      if (generated) window.__plutoLastPassGeneratedUtcV3 = generated;
+      if (startUtc) window.__plutoLastPassStartUtcV3 = startUtc;
+    }
+
+    function startPassFileWatchV3(title, detail) {
+      const existing = window.__plutoPassFileWatchV3 || {};
+      window.__plutoPassFileWatchV3 = {
+        active: true,
+        startedAt: Date.now(),
+        previousGeneratedUtc: existing.previousGeneratedUtc || window.__plutoLastPassGeneratedUtcV3 || "",
+        previousStartUtc: existing.previousStartUtc || window.__plutoLastPassStartUtcV3 || ""
+      };
+      if (typeof showPassLoadingFeedbackV2 === "function") {
+        showPassLoadingFeedbackV2(title, detail);
+      } else if (typeof showPassLoadingFeedbackV1 === "function") {
+        showPassLoadingFeedbackV1(title, detail);
+      } else {
+        const passesNode = document.getElementById("passes");
+        if (passesNode) {
+          passesNode.className = "empty";
+          passesNode.textContent = title || "Loading passes...";
+        }
+      }
+    }
+
+    function passPayloadLooksCurrentForBrowserV3(payload) {
+      const passes = (payload && payload.passes) || [];
+      if (!passes.length) return false;
+      const startMs = passPayloadStartMsV3(payload);
+      if (!startMs) return false;
+      return Math.abs(Date.now() - startMs) <= (15 * 60 * 1000);
+    }
+
+    function passPayloadLooksNewEnoughV3(payload) {
+      if (!passPayloadLooksCurrentForBrowserV3(payload)) return false;
+      const watch = window.__plutoPassFileWatchV3 || {};
+      const generated = passPayloadTimestampV3(payload);
+      if (!watch.active) return true;
+
+      /*
+       * During a manual or startup refresh, do not render the old pass list
+       * simply because it has some rows. Wait for generated_utc to change.
+       * If no previous stamp is known, current-enough rows are acceptable.
+       */
+      if (watch.previousGeneratedUtc && generated && generated === watch.previousGeneratedUtc) {
+        return false;
+      }
+      return true;
+    }
+
+    function shouldKeepPassFileSpinnerV3(passesPayload) {
+      const watch = window.__plutoPassFileWatchV3 || {};
+      if (!watch.active) return false;
+      if (passPayloadLooksNewEnoughV3(passesPayload)) {
+        window.__plutoPassFileWatchV3.active = false;
+        rememberPassPayloadStampV3(passesPayload);
+        return false;
+      }
+
+      /*
+       * Keep watching for up to 2 minutes. If the backend never publishes a new
+       * file, let the normal error/empty state appear instead of spinning forever.
+       */
+      if (Date.now() - Number(watch.startedAt || 0) > (2 * 60 * 1000)) {
+        window.__plutoPassFileWatchV3.active = false;
+        return false;
+      }
+      return true;
+    }
+
+
     function renderPasses(payload) {
       const node = document.getElementById("passes");
       const passes = payload.passes || [];
@@ -2695,7 +3003,16 @@ function bindAnalogAudio(pass, node) {
       appendRefreshSummary(refreshEntries, refreshStatus);
       setDl("refreshStatus", refreshEntries);
 
-      renderPasses(passes);
+      if (shouldKeepPassFileSpinnerV3(passes)) {
+        const refreshState = (refreshStatus && refreshStatus.state) || "waiting";
+        startPassFileWatchV3(
+          "Loading quick pass preview...",
+          `Watching /api/passes for a new pass file. Refresh state: ${refreshState}.`
+        );
+      } else {
+        rememberPassPayloadStampV3(passes);
+        renderPasses(passes);
+      }
       scheduleRefreshLoop();
       document.getElementById("summaryPasses").textContent =
         `${(passes.passes || []).length} passes | ${(refreshStatus.summary && refreshStatus.summary.prediction_hours !== undefined) ? `${refreshStatus.summary.prediction_hours} h window` : "current plan"}`;
@@ -2854,6 +3171,21 @@ function bindAnalogAudio(pass, node) {
         }
       }
 
+
+      /* PASS_LOADING_SPINNER_V1 */
+      function showPassLoadingFeedbackV2(title, detail) {
+        const passesNode = document.getElementById("passes");
+        if (!passesNode) return;
+        passesNode.className = "pass-loading";
+        passesNode.innerHTML = `
+          <div class="pass-loading-spinner" aria-hidden="true"></div>
+          <div class="pass-loading-text">
+            <div class="pass-loading-title">${escapeHtml(title || "Loading passes...")}</div>
+            <div class="pass-loading-detail">${escapeHtml(detail || "The quick preview will appear first; the full 24-hour rebuild continues in the background.")}</div>
+          </div>
+        `;
+      }
+
       async function syncPlutoTimeFromBrowserV3() {
         const result = await getJson(`/api/time/sync?epoch=${browserEpochSeconds()}`);
         try {
@@ -2894,6 +3226,7 @@ function bindAnalogAudio(pass, node) {
       async function triggerBrowserOwnedPassRefreshV3() {
         await syncPlutoTimeFromBrowserV3();
         const poster = originalPostJson || postJson;
+        startPassFileWatchV3("Requesting quick pass preview...", "Waiting for Pluto to publish the first pass results.");
         const result = await poster("/api/refresh/passes", {});
         scheduleFullRefreshPollV3();
         return result;
@@ -2904,18 +3237,23 @@ function bindAnalogAudio(pass, node) {
         browserBootstrapStarted = true;
         try {
           setBrowserStatus("Syncing browser time...", "pending");
+          startPassFileWatchV3("Syncing Pluto time...", "Using browser time before requesting pass predictions.");
           await syncPlutoTimeFromBrowserV3();
           await refresh();
           const passesPayload = await getJson("/api/passes");
           if (passPayloadNeedsBrowserRefresh(passesPayload)) {
             setBrowserStatus("Loading quick pass preview...", "pending");
+            startPassFileWatchV3("Loading quick pass preview...", "A short pass list will appear first; the full 24-hour pass rebuild continues after that.");
             await triggerBrowserOwnedPassRefreshV3();
             await refresh();
           }
         } catch (error) {
           setBrowserStatus("Startup refresh failed", "stopped");
           const passesNode = document.getElementById("passes");
-          if (passesNode) passesNode.textContent = error.message || String(error);
+          if (passesNode) {
+          passesNode.className = "empty";
+          passesNode.textContent = error.message || String(error);
+        }
         } finally {
           browserBootstrapStarted = false;
         }
@@ -2968,6 +3306,7 @@ function bindAnalogAudio(pass, node) {
           try {
             await syncPlutoTimeFromBrowserV3();
             button.textContent = "Loading preview...";
+            startPassFileWatchV3("Regenerating pass preview...", "The quick pass list will update first; full results continue in the background.");
             await (originalPostJson || postJson)(`/api/refresh/${target}`, {});
             scheduleFullRefreshPollV3();
             button.textContent = "Done";
