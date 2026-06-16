@@ -1,183 +1,184 @@
 #!/bin/sh
-# Pluto Satellite Tracker autorun.
-#
-# Installed to:
-#   /mnt/jffs2/autorun.sh
-#
+# Pluto Satellite Tracker autorun - reboot survival v3
 # AUTORUN_RUNTIME_HARDENING_V1
-# It mounts SD, validates read/write runtime, fixes execute permissions,
-# ensures observer.json exists, and starts the tracker backend.
-
+# REBOOT_SURVIVAL_HARDENING_V2
 set +e
 
-ENV_FILE="/mnt/jffs2/pluto_sat_tracker.env"
-if [ -f "$ENV_FILE" ]; then
-  . "$ENV_FILE"
+APP_ROOT="${APP_ROOT:-/mnt/jffs2/pluto_sat_tracker}"
+BIN="${BIN:-$APP_ROOT/bin/pluto_sat_tracker}"
+if [ ! -x "$BIN" ] && [ -x "$APP_ROOT/pluto_sat_tracker" ]; then
+  BIN="$APP_ROOT/pluto_sat_tracker"
 fi
 
-DEPLOY_DIR="${PLUTO_DEPLOY_DIR:-/mnt/jffs2/pluto_sat_tracker}"
-SD_ROOT="${PLUTO_SD_ROOT:-/media/mmcblk0p1/pluto_sat_tracker}"
-SD_MOUNT="${PLUTO_SD_MOUNT:-/media/mmcblk0p1}"
-SD_DEV="${PLUTO_SD_DEV:-/dev/mmcblk0p1}"
-WEB_DIR="${PLUTO_WEB_DIR:-$DEPLOY_DIR/web}"
-DATA_DIR="${PLUTO_DATA_DIR:-$SD_ROOT/data}"
-CONFIG_DIR="${PLUTO_CONFIG_DIR:-$SD_ROOT/config}"
 BIND_ADDR="${PLUTO_BIND_ADDR:-0.0.0.0}"
 PORT="${PLUTO_PORT:-8080}"
-LOG_DIR="$SD_ROOT/logs"
-LOG_FILE="/tmp/pluto_sat_tracker_autorun.log"
+SD_DEV="${PLUTO_SD_DEV:-/dev/mmcblk0p1}"
+SD_ROOT="${PLUTO_SD_ROOT:-/media/mmcblk0p1}"
+RUNTIME_ROOT="${PLUTO_RUNTIME_ROOT:-$SD_ROOT/pluto_sat_tracker}"
+DATA_DIR="${PLUTO_DATA_DIR:-$RUNTIME_ROOT/data}"
+CONFIG_DIR="${PLUTO_CONFIG_DIR:-$RUNTIME_ROOT/config}"
+LOG_DIR="${PLUTO_LOG_DIR:-$RUNTIME_ROOT/logs}"
+TMP_DIR="${PLUTO_TMP_DIR:-$RUNTIME_ROOT/tmp}"
+WEB_DIR="${PLUTO_WEB_DIR:-$APP_ROOT/web}"
+ENV_FILE="${PLUTO_ENV_FILE:-/mnt/jffs2/pluto_sat_tracker.env}"
+BOOT_LOG="/tmp/pluto_sat_tracker_autorun_boot.log"
+LOG="$BOOT_LOG"
 
 log() {
-  echo "$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date) $*" >> "$LOG_FILE"
-}
-
-is_mounted() {
-  grep -qs " $1 " /proc/mounts
-}
-
-mount_line() {
-  grep " $SD_MOUNT " /proc/mounts | tail -1
-}
-
-is_rw_mount() {
-  mount_line | grep -q " rw,"
-}
-
-kill_matching() {
-  pattern="$1"
-  ps w 2>/dev/null | awk -v pat="$pattern" '$0 ~ pat && $0 !~ /awk/ {print $1}' | while read pid; do
-    case "$pid" in
-      ''|*[!0-9]*) ;;
-      *) kill "$pid" 2>/dev/null || true ;;
-    esac
-  done
+  TS="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo 1970-01-01T00:00:00Z)"
+  echo "$TS $*" >> "$LOG"
 }
 
 ensure_sd_mounted_rw() {
-  mkdir -p "$SD_MOUNT"
-  if ! is_mounted "$SD_MOUNT" && [ -b "$SD_DEV" ]; then
-    mount "$SD_DEV" "$SD_MOUNT" >>"$LOG_FILE" 2>&1
+  mkdir -p "$SD_ROOT" 2>/dev/null || true
+  mount "$SD_DEV" "$SD_ROOT" 2>/dev/null || true
+
+  if touch "$SD_ROOT/.pluto_sat_tracker_rw_test" 2>/dev/null; then
+    rm -f "$SD_ROOT/.pluto_sat_tracker_rw_test" 2>/dev/null || true
+    return 0
   fi
 
-  if is_mounted "$SD_MOUNT" && ! is_rw_mount; then
-    log "WARN: SD mounted read-only; attempting remount,rw"
-    mount -o remount,rw "$SD_MOUNT" >>"$LOG_FILE" 2>&1 || true
+  log "SD not writable; attempting repair/remount"
+  sync 2>/dev/null || true
+  umount "$SD_ROOT" 2>/dev/null || true
+
+  if command -v fsck.vfat >/dev/null 2>&1; then
+    fsck.vfat -p "$SD_DEV" >>/tmp/pluto_sat_tracker_sd_fsck.log 2>&1 || true
+  elif command -v dosfsck >/dev/null 2>&1; then
+    dosfsck -a "$SD_DEV" >>/tmp/pluto_sat_tracker_sd_fsck.log 2>&1 || true
   fi
 
-  mkdir -p "$DATA_DIR" "$CONFIG_DIR" "$LOG_DIR" "$SD_ROOT/tmp" >>"$LOG_FILE" 2>&1 || {
-    log "ERROR: cannot create SD runtime dirs; SD may be read-only"
-    exit 1
-  }
+  mount -o rw "$SD_DEV" "$SD_ROOT" 2>/dev/null || mount "$SD_DEV" "$SD_ROOT" 2>/dev/null || true
 
-  TEST="$SD_ROOT/.autorun_rw_test_$$"
-  echo "rw-test" > "$TEST" 2>>"$LOG_FILE" || {
-    log "ERROR: SD runtime is not writable; repair SD card and rerun install"
-    mount_line >>"$LOG_FILE" 2>&1 || true
-    exit 1
-  }
-  rm -f "$TEST" 2>>"$LOG_FILE" || true
+  if touch "$SD_ROOT/.pluto_sat_tracker_rw_test" 2>/dev/null; then
+    rm -f "$SD_ROOT/.pluto_sat_tracker_rw_test" 2>/dev/null || true
+    log "SD writable after repair/remount"
+    return 0
+  fi
+
+  log "WARN: SD still not writable after repair/remount"
+  return 1
 }
 
-ensure_initial_files() {
-  if [ ! -f "$DATA_DIR/passes.json" ]; then
-    cat > "$DATA_DIR/passes.json" <<'EOF'
-{
-  "ok": true,
-  "passes": [],
-  "generated_utc": null,
-  "metadata": {
-    "initial_install": true,
-    "message": "Open the web UI so browser time sync can run, then use Refresh Passes."
-  }
-}
+seed_json_if_empty() {
+  file="$1"
+  kind="$2"
+  if [ -s "$file" ]; then
+    return 0
+  fi
+
+  mkdir -p "$(dirname "$file")" 2>/dev/null || true
+
+  case "$kind" in
+    track_state)
+      cat > "$file" <<'EOF' 2>/dev/null || true
+{"ok":true,"state":"idle","message":"No active Doppler track after reboot","name":"","point_index":-1,"point_time_utc":"","rx_hz":0,"lo_path":"","seconds_until_aos":-1,"seconds_until_los":-1,"seconds_until_next":-1,"seconds_until_point":-1,"lo_write_result":"idle"}
 EOF
-  fi
-
-  if [ ! -f "$DATA_DIR/refresh_status.json" ]; then
-    cat > "$DATA_DIR/refresh_status.json" <<'EOF'
-{
-  "ok": true,
-  "state": "idle",
-  "target": "passes",
-  "updated_utc": null,
-  "message": "Waiting for browser time sync and pass refresh."
-}
+      ;;
+    refresh_status)
+      cat > "$file" <<'EOF' 2>/dev/null || true
+{"ok":true,"state":"idle","target":"","message":"Idle after reboot","started_utc":"","finished_utc":"","updated_utc":""}
 EOF
-  fi
-
-  mkdir -p "$DEPLOY_DIR/config" "$CONFIG_DIR"
-  if [ -s "$CONFIG_DIR/observer.json" ]; then
-    cp "$CONFIG_DIR/observer.json" "$DEPLOY_DIR/config/observer.json" 2>>"$LOG_FILE" || true
-  elif [ -s "$DEPLOY_DIR/config/observer.json" ]; then
-    cp "$DEPLOY_DIR/config/observer.json" "$CONFIG_DIR/observer.json" 2>>"$LOG_FILE" || true
-  else
-    cat > "$CONFIG_DIR/observer.json" <<'EOF'
-{
-  "name": "Cripple Creek",
-  "latitude_deg": 38.80063,
-  "longitude_deg": -105.2,
-  "altitude_m": 2805.0,
-  "minimum_elevation_deg": 20.0
-}
-EOF
-    cp "$CONFIG_DIR/observer.json" "$DEPLOY_DIR/config/observer.json" 2>>"$LOG_FILE" || true
-  fi
+      ;;
+  esac
 }
 
 reset_permissions() {
-  chmod +x "$DEPLOY_DIR/bin/pluto_sat_tracker" "$DEPLOY_DIR/bin/pluto_fm_receiver" 2>>"$LOG_FILE" || true
-  find "$DEPLOY_DIR/tools" -type f -name '*.sh' -exec chmod +x {} \; 2>>"$LOG_FILE" || true
-  find "$SD_ROOT/tools" -type f -name '*.sh' -exec chmod +x {} \; 2>>"$LOG_FILE" || true
-  find "$SD_ROOT/python-runtime/bin" -type f -exec chmod +x {} \; 2>>"$LOG_FILE" || true
-  find "$SD_ROOT/python/bin" -type f -exec chmod +x {} \; 2>>"$LOG_FILE" || true
+  chmod +x "$BIN" 2>/dev/null || true
+  find "$APP_ROOT/bin" -type f -exec chmod +x {} \; 2>/dev/null || true
+  find "$APP_ROOT/tools" -type f -name '*.sh' -exec chmod +x {} \; 2>/dev/null || true
 }
 
-log "===== autorun start ====="
+ensure_initial_files() {
+  mkdir -p "$DATA_DIR" "$CONFIG_DIR" "$LOG_DIR" "$TMP_DIR" 2>/dev/null || true
 
-ensure_sd_mounted_rw
+  if [ ! -s "$CONFIG_DIR/observer.json" ]; then
+    cat > "$CONFIG_DIR/observer.json" <<'EOF' 2>/dev/null || true
+{
+  "name": "Default Observer",
+  "latitude_deg": 0.0,
+  "longitude_deg": 0.0,
+  "altitude_m": 0.0,
+  "grid": "",
+  "minimum_elevation_deg": 10.0
+}
+EOF
+  fi
 
-if [ -d "$LOG_DIR" ]; then
-  LOG_FILE="$LOG_DIR/autorun.log"
-  log "logging moved to $LOG_FILE"
-fi
+  seed_json_if_empty "$DATA_DIR/radio_track_state.json" track_state
+  seed_json_if_empty "$DATA_DIR/refresh_status.json" refresh_status
 
-reset_permissions
-ensure_initial_files
+  for f in "$DATA_DIR/radio_track.json" "$DATA_DIR/refresh.lock" "$TMP_DIR/refresh.lock"; do
+    if [ -e "$f" ] && [ ! -s "$f" ]; then
+      rm -f "$f" 2>/dev/null || true
+    fi
+  done
+}
 
-if [ ! -x "$DEPLOY_DIR/bin/pluto_sat_tracker" ]; then
-  log "ERROR: missing backend binary $DEPLOY_DIR/bin/pluto_sat_tracker"
-  exit 1
-fi
+prepare_runtime() {
+  if [ -f "$ENV_FILE" ]; then
+    . "$ENV_FILE" 2>/dev/null || true
+  fi
 
-if [ ! -d "$WEB_DIR" ]; then
-  log "ERROR: missing web dir $WEB_DIR"
-  exit 1
-fi
+  mkdir -p "$LOG_DIR" 2>/dev/null || true
+  LOG="$LOG_DIR/autorun.log"
+  log "logging moved to $LOG"
 
-kill_matching "pluto_sat_tracker"
-if command -v killall >/dev/null 2>&1; then
-  killall pluto_sat_tracker 2>/dev/null || true
-fi
-sleep 1
+  reset_permissions
+  ensure_initial_files
+}
 
-export PATH="$DEPLOY_DIR/bin:$DEPLOY_DIR/tools:$PATH"
-export PLUTO_DEPLOY_DIR="$DEPLOY_DIR"
-export PLUTO_SD_ROOT="$SD_ROOT"
-export PLUTO_WEB_DIR="$WEB_DIR"
-export PLUTO_DATA_DIR="$DATA_DIR"
-export PLUTO_CONFIG_DIR="$CONFIG_DIR"
+start_backend() {
+  if [ ! -x "$BIN" ]; then
+    log "ERROR: backend binary missing or not executable: $BIN"
+    return 1
+  fi
+  if [ ! -d "$WEB_DIR" ]; then
+    log "ERROR: web dir missing: $WEB_DIR"
+    return 1
+  fi
 
-log "starting $DEPLOY_DIR/bin/pluto_sat_tracker"
-log "bind=$BIND_ADDR port=$PORT data=$DATA_DIR web=$WEB_DIR config=$CONFIG_DIR"
+  if wget -qO- "http://127.0.0.1:${PORT}/api/status" >/dev/null 2>&1; then
+    log "backend already live on port $PORT"
+    return 0
+  fi
 
-nohup "$DEPLOY_DIR/bin/pluto_sat_tracker" \
-  --bind "$BIND_ADDR" \
-  --port "$PORT" \
-  --data-dir "$DATA_DIR" \
-  --web-dir "$WEB_DIR" \
-  --config-dir "$CONFIG_DIR" \
-  >> "$LOG_FILE" 2>&1 &
+  for pid in $(pidof pluto_sat_tracker 2>/dev/null); do
+    kill "$pid" 2>/dev/null || true
+  done
+  sleep 1
 
-echo $! > "$SD_ROOT/pluto_sat_tracker.pid"
-log "started pid $(cat "$SD_ROOT/pluto_sat_tracker.pid" 2>/dev/null)"
+  log "starting $BIN"
+  log "bind=$BIND_ADDR port=$PORT data=$DATA_DIR web=$WEB_DIR config=$CONFIG_DIR"
+
+  nohup "$BIN" \
+    --bind "$BIND_ADDR" \
+    --port "$PORT" \
+    --data-dir "$DATA_DIR" \
+    --web-dir "$WEB_DIR" \
+    --config-dir "$CONFIG_DIR" \
+    >> "$LOG" 2>&1 &
+
+  BACKEND_PID="$!"
+  echo "$BACKEND_PID" > /tmp/pluto_sat_tracker.pid 2>/dev/null || true
+  log "started pid $BACKEND_PID"
+
+  sleep 3
+  if wget -qO- "http://127.0.0.1:${PORT}/api/status" >/dev/null 2>&1; then
+    log "backend API is live"
+    return 0
+  fi
+
+  if ps w | grep "[p]luto_sat_tracker" >/dev/null 2>&1; then
+    log "backend process exists but API did not answer yet"
+    return 0
+  fi
+
+  log "ERROR: backend did not survive startup"
+  return 1
+}
+
+ensure_sd_mounted_rw || true
+prepare_runtime
+start_backend
 exit 0
