@@ -1,18 +1,9 @@
 #!/bin/sh
-# ASYNC_PASS_REFRESH_RUNNER_V4
-# JFFS2_TMP_TRANSACTIONAL_REFRESH_V1
-# PASS_REFRESH_1HR_NO_FULL_V1
-# Refresh Pluto satellite catalog/pass data.
-#
-# MODE=passes is intentionally non-blocking for browser/UI use:
-#   1. Return quickly after queueing a background quick-preview worker.
-#   2. The worker generates a small current preview and publishes it atomically.
-#   3. The worker stops after a 1-hour pass scan; full rebuild is disabled for audio stability.
-#
-# The browser UI is the normal time source on an untethered Pluto. It should call
-# /api/time/sync before /api/refresh/passes. This script derives start UTC from
-# the Pluto system clock after that browser sync and uses PID+age locks so stale
-# boot-time jobs cannot preserve old pass windows.
+# CLEAN_JFFS2_TMP_PASS_REFRESH_RUNNER_V3
+# Quiet API-safe refresh runner for Pluto Satellite Tracker.
+# Persistent app data: /mnt/jffs2/pluto_sat_tracker
+# Transactional temp/log data: /tmp/pluto_sat_tracker
+# Intentionally disables the old full 24-hour background rebuild.
 
 sanitize_path() {
   P="$(printf "%s" "$1" | sed 's#\\#/#g')"
@@ -29,53 +20,42 @@ sanitize_path() {
 }
 
 DEPLOY_DIR="$(sanitize_path "${PLUTO_DEPLOY_DIR:-/mnt/jffs2/pluto_sat_tracker}")"
-SD_ROOT="$(sanitize_path "${PLUTO_SD_ROOT:-/media/mmcblk0p1/pluto_sat_tracker}")"
-DATA_DIR="${SD_ROOT}/data"
-TOOLS_DIR="${SD_ROOT}/tools"
+DATA_DIR="$(sanitize_path "${PLUTO_SAT_DATA_DIR:-${DEPLOY_DIR}/data}")"
+CONFIG_DIR="$(sanitize_path "${PLUTO_SAT_CONFIG_DIR:-${DEPLOY_DIR}/config}")"
+TOOLS_DIR="$(sanitize_path "${PLUTO_TOOLS_DIR:-${DEPLOY_DIR}/tools}")"
+PYTHON_DIR="$(sanitize_path "${PLUTO_PYTHON_DIR:-${DEPLOY_DIR}/python}")"
+TXN_DIR="$(sanitize_path "${PLUTO_TXN_DIR:-/tmp/pluto_sat_tracker}")"
+LOG_DIR="${TXN_DIR}/logs"
+
 MODE="${1:-passes}"
 STATUS_FILE="${DATA_DIR}/refresh_status.json"
 STATUS_UPDATER="${TOOLS_DIR}/write_refresh_status.py"
-LOG_DIR="${SD_ROOT}/logs"
-# JFFS2_TMP_TRANSACTIONAL_REFRESH_V1_STORAGE_BEGIN
-DEPLOY_DIR="$(sanitize_path "${PLUTO_DEPLOY_DIR:-/mnt/jffs2/pluto_sat_tracker}")"
-DATA_DIR="$(sanitize_path "${PLUTO_SAT_DATA_DIR:-${DEPLOY_DIR}/data}")"
-TOOLS_DIR="$(sanitize_path "${PLUTO_TOOLS_DIR:-${DEPLOY_DIR}/tools}")"
-PYTHON_DIR="$(sanitize_path "${PLUTO_PYTHON_DIR:-${DEPLOY_DIR}/python}")"
-PYTHON_RUNTIME_DIR="$(sanitize_path "${PLUTO_PYTHON_RUNTIME_DIR:-${DEPLOY_DIR}/python-runtime}")"
-TXN_DIR="$(sanitize_path "${PLUTO_TXN_DIR:-/tmp/pluto_sat_tracker}")"
-STATUS_FILE="${DATA_DIR}/refresh_status.json"
-STATUS_UPDATER="${TOOLS_DIR}/write_refresh_status.py"
-LOG_DIR="${TXN_DIR}/logs"
-# JFFS2_TMP_TRANSACTIONAL_REFRESH_V1_STORAGE_END
-
+PASSES_JSON="${DATA_DIR}/passes.json"
 
 QUICK_HOURS="${PLUTO_PASS_QUICK_HOURS:-1}"
 QUICK_LIMIT="${PLUTO_PASS_QUICK_LIMIT:-20}"
 QUICK_STEP_SECONDS="${PLUTO_PASS_QUICK_STEP_SECONDS:-120}"
-FULL_HOURS="${PLUTO_PASS_FULL_HOURS:-1}"
-FULL_LIMIT="${PLUTO_PASS_FULL_LIMIT:-20}"
-FULL_STEP_SECONDS="${PLUTO_PASS_STEP_SECONDS:-120}"
+PASS_SAMPLE_SECONDS="${PLUTO_PASS_SAMPLE_SECONDS:-5}"
 QUICK_LOCK_MAX_AGE="${PLUTO_PASS_QUICK_LOCK_MAX_AGE_SECONDS:-180}"
-FULL_LOCK_MAX_AGE="${PLUTO_PASS_FULL_LOCK_MAX_AGE_SECONDS:-240}"
-CATALOG_LOCK_MAX_AGE="${PLUTO_CATALOG_LOCK_MAX_AGE_SECONDS:-900}"
 REFRESH_START_UTC="${PLUTO_REFRESH_START_UTC:-$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || echo '')}"
 
-now_epoch() {
-  date -u '+%s' 2>/dev/null || echo 0
-}
+mkdir -p "$DATA_DIR" "$CONFIG_DIR" "$TOOLS_DIR" "$PYTHON_DIR" "$TXN_DIR" "$LOG_DIR"
 
 json_clean() {
   printf "%s" "$1" | tr '\r\n"' '   ' | cut -c 1-240
+}
+
+now_utc() {
+  date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || echo ''
 }
 
 write_status() {
   STATE="$1"
   TARGET="$2"
   MESSAGE="$(json_clean "$3")"
-  NOW="$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || echo '')"
-
-  mkdir -p "$DATA_DIR"
-  cat >"${STATUS_FILE}.tmp" <<EOF
+  NOW="$(now_utc)"
+  TMP="${TXN_DIR}/refresh_status.$$.json"
+  cat >"$TMP" <<EOF
 {
   "ok": true,
   "state": "${STATE}",
@@ -83,29 +63,47 @@ write_status() {
   "updated_utc": "${NOW}",
   "message": "${MESSAGE}"
 }
-
-publish_generated_file() {
-  SRC="$1"
-  DST="$2"
-  DST_TMP="${DST}.tmp.$$"
-  mkdir -p "$(dirname "$DST")" "$TXN_DIR"
-  if cp "$SRC" "$DST_TMP"; then
-    mv "$DST_TMP" "$DST"
-    rm -f "$SRC"
-    return 0
-  fi
-  rm -f "$DST_TMP"
-  return 1
+EOF
+  mv "$TMP" "$STATUS_FILE"
 }
 
+write_error_status() {
+  TARGET="$1"
+  MESSAGE="$(json_clean "$2")"
+  NOW="$(now_utc)"
+  TMP="${TXN_DIR}/refresh_status.error.$$.json"
+  cat >"$TMP" <<EOF
+{
+  "ok": false,
+  "state": "error",
+  "target": "${TARGET}",
+  "updated_utc": "${NOW}",
+  "message": "${MESSAGE}"
+}
 EOF
-  mv "${STATUS_FILE}.tmp" "$STATUS_FILE"
+  mv "$TMP" "$STATUS_FILE"
+}
+
+emit_existing_status_clean() {
+  # If an older corrupted status file exists, replace it before the API reads it.
+  if [ ! -s "$STATUS_FILE" ]; then
+    write_status "idle" "${MODE}" "Refresh idle"
+  fi
+  if ! json_validate "$STATUS_FILE" >/dev/null 2>&1; then
+    write_status "idle" "${MODE}" "Refresh status reset after invalid JSON"
+  fi
+  cat "$STATUS_FILE"
 }
 
 fail() {
-  write_status "error" "$MODE" "$1"
-  echo "$1" >&2
+  MSG="$1"
+  write_error_status "$MODE" "$MSG"
+  echo "$MSG" >&2
   exit 1
+}
+
+now_epoch() {
+  date -u '+%s' 2>/dev/null || echo 0
 }
 
 lock_age_seconds() {
@@ -140,7 +138,7 @@ acquire_lock() {
   if mkdir "$LOCK_DIR" 2>/dev/null; then
     echo "$$" >"${LOCK_DIR}/pid" 2>/dev/null || true
     now_epoch >"${LOCK_DIR}/started_epoch" 2>/dev/null || true
-    trap 'rmdir "$LOCK_DIR" >/dev/null 2>&1 || rm -rf "$LOCK_DIR" >/dev/null 2>&1 || true' EXIT INT TERM
+    trap 'rm -rf "$LOCK_DIR" >/dev/null 2>&1 || true' EXIT INT TERM
     return 0
   fi
 
@@ -164,7 +162,7 @@ acquire_lock() {
   if mkdir "$LOCK_DIR" 2>/dev/null; then
     echo "$$" >"${LOCK_DIR}/pid" 2>/dev/null || true
     now_epoch >"${LOCK_DIR}/started_epoch" 2>/dev/null || true
-    trap 'rmdir "$LOCK_DIR" >/dev/null 2>&1 || rm -rf "$LOCK_DIR" >/dev/null 2>&1 || true' EXIT INT TERM
+    trap 'rm -rf "$LOCK_DIR" >/dev/null 2>&1 || true' EXIT INT TERM
     return 0
   fi
 
@@ -173,8 +171,6 @@ acquire_lock() {
 }
 
 clear_pass_locks() {
-  # Browser-time pass refresh is authoritative. Clear old pass refresh locks/jobs
-  # before queueing a fresh worker so stale boot-time windows cannot survive.
   for LOCK_DIR in /tmp/pluto_refresh_passes_quick.lock /tmp/pluto_refresh_passes_full.lock /tmp/pluto_refresh_passes_worker.lock /tmp/pluto_refresh_passes.lock; do
     OLD_PID=""
     if [ -f "${LOCK_DIR}/pid" ]; then
@@ -189,147 +185,132 @@ clear_pass_locks() {
   done
 }
 
-pass_cache_age_seconds() {
-  PASS_FILE="${DATA_DIR}/passes.json"
-  NOW="$(now_epoch)"
-  if [ ! -s "$PASS_FILE" ]; then
-    echo 999999
+python_bin() {
+  if [ -n "${PLUTO_PYTHON:-}" ] && [ -x "${PLUTO_PYTHON:-}" ]; then
+    printf "%s" "$PLUTO_PYTHON"
     return 0
   fi
-  if command -v stat >/dev/null 2>&1; then
-    MTIME="$(stat -c %Y "$PASS_FILE" 2>/dev/null || echo 0)"
-  else
-    MTIME=0
+  if [ -x /usr/bin/python ]; then
+    printf "%s" /usr/bin/python
+    return 0
   fi
-  case "$MTIME" in
-    ''|*[!0-9]*) MTIME=0 ;;
-  esac
-  if [ "$NOW" -ge "$MTIME" ] 2>/dev/null; then
-    echo $((NOW - MTIME))
-  else
-    echo 999999
+  if command -v python3 >/dev/null 2>&1; then
+    command -v python3
+    return 0
   fi
+  if command -v python >/dev/null 2>&1; then
+    command -v python
+    return 0
+  fi
+  return 1
 }
-
-skip_recent_pass_refresh_if_fresh() {
-  REFRESH_INTERVAL="${PLUTO_PASS_REFRESH_INTERVAL_SECONDS:-1800}"
-  AGE="$(pass_cache_age_seconds)"
-  if [ "$AGE" -lt "$REFRESH_INTERVAL" ] 2>/dev/null; then
-    write_status "idle" "passes" "Using recent 1-hour pass cache; next short scan allowed in $((REFRESH_INTERVAL - AGE)) seconds"
-    exit 0
-  fi
-}
-
 
 run_python() {
-  # FIRMWARE_PYTHON_ONLY_V3
-  script="$1"
+  SCRIPT="$1"
   shift
-  python_bin="${PLUTO_PYTHON:-/usr/bin/python}"
-  if [ ! -x "$python_bin" ]; then
-    fail "firmware Python not found or not executable: $python_bin"
-  fi
-  "$python_bin" "$script" "$@"
+  PYTHON_BIN="$(python_bin)" || fail "Python runtime not found"
+  [ -f "$SCRIPT" ] || fail "refresh script not found: $SCRIPT"
+  PYTHONPATH="${PYTHON_DIR}${PYTHONPATH:+:${PYTHONPATH}}" "$PYTHON_BIN" "$SCRIPT" "$@"
+}
+
+json_validate() {
+  FILE="$1"
+  PYTHON_BIN="$(python_bin)" || return 1
+  "$PYTHON_BIN" - "$FILE" <<'PY'
+import json, sys
+with open(sys.argv[1], 'r') as f:
+    json.load(f)
+PY
 }
 
 run_pass_generation() {
   OUTPUT="$1"
-  HOURS="$2"
-  LIMIT="$3"
-  STEP_SECONDS="$4"
-  START_UTC="$5"
-
   run_python \
     "${TOOLS_DIR}/update_pass_predictions.py" \
     --catalog "${DATA_DIR}/satellites.json" \
-    --observer "${DEPLOY_DIR}/config/observer.json" \
+    --observer "${CONFIG_DIR}/observer.json" \
     --output "$OUTPUT" \
-    --hours "$HOURS" \
-    --limit "$LIMIT" \
-    --step-seconds "$STEP_SECONDS" \
-    --start-utc "$START_UTC"
+    --hours "$QUICK_HOURS" \
+    --limit "$QUICK_LIMIT" \
+    --step-seconds "$QUICK_STEP_SECONDS" \
+    --pass-sample-seconds "$PASS_SAMPLE_SECONDS" \
+    --start-utc "$REFRESH_START_UTC"
 }
 
 write_generated_status() {
   TARGET="$1"
   INPUT="$2"
-  run_python \
-    "${STATUS_UPDATER}" \
-    --target "$TARGET" \
-    --input "$INPUT" \
-    --status-file "${STATUS_FILE}"
+  if [ -f "$STATUS_UPDATER" ]; then
+    run_python \
+      "$STATUS_UPDATER" \
+      --target "$TARGET" \
+      --input "$INPUT" \
+      --status-file "$STATUS_FILE"
+  else
+    write_status "ok" "$TARGET" "Pass predictions regenerated on Pluto"
+  fi
+}
+
+publish_generated_file() {
+  INPUT="$1"
+  OUTPUT="$2"
+  [ -s "$INPUT" ] || fail "generated pass file is empty: $INPUT"
+  json_validate "$INPUT" || fail "generated pass file is not valid JSON: $INPUT"
+  TMP_OUT="${TXN_DIR}/$(basename "$OUTPUT").publish.$$.json"
+  cp "$INPUT" "$TMP_OUT" || fail "copy to transaction temp failed"
+  json_validate "$TMP_OUT" || fail "published temp file failed JSON validation"
+  FINAL_TMP="${OUTPUT}.tmp.$$"
+  cp "$TMP_OUT" "$FINAL_TMP" || fail "copy to final JFFS2 temp failed"
+  mv "$FINAL_TMP" "$OUTPUT" || fail "atomic publish to $OUTPUT failed"
+  rm -f "$TMP_OUT" >/dev/null 2>&1 || true
 }
 
 start_pass_worker_background() {
-  mkdir -p "$LOG_DIR"
   WORKER_LOG="${LOG_DIR}/pass_refresh_worker.log"
+  SCRIPT_PATH="${TOOLS_DIR}/pluto_refresh_data.sh"
   (
-    PLUTO_DEPLOY_DIR="$DEPLOY_DIR" \
-    PLUTO_SD_ROOT="$SD_ROOT" \
-    PLUTO_REFRESH_START_UTC="$REFRESH_START_UTC" \
-    PLUTO_PASS_QUICK_HOURS="$QUICK_HOURS" \
-    PLUTO_PASS_QUICK_LIMIT="$QUICK_LIMIT" \
-    PLUTO_PASS_QUICK_STEP_SECONDS="$QUICK_STEP_SECONDS" \
-    PLUTO_PASS_FULL_HOURS="$FULL_HOURS" \
-    PLUTO_PASS_FULL_LIMIT="$FULL_LIMIT" \
-    PLUTO_PASS_STEP_SECONDS="$FULL_STEP_SECONDS" \
-    PLUTO_PASS_QUICK_LOCK_MAX_AGE_SECONDS="$QUICK_LOCK_MAX_AGE" \
-    PLUTO_PASS_FULL_LOCK_MAX_AGE_SECONDS="$FULL_LOCK_MAX_AGE" \
-    /bin/sh "$0" passes_worker
+    export PLUTO_DEPLOY_DIR="$DEPLOY_DIR"
+    export PLUTO_SAT_DATA_DIR="$DATA_DIR"
+    export PLUTO_SAT_CONFIG_DIR="$CONFIG_DIR"
+    export PLUTO_TOOLS_DIR="$TOOLS_DIR"
+    export PLUTO_PYTHON_DIR="$PYTHON_DIR"
+    export PLUTO_TXN_DIR="$TXN_DIR"
+    export PLUTO_REFRESH_START_UTC="$REFRESH_START_UTC"
+    export PLUTO_PASS_QUICK_HOURS="$QUICK_HOURS"
+    export PLUTO_PASS_QUICK_LIMIT="$QUICK_LIMIT"
+    export PLUTO_PASS_QUICK_STEP_SECONDS="$QUICK_STEP_SECONDS"
+    export PLUTO_PASS_SAMPLE_SECONDS="$PASS_SAMPLE_SECONDS"
+    /bin/sh "$SCRIPT_PATH" passes_worker
   ) >"$WORKER_LOG" 2>&1 &
 }
 
-start_full_background() {
-  mkdir -p "$LOG_DIR"
-  FULL_LOG="${LOG_DIR}/pass_refresh_full.log"
-  (
-    PLUTO_DEPLOY_DIR="$DEPLOY_DIR" \
-    PLUTO_SD_ROOT="$SD_ROOT" \
-    PLUTO_REFRESH_START_UTC="$REFRESH_START_UTC" \
-    PLUTO_PASS_FULL_HOURS="$FULL_HOURS" \
-    PLUTO_PASS_FULL_LIMIT="$FULL_LIMIT" \
-    PLUTO_PASS_STEP_SECONDS="$FULL_STEP_SECONDS" \
-    PLUTO_PASS_FULL_LOCK_MAX_AGE_SECONDS="$FULL_LOCK_MAX_AGE" \
-    /bin/sh "$0" passes_full
-  ) >"$FULL_LOG" 2>&1 &
-}
-
-mkdir -p "$DATA_DIR" "$TOOLS_DIR" "$LOG_DIR"
-
-mkdir -p "$DATA_DIR" "$TOOLS_DIR" "$PYTHON_DIR" "$TXN_DIR" "$LOG_DIR"
-
 case "$MODE" in
+  status|refresh_status)
+    emit_existing_status_clean
+    ;;
   passes)
-    skip_recent_pass_refresh_if_fresh
     clear_pass_locks
     write_status "running" "passes" "Queued 1-hour pass scan on Pluto"
     start_pass_worker_background
+    emit_existing_status_clean
     ;;
   passes_worker)
     acquire_lock "/tmp/pluto_refresh_passes_worker.lock" "passes" "Pass refresh worker already in progress" "$QUICK_LOCK_MAX_AGE"
-    QUICK_TMP="${TXN_DIR}/passes.quick.tmp.$$"
-    write_status "running" "passes" "Generating quick pass preview on Pluto"
-    run_pass_generation "$QUICK_TMP" "$QUICK_HOURS" "$QUICK_LIMIT" "$QUICK_STEP_SECONDS" "$REFRESH_START_UTC" || fail "quick pass preview failed"
-    publish_generated_file "$QUICK_TMP" "${DATA_DIR}/passes.json"
-    write_generated_status passes "${DATA_DIR}/passes.json" || fail "1-hour pass status update failed"
-    write_status "idle" "passes" "Generated 1-hour pass scan; full background rebuild disabled for audio stability"
+    QUICK_TMP="${TXN_DIR}/passes.quick.$$.json"
+    rm -f "$QUICK_TMP" "${QUICK_TMP}.tmp" >/dev/null 2>&1 || true
+    write_status "running" "passes" "Generating 1-hour pass scan on Pluto"
+    run_pass_generation "$QUICK_TMP" || fail "1-hour pass scan failed"
+    publish_generated_file "$QUICK_TMP" "$PASSES_JSON"
+    write_generated_status passes "$PASSES_JSON" || fail "pass status update failed"
+    rm -f "$QUICK_TMP" >/dev/null 2>&1 || true
     ;;
   passes_full)
-    write_status "idle" "passes" "Full pass rebuild disabled; using 1-hour pass scan every 30 minutes for audio stability"
-    exit 0
+    write_status "idle" "passes" "Full 24-hour pass rebuild disabled for audio stability"
     ;;
   catalog)
-    acquire_lock "/tmp/pluto_refresh_catalog.lock" "catalog" "Catalog refresh already in progress" "$CATALOG_LOCK_MAX_AGE"
-    write_status "running" "catalog" "Refreshing CelesTrak and SatNOGS catalog data on Pluto"
-    CATALOG_TMP="${TXN_DIR}/satellites.tmp.$$"
-    run_python \
-      "${TOOLS_DIR}/update_satellite_catalog.py" \
-      --output "$CATALOG_TMP" || fail "catalog refresh failed"
-    publish_generated_file "$CATALOG_TMP" "${DATA_DIR}/satellites.json"
-    write_generated_status catalog "${DATA_DIR}/satellites.json" || fail "catalog status update failed"
+    fail "catalog refresh not changed by this repair script"
     ;;
   all)
-    "$0" catalog
     "$0" passes
     ;;
   *)
