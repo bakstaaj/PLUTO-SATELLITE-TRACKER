@@ -23,7 +23,8 @@
 #include <stdint.h>
 #include <pthread.h>
 
-#define APP_VERSION "0.1.0"
+#define APP_VERSION "0.2.0"
+/* RESTORE_517C91A_BUILDABLE_KEEP_RECEIVER_V1 */
 /* BACKEND_STREAMING_AUDIO_STREAM_ROUTE_V1C */
 /* BACKEND_STREAMING_AUDIO_ROUTE_FIX_V1B */
 #define DEFAULT_BIND_ADDR "127.0.0.1"
@@ -2033,7 +2034,7 @@ static int query_param_is_true(const char *query, const char *name)
            strcmp(value, "on") == 0;
 }
 
-static int send_live_audio_stream(int fd, const char *query)
+static int send_live_audio_stream_v1f(int fd, const char *query)
 {
     char from_text[64] = "";
     size_t cursor_samples = 0;
@@ -2170,7 +2171,7 @@ static void send_live_audio_stop(int fd)
  * file written by pluto_fm_receiver.  If the DSP has not produced samples yet,
  * it sends short silence chunks instead of returning 204.
  */
-static void send_live_audio_stream(int fd, const char *query)
+static void send_live_audio_stream_v1h(int fd, const char *query)
 {
     char seconds_text[64] = "";
     int max_seconds = 180;
@@ -2441,7 +2442,7 @@ static void send_live_audio_block(int fd, const char *query)
         char stream_text[32] = "";
         query_param(query, "stream", stream_text, sizeof(stream_text));
         if (strcmp(stream_text, "1") == 0 || strcmp(stream_text, "true") == 0 || strcmp(stream_text, "yes") == 0) {
-            send_live_audio_stream(fd, query);
+            send_live_audio_stream_v1h(fd, query);
             return;
         }
     }
@@ -2471,7 +2472,7 @@ static void send_live_audio_block(int fd, const char *query)
         if (strcmp(stream_text, "1") == 0 ||
             strcmp(stream_text, "true") == 0 ||
             strcmp(stream_text, "yes") == 0) {
-            send_live_audio_stream(fd);
+            send_live_audio_stream_v1h(fd, "");
             return;
         }
     }
@@ -2565,7 +2566,7 @@ pthread_mutex_lock(&g_audio_live_lock);
 
 
 /* BACKEND_STREAMING_AUDIO_V1: continuous backend decoded WAV stream for browser playback. */
-static int send_live_audio_stream(int fd, const struct app_config *cfg, const char *query)
+static int send_live_audio_stream_cfg_v1k(int fd, const struct app_config *cfg, const char *query)
 {
     char frequency_text[64] = "";
     char debug_line[256];
@@ -3629,7 +3630,7 @@ static void handle_request(
 
     /* BACKEND_STREAMING_AUDIO_STREAM_ROUTE_V1D_EARLY_GUARD: keep continuous browser audio out of fragile router branches. */
     if (strcmp(path, "/api/radio/audio/live/stream.wav") == 0) {
-        send_live_audio_stream(fd, query);
+        send_live_audio_stream_v1h(fd, query);
         return;
     }
 
@@ -3720,12 +3721,12 @@ static void handle_request(
     } else if (strcmp(path, "/api/radio/audio/fm_chunk") == 0) {
         send_audio_chunk_json(fd, cfg, query);
     } else if (strcmp(path, "/api/radio/audio/live/stream.wav") == 0) {
-        send_live_audio_stream(fd, cfg, query);
+        send_live_audio_stream_cfg_v1k(fd, cfg, query);
     } else if (strcmp(path, "/api/radio/audio/live/stream.wav") == 0) {
-        send_live_audio_stream(fd, query);
+        send_live_audio_stream_v1h(fd, query);
     } else if (strcmp(path, "/api/radio/audio/live.wav") == 0) {
         if (query_param_is_true(query, "stream")) {
-            send_live_audio_stream(fd, query);
+            send_live_audio_stream_v1h(fd, query);
         } else {
             send_live_audio_block(fd, query);
         }

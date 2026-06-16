@@ -210,7 +210,10 @@ stop_existing() {
   kill_matching "pluto_refresh_data.sh"
   kill_matching "update_pass_predictions.py"
   kill_matching "python3.11 .*update_pass_predictions"
-  kill_matching "pluto_sat_tracker"
+  # INSTALLER_SELF_KILL_FIX_V1
+  for _tracker_pid in $(pidof pluto_sat_tracker 2>/dev/null); do
+    kill "$_tracker_pid" 2>/dev/null || true
+  done
   if command -v killall >/dev/null 2>&1; then
     killall pluto_sat_tracker 2>/dev/null || true
     killall pluto_fm_receiver 2>/dev/null || true
@@ -271,7 +274,10 @@ log "PASS: wrote /mnt/jffs2/pluto_sat_tracker.env"
 
 if [ "$START_APP" -eq 1 ]; then
   log "Starting app through autorun..."
-  /mnt/jffs2/autorun.sh >>"$LOG" 2>&1 || fail "autorun start failed"
+  # INSTALLER_DETACHED_AUTORUN_START_V1
+    nohup /mnt/jffs2/autorun.sh >>/tmp/pluto_sat_tracker_autorun_start.log 2>&1 &
+    sleep 2
+    log "autorun start requested in background; see /tmp/pluto_sat_tracker_autorun_start.log"
 fi
 
 sync
