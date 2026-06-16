@@ -30,16 +30,16 @@
 #define DEFAULT_BIND_ADDR "127.0.0.1"
 #define DEFAULT_NET_BIND_ADDR "0.0.0.0"
 #define DEFAULT_PORT 8080
-#define DEFAULT_DATA_DIR "data"
-#define DEFAULT_WEB_DIR "web"
-#define DEFAULT_CONFIG_DIR "config"
+#define DEFAULT_DATA_DIR "/mnt/jffs2/pluto_sat_tracker/data"
+#define DEFAULT_WEB_DIR "/mnt/jffs2/pluto_sat_tracker/web"
+#define DEFAULT_CONFIG_DIR "/mnt/jffs2/pluto_sat_tracker/config"
 #define REQ_BUF_SIZE 131072
 #define PATH_BUF_SIZE 1024
 #define PLUTO_MIN_HZ 70000000LL
 #define PLUTO_MAX_HZ 6000000000LL
 #define AUDIO_SAMPLE_RATE 24000
-#define AUDIO_IQ_SAMPLE_RATE 2400000
-#define AUDIO_DECIMATION 100
+#define AUDIO_IQ_SAMPLE_RATE 600000
+#define AUDIO_DECIMATION 25
 #define AUDIO_PCM_CHUNK_SAMPLES 4800
 #define AUDIO_IIO_BUFFER_SAMPLES 24000
 #define AUDIO_CAPTURE_IQ_SAMPLES 2400000
@@ -105,6 +105,36 @@ static const char *env_or_default(const char *name, const char *fallback)
 {
     const char *value = getenv(name);
     return (value && value[0]) ? value : fallback;
+}
+
+
+/* JFFS2_PERSISTENT_TMP_TRANSACTIONAL_V1
+ * Persistent app state lives on JFFS2; short-lived listen/track plan files live
+ * in tmpfs so SD-card read-only remounts cannot break the listen workflow.
+ */
+static const char *runtime_dir_or_default(void)
+{
+    const char *value = getenv("PLUTO_SAT_RUNTIME_DIR");
+    return (value && value[0]) ? value : "/tmp/pluto_sat_tracker";
+}
+
+static void runtime_file_path(char *out, size_t out_size, const char *filename)
+{
+    const char *dir = runtime_dir_or_default();
+    size_t len;
+
+    if (!out || out_size == 0) {
+        return;
+    }
+    if (!dir || !*dir) {
+        dir = "/tmp/pluto_sat_tracker";
+    }
+    len = strlen(dir);
+    if (len > 0 && dir[len - 1] == '/') {
+        snprintf(out, out_size, "%s%s", dir, filename ? filename : "");
+    } else {
+        snprintf(out, out_size, "%s/%s", dir, filename ? filename : "");
+    }
 }
 
 static void usage(const char *argv0)
@@ -1071,7 +1101,7 @@ static void send_radio_plan(int fd, const struct app_config *cfg, const char *qu
     json_escape(mode_json, sizeof(mode_json), mode);
     json_escape(description_json, sizeof(description_json), description);
 
-    join_path(path, sizeof(path), cfg->data_dir, "radio_target.json");
+    runtime_file_path(path, sizeof(path), "radio_target.json");
     snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
 
     f = fopen(tmp_path, "wb");
@@ -1158,7 +1188,7 @@ static int write_radio_target_state(
         snprintf(tuned_epoch_value, sizeof(tuned_epoch_value), "null");
     }
 
-    join_path(path, sizeof(path), cfg->data_dir, "radio_target.json");
+    runtime_file_path(path, sizeof(path), "radio_target.json");
     snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
 
     f = fopen(tmp_path, "wb");
@@ -1280,6 +1310,18 @@ static int write_rx_lo_frequency(long long frequency_hz, char *path_used, size_t
     return 0;
 }
 
+/* AUDIO_HELPER_TOLERANT_CONFIG_600K_V1
+ * Keep audio alive on Pluto firmware variants where one or more iio_attr
+ * tuning attributes are rejected.  The RX LO write is required; sample-rate,
+ * RF bandwidth, and gain-mode writes are best-effort so live audio does not
+ * fail before iio_readdev can produce IQ samples.
+ */
+/* AUDIO_TOLERANT_CONFIG_600K_V2
+ * Keep audio alive on Pluto firmware variants where one or more iio_attr
+ * tuning attributes are rejected.  The RX LO write is required; sample-rate,
+ * RF bandwidth, and gain-mode writes are best-effort so live audio does not
+ * fail before iio_readdev can produce IQ samples.
+ */
 static int configure_rx_audio_path(long long frequency_hz)
 {
     char command[512];
@@ -1290,35 +1332,28 @@ static int configure_rx_audio_path(long long frequency_hz)
     }
 
     if (snprintf(command, sizeof(command),
-                 "/usr/bin/iio_attr -u local: -c ad9361-phy voltage0 sampling_frequency %d >/dev/null 2>&1",
-                 AUDIO_IQ_SAMPLE_RATE) >= (int)sizeof(command)) {
-        return 0;
-    }
-    result = system(command);
-    if (result == -1 || !WIFEXITED(result) || WEXITSTATUS(result) != 0) {
-        return 0;
+                 "/usr/bin/iio_attr -u local: -c ad9361-phy voltage0 sampling_frequency %d >/tmp/pluto_audio_iio_attr.log 2>&1",
+                 AUDIO_IQ_SAMPLE_RATE) < (int)sizeof(command)) {
+        result = system(command);
+        (void)result;
     }
 
     if (snprintf(command, sizeof(command),
-                 "/usr/bin/iio_attr -u local: -c ad9361-phy voltage0 rf_bandwidth 200000 >/dev/null 2>&1") >= (int)sizeof(command)) {
-        return 0;
-    }
-    result = system(command);
-    if (result == -1 || !WIFEXITED(result) || WEXITSTATUS(result) != 0) {
-        return 0;
+                 "/usr/bin/iio_attr -u local: -c ad9361-phy voltage0 rf_bandwidth 200000 >>/tmp/pluto_audio_iio_attr.log 2>&1") < (int)sizeof(command)) {
+        result = system(command);
+        (void)result;
     }
 
     if (snprintf(command, sizeof(command),
-                 "/usr/bin/iio_attr -u local: -c ad9361-phy voltage0 gain_control_mode slow_attack >/dev/null 2>&1") >= (int)sizeof(command)) {
-        return 0;
-    }
-    result = system(command);
-    if (result == -1 || !WIFEXITED(result) || WEXITSTATUS(result) != 0) {
-        return 0;
+                 "/usr/bin/iio_attr -u local: -c ad9361-phy voltage0 gain_control_mode slow_attack >>/tmp/pluto_audio_iio_attr.log 2>&1") < (int)sizeof(command)) {
+        result = system(command);
+        (void)result;
     }
 
-    return write_rx_lo_frequency(frequency_hz, command, sizeof(command));
+    return write_rx_lo_frequency(frequency_hz, NULL, 0);
 }
+
+
 
 static int read_active_audio_frequency_hz(const struct app_config *cfg, long long *out_hz)
 {
@@ -1331,7 +1366,7 @@ static int read_active_audio_frequency_hz(const struct app_config *cfg, long lon
         return 0;
     }
 
-    join_path(path, sizeof(path), cfg->data_dir, "radio_target.json");
+    runtime_file_path(path, sizeof(path), "radio_target.json");
     if (read_file_to_string(path, &body, &body_len) == 0) {
         (void)body_len;
         if (json_long_long_after(body, "downlink_hz", &hz) && hz >= PLUTO_MIN_HZ && hz <= PLUTO_MAX_HZ) {
@@ -2832,7 +2867,7 @@ static void send_radio_track_plan(int fd, const struct app_config *cfg, const ch
         return;
     }
 
-    join_path(path, sizeof(path), cfg->data_dir, "radio_track.json");
+    runtime_file_path(path, sizeof(path), "radio_track.json");
     snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
 
     f = fopen(tmp_path, "wb");
@@ -3152,7 +3187,7 @@ static int read_stored_track_window(
     size_t plan_len = 0;
     int ok;
 
-    join_path(path, sizeof(path), cfg->data_dir, "radio_track.json");
+    runtime_file_path(path, sizeof(path), "radio_track.json");
     if (read_file_to_string(path, &plan, &plan_len) != 0) {
         snprintf(error, error_size, "no Doppler track plan has been stored");
         return 0;
@@ -3195,7 +3230,7 @@ static int apply_radio_track_step(
     int point_index = -1;
     time_t now = time(NULL);
 
-    join_path(path, sizeof(path), cfg->data_dir, "radio_track.json");
+    runtime_file_path(path, sizeof(path), "radio_track.json");
     if (read_file_to_string(path, &plan, &plan_len) != 0) {
         snprintf(error, error_size, "no Doppler track plan has been stored");
         return 404;
@@ -3363,7 +3398,7 @@ static void send_radio_track_tune_point(int fd, const struct app_config *cfg, co
         return;
     }
 
-    join_path(path, sizeof(path), cfg->data_dir, "radio_track.json");
+    runtime_file_path(path, sizeof(path), "radio_track.json");
     if (read_file_to_string(path, &plan, &plan_len) != 0) {
         send_error_json(fd, 404, "no Doppler track plan has been stored");
         return;

@@ -14,8 +14,9 @@
 
 #define PLUTO_MIN_HZ 70000000LL
 #define PLUTO_MAX_HZ 6000000000LL
-#define AUDIO_IQ_SAMPLE_RATE 2400000
-#define AUDIO_DECIMATION 100
+/* FM_RECEIVER_CPU_REDUCTION_600K_V2: 600 kSPS / 25 = 24 kHz PCM output. */
+#define AUDIO_IQ_SAMPLE_RATE 600000
+#define AUDIO_DECIMATION 25
 #define AUDIO_PCM_CHUNK_SAMPLES 4800
 #define AUDIO_IIO_BUFFER_SAMPLES 24000
 
@@ -62,6 +63,18 @@ static int write_rx_lo_frequency(long long frequency_hz)
     return 0;
 }
 
+/* AUDIO_HELPER_TOLERANT_CONFIG_600K_V1
+ * Keep audio alive on Pluto firmware variants where one or more iio_attr
+ * tuning attributes are rejected.  The RX LO write is required; sample-rate,
+ * RF bandwidth, and gain-mode writes are best-effort so live audio does not
+ * fail before iio_readdev can produce IQ samples.
+ */
+/* AUDIO_TOLERANT_CONFIG_600K_V2
+ * Keep audio alive on Pluto firmware variants where one or more iio_attr
+ * tuning attributes are rejected.  The RX LO write is required; sample-rate,
+ * RF bandwidth, and gain-mode writes are best-effort so live audio does not
+ * fail before iio_readdev can produce IQ samples.
+ */
 static int configure_rx_audio_path(long long frequency_hz)
 {
     char command[512];
@@ -72,34 +85,42 @@ static int configure_rx_audio_path(long long frequency_hz)
     }
 
     if (snprintf(command, sizeof(command),
-                 "/usr/bin/iio_attr -u local: -c ad9361-phy voltage0 sampling_frequency %d >/dev/null 2>&1",
-                 AUDIO_IQ_SAMPLE_RATE) >= (int)sizeof(command)) {
-        return 0;
-    }
-    result = system(command);
-    if (result == -1 || !WIFEXITED(result) || WEXITSTATUS(result) != 0) {
-        return 0;
+                 "/usr/bin/iio_attr -u local: -c ad9361-phy voltage0 sampling_frequency %d >/tmp/pluto_audio_iio_attr.log 2>&1",
+                 AUDIO_IQ_SAMPLE_RATE) < (int)sizeof(command)) {
+        result = system(command);
+        (void)result;
     }
 
     if (snprintf(command, sizeof(command),
-                 "/usr/bin/iio_attr -u local: -c ad9361-phy voltage0 rf_bandwidth 200000 >/dev/null 2>&1") >= (int)sizeof(command)) {
-        return 0;
-    }
-    result = system(command);
-    if (result == -1 || !WIFEXITED(result) || WEXITSTATUS(result) != 0) {
-        return 0;
+                 "/usr/bin/iio_attr -u local: -c ad9361-phy voltage0 rf_bandwidth 200000 >>/tmp/pluto_audio_iio_attr.log 2>&1") < (int)sizeof(command)) {
+        result = system(command);
+        (void)result;
     }
 
     if (snprintf(command, sizeof(command),
-                 "/usr/bin/iio_attr -u local: -c ad9361-phy voltage0 gain_control_mode slow_attack >/dev/null 2>&1") >= (int)sizeof(command)) {
-        return 0;
-    }
-    result = system(command);
-    if (result == -1 || !WIFEXITED(result) || WEXITSTATUS(result) != 0) {
-        return 0;
+                 "/usr/bin/iio_attr -u local: -c ad9361-phy voltage0 gain_control_mode slow_attack >>/tmp/pluto_audio_iio_attr.log 2>&1") < (int)sizeof(command)) {
+        result = system(command);
+        (void)result;
     }
 
     return write_rx_lo_frequency(frequency_hz);
+}
+
+
+
+
+static void fm_log_config(long long frequency_hz, const char *output_path)
+{
+    fprintf(stderr,
+            "pluto_fm_receiver: freq_hz=%lld iq_rate=%d decimation=%d pcm_rate=%d iio_buffer_samples=%d pcm_chunk_samples=%d output=%s\n",
+            frequency_hz,
+            AUDIO_IQ_SAMPLE_RATE,
+            AUDIO_DECIMATION,
+            AUDIO_IQ_SAMPLE_RATE / AUDIO_DECIMATION,
+            AUDIO_IIO_BUFFER_SAMPLES,
+            AUDIO_PCM_CHUNK_SAMPLES,
+            output_path ? output_path : "");
+    fflush(stderr);
 }
 
 static FILE *start_iio_read_stream(pid_t *child_pid)
@@ -149,7 +170,11 @@ static int stream_fm_audio_to_file(FILE *pipe, FILE *output, struct fm_demod_sta
     size_t pcm_count = 0;
     size_t flush_pending = 0;
 
-    while (g_running) {
+    
+    unsigned long long total_input_pairs = 0;
+    unsigned long long total_output_samples = 0;
+    unsigned long long next_log_input_pairs = (unsigned long long)AUDIO_IQ_SAMPLE_RATE * 5ULL;
+while (g_running) {
         size_t got = fread(iq_bytes, 1, sizeof(iq_bytes), pipe);
         size_t sample_pairs;
         size_t sample_index;
@@ -165,7 +190,8 @@ static int stream_fm_audio_to_file(FILE *pipe, FILE *output, struct fm_demod_sta
         }
 
         sample_pairs = got / 4;
-        for (sample_index = 0; sample_index < sample_pairs; sample_index++) {
+        
+        total_input_pairs += (unsigned long long)sample_pairs;for (sample_index = 0; sample_index < sample_pairs; sample_index++) {
             int offset = (int)(sample_index * 4);
             short i_raw = (short)((unsigned short)iq_bytes[offset] | ((unsigned short)iq_bytes[offset + 1] << 8));
             short q_raw = (short)((unsigned short)iq_bytes[offset + 2] | ((unsigned short)iq_bytes[offset + 3] << 8));
@@ -196,7 +222,8 @@ static int stream_fm_audio_to_file(FILE *pipe, FILE *output, struct fm_demod_sta
                 }
 
                 pcm[pcm_count++] = (short)averaged;
-                state->acc = 0;
+                
+                total_output_samples++;state->acc = 0;
                 state->acc_count = 0;
 
                 if (pcm_count >= AUDIO_PCM_CHUNK_SAMPLES) {
@@ -211,6 +238,16 @@ static int stream_fm_audio_to_file(FILE *pipe, FILE *output, struct fm_demod_sta
                     pcm_count = 0;
                 }
             }
+        }
+
+        if (total_input_pairs >= next_log_input_pairs) {
+            fprintf(stderr,
+                    "pluto_fm_receiver: samples input=%llu output=%llu target_pcm_rate=%d\n",
+                    total_input_pairs,
+                    total_output_samples,
+                    AUDIO_IQ_SAMPLE_RATE / AUDIO_DECIMATION);
+            fflush(stderr);
+            next_log_input_pairs += (unsigned long long)AUDIO_IQ_SAMPLE_RATE * 5ULL;
         }
     }
 
@@ -282,6 +319,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    fm_log_config(frequency_hz, output_path);
     if (stream_fm_audio_to_file(pipe, output, &demod_state) != 0) {
         fprintf(stderr, "Audio stream failed.\n");
     }

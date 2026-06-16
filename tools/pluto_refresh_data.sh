@@ -1,5 +1,6 @@
 #!/bin/sh
 # ASYNC_PASS_REFRESH_RUNNER_V4
+# JFFS2_TMP_TRANSACTIONAL_REFRESH_V1
 # PASS_REFRESH_1HR_NO_FULL_V1
 # Refresh Pluto satellite catalog/pass data.
 #
@@ -35,6 +36,18 @@ MODE="${1:-passes}"
 STATUS_FILE="${DATA_DIR}/refresh_status.json"
 STATUS_UPDATER="${TOOLS_DIR}/write_refresh_status.py"
 LOG_DIR="${SD_ROOT}/logs"
+# JFFS2_TMP_TRANSACTIONAL_REFRESH_V1_STORAGE_BEGIN
+DEPLOY_DIR="$(sanitize_path "${PLUTO_DEPLOY_DIR:-/mnt/jffs2/pluto_sat_tracker}")"
+DATA_DIR="$(sanitize_path "${PLUTO_SAT_DATA_DIR:-${DEPLOY_DIR}/data}")"
+TOOLS_DIR="$(sanitize_path "${PLUTO_TOOLS_DIR:-${DEPLOY_DIR}/tools}")"
+PYTHON_DIR="$(sanitize_path "${PLUTO_PYTHON_DIR:-${DEPLOY_DIR}/python}")"
+PYTHON_RUNTIME_DIR="$(sanitize_path "${PLUTO_PYTHON_RUNTIME_DIR:-${DEPLOY_DIR}/python-runtime}")"
+TXN_DIR="$(sanitize_path "${PLUTO_TXN_DIR:-/tmp/pluto_sat_tracker}")"
+STATUS_FILE="${DATA_DIR}/refresh_status.json"
+STATUS_UPDATER="${TOOLS_DIR}/write_refresh_status.py"
+LOG_DIR="${TXN_DIR}/logs"
+# JFFS2_TMP_TRANSACTIONAL_REFRESH_V1_STORAGE_END
+
 
 QUICK_HOURS="${PLUTO_PASS_QUICK_HOURS:-1}"
 QUICK_LIMIT="${PLUTO_PASS_QUICK_LIMIT:-20}"
@@ -70,6 +83,21 @@ write_status() {
   "updated_utc": "${NOW}",
   "message": "${MESSAGE}"
 }
+
+publish_generated_file() {
+  SRC="$1"
+  DST="$2"
+  DST_TMP="${DST}.tmp.$$"
+  mkdir -p "$(dirname "$DST")" "$TXN_DIR"
+  if cp "$SRC" "$DST_TMP"; then
+    mv "$DST_TMP" "$DST"
+    rm -f "$SRC"
+    return 0
+  fi
+  rm -f "$DST_TMP"
+  return 1
+}
+
 EOF
   mv "${STATUS_FILE}.tmp" "$STATUS_FILE"
 }
@@ -268,6 +296,8 @@ start_full_background() {
 
 mkdir -p "$DATA_DIR" "$TOOLS_DIR" "$LOG_DIR"
 
+mkdir -p "$DATA_DIR" "$TOOLS_DIR" "$PYTHON_DIR" "$TXN_DIR" "$LOG_DIR"
+
 case "$MODE" in
   passes)
     skip_recent_pass_refresh_if_fresh
@@ -277,10 +307,10 @@ case "$MODE" in
     ;;
   passes_worker)
     acquire_lock "/tmp/pluto_refresh_passes_worker.lock" "passes" "Pass refresh worker already in progress" "$QUICK_LOCK_MAX_AGE"
-    QUICK_TMP="${DATA_DIR}/passes.quick.tmp.$$"
+    QUICK_TMP="${TXN_DIR}/passes.quick.tmp.$$"
     write_status "running" "passes" "Generating quick pass preview on Pluto"
     run_pass_generation "$QUICK_TMP" "$QUICK_HOURS" "$QUICK_LIMIT" "$QUICK_STEP_SECONDS" "$REFRESH_START_UTC" || fail "quick pass preview failed"
-    mv "$QUICK_TMP" "${DATA_DIR}/passes.json"
+    publish_generated_file "$QUICK_TMP" "${DATA_DIR}/passes.json"
     write_generated_status passes "${DATA_DIR}/passes.json" || fail "1-hour pass status update failed"
     write_status "idle" "passes" "Generated 1-hour pass scan; full background rebuild disabled for audio stability"
     ;;
@@ -291,11 +321,11 @@ case "$MODE" in
   catalog)
     acquire_lock "/tmp/pluto_refresh_catalog.lock" "catalog" "Catalog refresh already in progress" "$CATALOG_LOCK_MAX_AGE"
     write_status "running" "catalog" "Refreshing CelesTrak and SatNOGS catalog data on Pluto"
-    CATALOG_TMP="${DATA_DIR}/satellites.tmp.$$"
+    CATALOG_TMP="${TXN_DIR}/satellites.tmp.$$"
     run_python \
       "${TOOLS_DIR}/update_satellite_catalog.py" \
       --output "$CATALOG_TMP" || fail "catalog refresh failed"
-    mv "$CATALOG_TMP" "${DATA_DIR}/satellites.json"
+    publish_generated_file "$CATALOG_TMP" "${DATA_DIR}/satellites.json"
     write_generated_status catalog "${DATA_DIR}/satellites.json" || fail "catalog status update failed"
     ;;
   all)
