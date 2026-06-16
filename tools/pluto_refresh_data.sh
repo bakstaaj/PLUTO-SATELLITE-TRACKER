@@ -30,8 +30,6 @@ DEPLOY_DIR="$(sanitize_path "${PLUTO_DEPLOY_DIR:-/mnt/jffs2/pluto_sat_tracker}")
 SD_ROOT="$(sanitize_path "${PLUTO_SD_ROOT:-/media/mmcblk0p1/pluto_sat_tracker}")"
 DATA_DIR="${SD_ROOT}/data"
 TOOLS_DIR="${SD_ROOT}/tools"
-PYTHON_DIR="${SD_ROOT}/python"
-PYTHON_RUNTIME_DIR="${SD_ROOT}/python-runtime"
 MODE="${1:-passes}"
 STATUS_FILE="${DATA_DIR}/refresh_status.json"
 STATUS_UPDATER="${TOOLS_DIR}/write_refresh_status.py"
@@ -163,44 +161,14 @@ clear_pass_locks() {
 }
 
 run_python() {
-  SCRIPT="$1"
+  # FIRMWARE_PYTHON_ONLY_V3
+  script="$1"
   shift
-  PYTHON_BIN="${PLUTO_PYTHON:-}"
-  SD_RUNTIME=0
-
-  if [ -n "$PYTHON_BIN" ] && [ ! -x "$PYTHON_BIN" ]; then
-    fail "configured Python runtime is not executable: $PYTHON_BIN"
+  python_bin="${PLUTO_PYTHON:-/usr/bin/python}"
+  if [ ! -x "$python_bin" ]; then
+    fail "firmware Python not found or not executable: $python_bin"
   fi
-  if [ -z "$PYTHON_BIN" ] && [ -f "${PYTHON_RUNTIME_DIR}/bin/python3.11" ]; then
-    PYTHON_BIN="${PYTHON_RUNTIME_DIR}/bin/python3.11"
-    SD_RUNTIME=1
-  fi
-  if [ -z "$PYTHON_BIN" ] && command -v python3 >/dev/null 2>&1; then
-    PYTHON_BIN="$(command -v python3)"
-  fi
-  if [ -z "$PYTHON_BIN" ]; then
-    fail "python3 runtime not found; deploy runtime/python-pluto-armhf.tar.gz to the SD card"
-  fi
-  if [ ! -f "$SCRIPT" ]; then
-    fail "refresh script not found: $SCRIPT"
-  fi
-
-  if [ "$SD_RUNTIME" = "1" ]; then
-    export PYTHONHOME="${PYTHON_RUNTIME_DIR}"
-    export LD_LIBRARY_PATH="${PYTHON_RUNTIME_DIR}/lib:${PYTHON_RUNTIME_DIR}/usr/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
-    if PYTHONPATH="${PYTHON_DIR}${PYTHONPATH:+:${PYTHONPATH}}" "$PYTHON_BIN" "$SCRIPT" "$@" 2>/tmp/pluto_python_direct.err; then
-      rm -f /tmp/pluto_python_direct.err
-      return 0
-    fi
-    if [ -x /lib/ld-linux-armhf.so.3 ]; then
-      PYTHONPATH="${PYTHON_DIR}${PYTHONPATH:+:${PYTHONPATH}}" /lib/ld-linux-armhf.so.3 "$PYTHON_BIN" "$SCRIPT" "$@"
-      return $?
-    fi
-    cat /tmp/pluto_python_direct.err >&2 2>/dev/null || true
-    fail "SD-card Python runtime is present but could not be executed"
-  fi
-
-  PYTHONPATH="${PYTHON_DIR}${PYTHONPATH:+:${PYTHONPATH}}" "$PYTHON_BIN" "$SCRIPT" "$@"
+  "$python_bin" "$script" "$@"
 }
 
 run_pass_generation() {
@@ -265,7 +233,7 @@ start_full_background() {
   ) >"$FULL_LOG" 2>&1 &
 }
 
-mkdir -p "$DATA_DIR" "$TOOLS_DIR" "$PYTHON_DIR" "$LOG_DIR"
+mkdir -p "$DATA_DIR" "$TOOLS_DIR" "$LOG_DIR"
 
 case "$MODE" in
   passes)
