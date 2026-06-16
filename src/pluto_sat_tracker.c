@@ -23,7 +23,7 @@
 #include <stdint.h>
 #include <pthread.h>
 
-#define APP_VERSION "0.2.2"
+#define APP_VERSION "2.2.1"
 /* RESTORE_517C91A_BUILDABLE_KEEP_RECEIVER_V1 */
 /* BACKEND_STREAMING_AUDIO_STREAM_ROUTE_V1C */
 /* BACKEND_STREAMING_AUDIO_ROUTE_FIX_V1B */
@@ -3667,6 +3667,16 @@ static void handle_request(
     } else if (strcmp(path, "/SatelliteTracker/") == 0 ||
                strcmp(path, "/SatelliteTracker/index.html") == 0) {
         join_path(file_path, sizeof(file_path), cfg->web_dir, "index.html");
+        send_file(fd, file_path);
+
+    /* BACKEND_SPLIT_UI_STATIC_ASSETS_V3 */
+    } else if (strcmp(path, "/app.css") == 0 ||
+               strcmp(path, "/SatelliteTracker/app.css") == 0) {
+        join_path(file_path, sizeof(file_path), cfg->web_dir, "app.css");
+        send_file(fd, file_path);
+    } else if (strcmp(path, "/app.js") == 0 ||
+               strcmp(path, "/SatelliteTracker/app.js") == 0) {
+        join_path(file_path, sizeof(file_path), cfg->web_dir, "app.js");
         send_file(fd, file_path);
     } else if (strcmp(path, "/api/status") == 0) {
         send_status(fd, cfg);

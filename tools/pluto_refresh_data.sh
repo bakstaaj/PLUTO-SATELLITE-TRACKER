@@ -1,11 +1,12 @@
 #!/bin/sh
 # ASYNC_PASS_REFRESH_RUNNER_V4
+# PASS_REFRESH_1HR_NO_FULL_V1
 # Refresh Pluto satellite catalog/pass data.
 #
 # MODE=passes is intentionally non-blocking for browser/UI use:
 #   1. Return quickly after queueing a background quick-preview worker.
 #   2. The worker generates a small current preview and publishes it atomically.
-#   3. The worker then queues a full 24-hour rebuild in the background.
+#   3. The worker stops after a 1-hour pass scan; full rebuild is disabled for audio stability.
 #
 # The browser UI is the normal time source on an untethered Pluto. It should call
 # /api/time/sync before /api/refresh/passes. This script derives start UTC from
@@ -35,12 +36,12 @@ STATUS_FILE="${DATA_DIR}/refresh_status.json"
 STATUS_UPDATER="${TOOLS_DIR}/write_refresh_status.py"
 LOG_DIR="${SD_ROOT}/logs"
 
-QUICK_HOURS="${PLUTO_PASS_QUICK_HOURS:-4}"
-QUICK_LIMIT="${PLUTO_PASS_QUICK_LIMIT:-5}"
+QUICK_HOURS="${PLUTO_PASS_QUICK_HOURS:-1}"
+QUICK_LIMIT="${PLUTO_PASS_QUICK_LIMIT:-20}"
 QUICK_STEP_SECONDS="${PLUTO_PASS_QUICK_STEP_SECONDS:-120}"
-FULL_HOURS="${PLUTO_PASS_FULL_HOURS:-24}"
-FULL_LIMIT="${PLUTO_PASS_FULL_LIMIT:-80}"
-FULL_STEP_SECONDS="${PLUTO_PASS_STEP_SECONDS:-60}"
+FULL_HOURS="${PLUTO_PASS_FULL_HOURS:-1}"
+FULL_LIMIT="${PLUTO_PASS_FULL_LIMIT:-20}"
+FULL_STEP_SECONDS="${PLUTO_PASS_STEP_SECONDS:-120}"
 QUICK_LOCK_MAX_AGE="${PLUTO_PASS_QUICK_LOCK_MAX_AGE_SECONDS:-180}"
 FULL_LOCK_MAX_AGE="${PLUTO_PASS_FULL_LOCK_MAX_AGE_SECONDS:-240}"
 CATALOG_LOCK_MAX_AGE="${PLUTO_CATALOG_LOCK_MAX_AGE_SECONDS:-900}"
@@ -160,6 +161,38 @@ clear_pass_locks() {
   done
 }
 
+pass_cache_age_seconds() {
+  PASS_FILE="${DATA_DIR}/passes.json"
+  NOW="$(now_epoch)"
+  if [ ! -s "$PASS_FILE" ]; then
+    echo 999999
+    return 0
+  fi
+  if command -v stat >/dev/null 2>&1; then
+    MTIME="$(stat -c %Y "$PASS_FILE" 2>/dev/null || echo 0)"
+  else
+    MTIME=0
+  fi
+  case "$MTIME" in
+    ''|*[!0-9]*) MTIME=0 ;;
+  esac
+  if [ "$NOW" -ge "$MTIME" ] 2>/dev/null; then
+    echo $((NOW - MTIME))
+  else
+    echo 999999
+  fi
+}
+
+skip_recent_pass_refresh_if_fresh() {
+  REFRESH_INTERVAL="${PLUTO_PASS_REFRESH_INTERVAL_SECONDS:-1800}"
+  AGE="$(pass_cache_age_seconds)"
+  if [ "$AGE" -lt "$REFRESH_INTERVAL" ] 2>/dev/null; then
+    write_status "idle" "passes" "Using recent 1-hour pass cache; next short scan allowed in $((REFRESH_INTERVAL - AGE)) seconds"
+    exit 0
+  fi
+}
+
+
 run_python() {
   # FIRMWARE_PYTHON_ONLY_V3
   script="$1"
@@ -237,8 +270,9 @@ mkdir -p "$DATA_DIR" "$TOOLS_DIR" "$LOG_DIR"
 
 case "$MODE" in
   passes)
+    skip_recent_pass_refresh_if_fresh
     clear_pass_locks
-    write_status "running" "passes" "Queued quick pass preview on Pluto"
+    write_status "running" "passes" "Queued 1-hour pass scan on Pluto"
     start_pass_worker_background
     ;;
   passes_worker)
@@ -247,16 +281,12 @@ case "$MODE" in
     write_status "running" "passes" "Generating quick pass preview on Pluto"
     run_pass_generation "$QUICK_TMP" "$QUICK_HOURS" "$QUICK_LIMIT" "$QUICK_STEP_SECONDS" "$REFRESH_START_UTC" || fail "quick pass preview failed"
     mv "$QUICK_TMP" "${DATA_DIR}/passes.json"
-    write_generated_status passes "${DATA_DIR}/passes.json" || fail "quick pass status update failed"
-    start_full_background
+    write_generated_status passes "${DATA_DIR}/passes.json" || fail "1-hour pass status update failed"
+    write_status "idle" "passes" "Generated 1-hour pass scan; full background rebuild disabled for audio stability"
     ;;
   passes_full)
-    acquire_lock "/tmp/pluto_refresh_passes_full.lock" "passes" "Full 24-hour pass refresh already in progress" "$FULL_LOCK_MAX_AGE"
-    FULL_TMP="${DATA_DIR}/passes.full.tmp.$$"
-    write_status "running" "passes" "Regenerating full 24-hour pass predictions on Pluto"
-    run_pass_generation "$FULL_TMP" "$FULL_HOURS" "$FULL_LIMIT" "$FULL_STEP_SECONDS" "$REFRESH_START_UTC" || fail "full 24-hour pass refresh failed"
-    mv "$FULL_TMP" "${DATA_DIR}/passes.json"
-    write_generated_status passes "${DATA_DIR}/passes.json" || fail "full pass status update failed"
+    write_status "idle" "passes" "Full pass rebuild disabled; using 1-hour pass scan every 30 minutes for audio stability"
+    exit 0
     ;;
   catalog)
     acquire_lock "/tmp/pluto_refresh_catalog.lock" "catalog" "Catalog refresh already in progress" "$CATALOG_LOCK_MAX_AGE"
