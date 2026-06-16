@@ -23,7 +23,7 @@
 #include <stdint.h>
 #include <pthread.h>
 
-#define APP_VERSION "2.2.1"
+#define APP_VERSION "2.3.0"
 /* RESTORE_517C91A_BUILDABLE_KEEP_RECEIVER_V1 */
 /* BACKEND_STREAMING_AUDIO_STREAM_ROUTE_V1C */
 /* BACKEND_STREAMING_AUDIO_ROUTE_FIX_V1B */
@@ -92,8 +92,34 @@ static void json_escape(char *dst, size_t dst_size, const char *src);
 static int json_string_value(const char *json, const char *key, char *out, size_t out_size);
 static int json_double_value(const char *json, const char *key, double *out);
 static int send_wav_stream(int fd, const struct app_config *cfg, const char *query);
+static int apply_radio_track_step(
+    const struct app_config *cfg,
+    const char *state,
+    const char *message,
+    int enforce_pass_window,
+    char *response,
+    size_t response_size,
+    char *error,
+    size_t error_size);
+static int ensure_track_auto_running_for_audio_v1(const struct app_config *cfg);
+static void track_auto_set_running(int running);
 static void append_audio_debug(const char *message);
 static struct live_audio_state g_live_audio = {0};
+static int g_audio_doppler_running_v6 = 0; /* BACKEND_AUDIO_OWNED_DOPPLER_V6 */
+static pthread_t g_audio_doppler_thread_v6;
+static const struct app_config *g_audio_doppler_cfg_v6 = NULL;
+static int g_audio_started_track_auto_v1 = 0; /* BACKEND_AUDIO_DOPPLER_TRACKED_START_V1 */
+static int apply_radio_track_step(
+    const struct app_config *cfg,
+    const char *state,
+    const char *message,
+    int enforce_pass_window,
+    char *response,
+    size_t response_size,
+    char *error,
+    size_t error_size);
+static int ensure_track_auto_running_for_audio_v1(const struct app_config *cfg);
+static void track_auto_set_running(int running);
 
 static void on_signal(int signum)
 {
@@ -105,6 +131,52 @@ static const char *env_or_default(const char *name, const char *fallback)
 {
     const char *value = getenv(name);
     return (value && value[0]) ? value : fallback;
+}
+
+/* BACKEND_AUDIO_DOPPLER_TRACKED_START_V1 */
+static int query_param_is_true_audio_doppler_v1(const char *query, const char *name)
+{
+    char value[32] = "";
+
+    if (!query || !name || !*name) {
+        return 0;
+    }
+
+    query_param(query, name, value, sizeof(value));
+    return strcmp(value, "1") == 0 ||
+           strcmp(value, "true") == 0 ||
+           strcmp(value, "yes") == 0 ||
+           strcmp(value, "on") == 0;
+}
+
+static int query_param_is_false_audio_doppler_v6(const char *query, const char *name)
+{
+    char value[32] = "";
+
+    if (!query || !name || !*name) {
+        return 0;
+    }
+
+    query_param(query, name, value, sizeof(value));
+    return strcmp(value, "0") == 0 ||
+           strcmp(value, "false") == 0 ||
+           strcmp(value, "no") == 0 ||
+           strcmp(value, "off") == 0;
+}
+
+static int query_param_is_false_audio_doppler_v3(const char *query, const char *name)
+{
+    char value[32] = "";
+
+    if (!query || !name || !*name) {
+        return 0;
+    }
+
+    query_param(query, name, value, sizeof(value));
+    return strcmp(value, "0") == 0 ||
+           strcmp(value, "false") == 0 ||
+           strcmp(value, "no") == 0 ||
+           strcmp(value, "off") == 0;
 }
 
 
@@ -1234,6 +1306,19 @@ static int write_radio_target_state(
     return 1;
 }
 
+
+/* BACKEND_AUDIO_DOPPLER_DEFAULT_V3 */
+static int is_noaa_weather_frequency_v3(long long frequency_hz)
+{
+    return frequency_hz == 162400000LL ||
+           frequency_hz == 162425000LL ||
+           frequency_hz == 162450000LL ||
+           frequency_hz == 162475000LL ||
+           frequency_hz == 162500000LL ||
+           frequency_hz == 162525000LL ||
+           frequency_hz == 162550000LL;
+}
+
 static int parse_frequency_hz(const char *value, long long *out)
 {
     char *end = NULL;
@@ -1286,6 +1371,25 @@ static int read_first_line(const char *path, char *out, size_t out_size)
 
 static int write_rx_lo_frequency(long long frequency_hz, char *path_used, size_t path_used_size)
 {
+    /* BACKEND_DOPPLER_IIO_LO_WRITE_V4
+     * Match the known-good pluto_fm_receiver tuning path. Some Pluto Plus
+     * firmware layouts do not expose old sysfs LO paths reliably, while
+     * iio_attr against ad9361-phy altvoltage0 frequency works.
+     */
+    {
+        char command[512];
+        int result;
+        if (snprintf(command, sizeof(command),
+                     "/usr/bin/iio_attr -u local: -c ad9361-phy altvoltage0 frequency %lld >/dev/null 2>&1",
+                     frequency_hz) < (int)sizeof(command)) {
+            result = system(command);
+            if (result != -1 && WIFEXITED(result) && WEXITSTATUS(result) == 0) {
+                snprintf(path_used, path_used_size, "iio_attr:ad9361-phy/altvoltage0/frequency");
+                return 1;
+            }
+        }
+    }
+
     const char *paths[] = {
         "/sys/bus/iio/devices/iio:device1/out_altvoltage0_RX_LO_frequency",
         "/sys/bus/iio/devices/iio:device0/out_altvoltage0_RX_LO_frequency",
@@ -1711,6 +1815,7 @@ static void *live_audio_worker(void *arg)
     return NULL;
 }
 
+static void audio_doppler_stop_worker_v6(void);
 static int stop_live_audio_session(void)
 {
     pid_t pid = 0;
@@ -1731,6 +1836,11 @@ static int stop_live_audio_session(void)
     }
 
     unlink(AUDIO_LIVE_PCM_PATH);
+    audio_doppler_stop_worker_v6();
+    if (g_audio_started_track_auto_v1) {
+        track_auto_set_running(0);
+        g_audio_started_track_auto_v1 = 0;
+    }
     return was_running;
 }
 
@@ -2152,11 +2262,476 @@ static int send_live_audio_stream_v1f(int fd, const char *query)
     return finish_chunked_response(fd);
 }
 
+
+/* BACKEND_AUDIO_OWNED_DOPPLER_V6 */
+static int audio_read_track_plan_v6(const struct app_config *cfg, char **plan_out, size_t *plan_len_out, char *path_used, size_t path_used_size)
+{
+    char path[PATH_BUF_SIZE];
+    const char *fallback_paths[] = {
+        "/mnt/jffs2/pluto_sat_tracker/data/radio_track.json",
+        "data/radio_track.json"
+    };
+    size_t i;
+
+    if (!plan_out || !plan_len_out) {
+        return 0;
+    }
+    *plan_out = NULL;
+    *plan_len_out = 0;
+
+    if (cfg && cfg->data_dir) {
+        join_path(path, sizeof(path), cfg->data_dir, "radio_track.json");
+        if (read_file_to_string(path, plan_out, plan_len_out) == 0) {
+            if (path_used && path_used_size > 0) {
+                snprintf(path_used, path_used_size, "%s", path);
+            }
+            return 1;
+        }
+    }
+
+    for (i = 0; i < sizeof(fallback_paths) / sizeof(fallback_paths[0]); i++) {
+        if (read_file_to_string(fallback_paths[i], plan_out, plan_len_out) == 0) {
+            if (path_used && path_used_size > 0) {
+                snprintf(path_used, path_used_size, "%s", fallback_paths[i]);
+            }
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static int audio_track_window_v6(const char *plan, long long *aos_epoch, long long *los_epoch)
+{
+    char aos[64] = "";
+    char los[64] = "";
+
+    if (!plan || !aos_epoch || !los_epoch) {
+        return 0;
+    }
+
+    if (!json_string_value(plan, "aos_utc", aos, sizeof(aos)) ||
+        !json_string_value(plan, "los_utc", los, sizeof(los))) {
+        return 0;
+    }
+
+    return parse_iso_utc_epoch(aos, aos_epoch) && parse_iso_utc_epoch(los, los_epoch);
+}
+
+static int audio_find_track_point_for_now_v6(
+    const char *plan_json,
+    long long now_epoch,
+    long long *rx_hz,
+    char *point_time,
+    size_t point_time_size,
+    int *point_index,
+    long long *point_epoch_out)
+{
+    const char *p = plan_json;
+    long long best_past_epoch = LLONG_MIN;
+    long long best_future_epoch = LLONG_MAX;
+    long long best_past_hz = 0;
+    long long best_future_hz = 0;
+    int best_past_index = -1;
+    int best_future_index = -1;
+    char best_past_time[64] = "";
+    char best_future_time[64] = "";
+    int index = 0;
+    int found_past = 0;
+    int found_future = 0;
+
+    while (p && (p = strstr(p, "\"time_utc\"")) != NULL) {
+        char time_value[64] = "";
+        const char *object_start = p;
+        const char *time_start;
+        const char *next_point;
+        long long point_epoch;
+        long long point_rx_hz;
+
+        while (object_start > plan_json && *object_start != '{') {
+            object_start--;
+        }
+
+        time_start = strchr(p, ':');
+        if (!time_start) {
+            break;
+        }
+        time_start++;
+        while (*time_start == ' ' || *time_start == '\t' || *time_start == '\r' || *time_start == '\n') {
+            time_start++;
+        }
+        if (*time_start != '"') {
+            p += 10;
+            continue;
+        }
+        time_start++;
+
+        snprintf(time_value, sizeof(time_value), "%.63s", time_start);
+        if (strchr(time_value, '"')) {
+            *strchr(time_value, '"') = '\0';
+        }
+
+        next_point = strstr(time_start, "\"time_utc\"");
+
+        if (!json_long_long_after(object_start, "rx_hz", &point_rx_hz) ||
+            !parse_iso_utc_epoch(time_value, &point_epoch)) {
+            p = next_point ? next_point : time_start + strlen(time_start);
+            index++;
+            continue;
+        }
+
+        if (point_epoch <= now_epoch) {
+            if (!found_past || point_epoch > best_past_epoch) {
+                found_past = 1;
+                best_past_epoch = point_epoch;
+                best_past_hz = point_rx_hz;
+                best_past_index = index;
+                snprintf(best_past_time, sizeof(best_past_time), "%s", time_value);
+            }
+        } else if (!found_future || point_epoch < best_future_epoch) {
+            found_future = 1;
+            best_future_epoch = point_epoch;
+            best_future_hz = point_rx_hz;
+            best_future_index = index;
+            snprintf(best_future_time, sizeof(best_future_time), "%s", time_value);
+        }
+
+        p = next_point ? next_point : time_start + strlen(time_start);
+        index++;
+    }
+
+    if (found_past) {
+        *rx_hz = best_past_hz;
+        *point_index = best_past_index;
+        if (point_epoch_out) {
+            *point_epoch_out = best_past_epoch;
+        }
+        snprintf(point_time, point_time_size, "%s", best_past_time);
+        return 1;
+    }
+
+    if (found_future) {
+        *rx_hz = best_future_hz;
+        *point_index = best_future_index;
+        if (point_epoch_out) {
+            *point_epoch_out = best_future_epoch;
+        }
+        snprintf(point_time, point_time_size, "%s", best_future_time);
+        return 1;
+    }
+
+    return 0;
+}
+
+static int audio_write_track_state_v6(
+    const struct app_config *cfg,
+    const char *state,
+    const char *name,
+    int point_index,
+    const char *point_time,
+    long long rx_hz,
+    const char *lo_path,
+    const char *message,
+    const char *plan_path)
+{
+    char path[PATH_BUF_SIZE];
+    char tmp_path[PATH_BUF_SIZE + 8];
+    char name_json[512];
+    char message_json[512];
+    char plan_path_json[PATH_BUF_SIZE * 2];
+    FILE *f;
+    time_t now = time(NULL);
+
+    json_escape(name_json, sizeof(name_json), name ? name : "");
+    json_escape(message_json, sizeof(message_json), message ? message : "");
+    json_escape(plan_path_json, sizeof(plan_path_json), plan_path ? plan_path : "");
+
+    join_path(path, sizeof(path), cfg->data_dir, "radio_track_state.json");
+    snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
+
+    f = fopen(tmp_path, "wb");
+    if (!f) {
+        return 0;
+    }
+
+    fprintf(f,
+            "{\n"
+            "  \"ok\": true,\n"
+            "  \"state\": \"%s\",\n"
+            "  \"updated_epoch\": %ld,\n"
+            "  \"name\": \"%s\",\n"
+            "  \"point_index\": %d,\n"
+            "  \"point_time_utc\": \"%s\",\n"
+            "  \"rx_hz\": %lld,\n"
+            "  \"lo_path\": \"%s\",\n"
+            "  \"plan_path\": \"%s\",\n"
+            "  \"lo_write_result\": \"%s\",\n"
+            "  \"message\": \"%s\"\n"
+            "}\n",
+            state ? state : "unknown",
+            (long)now,
+            name_json,
+            point_index,
+            point_time ? point_time : "",
+            rx_hz,
+            lo_path ? lo_path : "",
+            plan_path_json,
+            (lo_path && lo_path[0]) ? "written" : "not_attempted",
+            message_json);
+    fclose(f);
+
+    if (rename(tmp_path, path) != 0) {
+        unlink(tmp_path);
+        return 0;
+    }
+    return 1;
+}
+
+static int audio_doppler_tune_now_v6(
+    const struct app_config *cfg,
+    const char *state,
+    const char *message,
+    char *response,
+    size_t response_size,
+    char *error,
+    size_t error_size,
+    long long *rx_hz_out)
+{
+    char *plan = NULL;
+    size_t plan_len = 0;
+    char plan_path[PATH_BUF_SIZE] = "";
+    char name[256] = "";
+    char name_json[512];
+    char point_time[64] = "";
+    char lo_path[PATH_BUF_SIZE] = "";
+    long long rx_hz = 0;
+    long long aos_epoch = 0;
+    long long los_epoch = 0;
+    long long point_epoch = 0;
+    int point_index = -1;
+    time_t now = time(NULL);
+
+    (void)plan_len;
+
+    if (!audio_read_track_plan_v6(cfg, &plan, &plan_len, plan_path, sizeof(plan_path))) {
+        snprintf(error, error_size, "no Doppler track plan has been stored in active data_dir or fallback paths");
+        return 404;
+    }
+
+    json_string_value(plan, "name", name, sizeof(name));
+
+    if (audio_track_window_v6(plan, &aos_epoch, &los_epoch)) {
+        if ((long long)now < aos_epoch) {
+            long long seconds_until_aos = aos_epoch - (long long)now;
+            free(plan);
+            audio_write_track_state_v6(cfg, "waiting", name, -1, "", 0, "", "Waiting for AOS", plan_path);
+            snprintf(error, error_size, "pass has not reached AOS; seconds_until_aos=%lld", seconds_until_aos);
+            return 409;
+        }
+        if ((long long)now > los_epoch) {
+            long long seconds_since_los = (long long)now - los_epoch;
+            free(plan);
+            audio_write_track_state_v6(cfg, "complete", name, -1, "", 0, "", "Pass complete", plan_path);
+            snprintf(error, error_size, "pass is complete; seconds_since_los=%lld", seconds_since_los);
+            return 409;
+        }
+    }
+
+    if (!audio_find_track_point_for_now_v6(plan, (long long)now, &rx_hz, point_time, sizeof(point_time), &point_index, &point_epoch)) {
+        free(plan);
+        snprintf(error, error_size, "track plan does not contain usable Doppler points");
+        return 400;
+    }
+    free(plan);
+
+    if (rx_hz < PLUTO_MIN_HZ || rx_hz > PLUTO_MAX_HZ || !write_rx_lo_frequency(rx_hz, lo_path, sizeof(lo_path))) {
+        audio_write_track_state_v6(cfg, "tune_error", name, point_index, point_time, rx_hz, "", "could not tune RX LO for Doppler track point", plan_path);
+        snprintf(error, error_size, "could not tune RX LO for Doppler track point");
+        return 500;
+    }
+
+    audio_write_track_state_v6(cfg, state, name, point_index, point_time, rx_hz, lo_path, message, plan_path);
+
+    if (rx_hz_out) {
+        *rx_hz_out = rx_hz;
+    }
+
+    json_escape(name_json, sizeof(name_json), name);
+    snprintf(response, response_size,
+             "{\"ok\":true,\"state\":\"%s\",\"name\":\"%s\",\"point_index\":%d,\"point_time_utc\":\"%s\",\"rx_hz\":%lld,\"lo_path\":\"%s\",\"plan_path\":\"%s\",\"point_epoch\":%lld}\n",
+             state ? state : "active",
+             name_json,
+             point_index,
+             point_time,
+             rx_hz,
+             lo_path,
+             plan_path,
+             point_epoch);
+    return 200;
+}
+
+static int audio_doppler_should_run_v6(void)
+{
+    int running;
+    pthread_mutex_lock(&g_track_lock);
+    running = g_audio_doppler_running_v6;
+    pthread_mutex_unlock(&g_track_lock);
+    return running;
+}
+
+static void audio_doppler_set_running_v6(int running)
+{
+    pthread_mutex_lock(&g_track_lock);
+    g_audio_doppler_running_v6 = running;
+    pthread_mutex_unlock(&g_track_lock);
+}
+
+static void *audio_doppler_worker_v6(void *arg)
+{
+    const struct app_config *cfg = (const struct app_config *)arg;
+
+    while (audio_doppler_should_run_v6()) {
+        char response[1024];
+        char error[256] = "";
+        long long rx_hz = 0;
+        int status = audio_doppler_tune_now_v6(
+            cfg,
+            "audio_auto_active",
+            "audio-owned automatic Doppler retune",
+            response,
+            sizeof(response),
+            error,
+            sizeof(error),
+            &rx_hz);
+        (void)response;
+        (void)rx_hz;
+
+        if (status != 200) {
+            audio_doppler_set_running_v6(0);
+            break;
+        }
+        sleep(5);
+    }
+    return NULL;
+}
+
+static int audio_doppler_start_worker_v6(const struct app_config *cfg)
+{
+    int create_result;
+
+    pthread_mutex_lock(&g_track_lock);
+    if (g_audio_doppler_running_v6) {
+        pthread_mutex_unlock(&g_track_lock);
+        return 1;
+    }
+    g_audio_doppler_cfg_v6 = cfg;
+    g_audio_doppler_running_v6 = 1;
+    pthread_mutex_unlock(&g_track_lock);
+
+    create_result = pthread_create(&g_audio_doppler_thread_v6, NULL, audio_doppler_worker_v6, (void *)cfg);
+    if (create_result != 0) {
+        audio_doppler_set_running_v6(0);
+        return 0;
+    }
+    pthread_detach(g_audio_doppler_thread_v6);
+    return 1;
+}
+
+static void audio_doppler_stop_worker_v6(void)
+{
+    audio_doppler_set_running_v6(0);
+}
+
+
+/* BACKEND_AUDIO_DOPPLER_STATE_FALLBACK_V7 */
+static int audio_read_active_state_rx_hz_v7(
+    const struct app_config *cfg,
+    long long *rx_hz_out,
+    char *state_out,
+    size_t state_out_size,
+    char *path_used,
+    size_t path_used_size)
+{
+    char path[PATH_BUF_SIZE];
+    char *state_json = NULL;
+    size_t state_len = 0;
+    char state[64] = "";
+    char lo_result[64] = "";
+    long long rx_hz = 0;
+
+    (void)state_len;
+
+    if (!cfg || !rx_hz_out) {
+        return 0;
+    }
+
+    join_path(path, sizeof(path), cfg->data_dir, "radio_track_state.json");
+    if (read_file_to_string(path, &state_json, &state_len) != 0) {
+        return 0;
+    }
+
+    json_string_value(state_json, "state", state, sizeof(state));
+    json_string_value(state_json, "lo_write_result", lo_result, sizeof(lo_result));
+
+    if (!json_long_long_after(state_json, "rx_hz", &rx_hz)) {
+        free(state_json);
+        return 0;
+    }
+
+    free(state_json);
+
+    if (rx_hz < PLUTO_MIN_HZ || rx_hz > PLUTO_MAX_HZ) {
+        return 0;
+    }
+
+    if (strcmp(state, "auto_active") != 0 &&
+        strcmp(state, "audio_active") != 0 &&
+        strcmp(state, "audio_auto_active") != 0) {
+        return 0;
+    }
+
+    if (lo_result[0] && strcmp(lo_result, "written") != 0) {
+        return 0;
+    }
+
+    *rx_hz_out = rx_hz;
+
+    if (state_out && state_out_size > 0) {
+        snprintf(state_out, state_out_size, "%s", state);
+    }
+
+    if (path_used && path_used_size > 0) {
+        snprintf(path_used, path_used_size, "%s", path);
+    }
+
+    return 1;
+}
+
 static void send_live_audio_start(int fd, const struct app_config *cfg, const char *query)
 {
     char frequency_text[64] = "";
-    char body[256];
+    char body[1200];
+    char track_response[1024];
+    char track_error[256] = "";
     long long frequency_hz = 0;
+    long long requested_frequency_hz = 0;
+    long long doppler_frequency_hz = 0;
+    int explicit_doppler =
+        query_param_is_true_audio_doppler_v1(query, "doppler") ||
+        query_param_is_true_audio_doppler_v1(query, "track") ||
+        query_param_is_true_audio_doppler_v1(query, "doppler_track");
+    int fixed_requested =
+        query_param_is_true_audio_doppler_v1(query, "fixed") ||
+        query_param_is_true_audio_doppler_v1(query, "no_doppler") ||
+        query_param_is_false_audio_doppler_v6(query, "doppler") ||
+        query_param_is_false_audio_doppler_v6(query, "track") ||
+        query_param_is_false_audio_doppler_v6(query, "doppler_track");
+    int noaa_fixed = 0;
+    int doppler_attempted = 0;
+    int doppler_used = 0;
+    int doppler_defaulted = 0;
+    int doppler_fallback = 0;
+    int doppler_state_fallback = 0;
 
     query_param(query, "downlink_hz", frequency_text, sizeof(frequency_text));
     if (frequency_text[0]) {
@@ -2169,14 +2744,97 @@ static void send_live_audio_start(int fd, const struct app_config *cfg, const ch
         return;
     }
 
+    requested_frequency_hz = frequency_hz;
+    noaa_fixed = is_noaa_weather_frequency_v3(requested_frequency_hz);
+
+    if (!noaa_fixed && !fixed_requested && !explicit_doppler) {
+        explicit_doppler = 1;
+        doppler_defaulted = 1;
+    }
+
+    if (!noaa_fixed && !fixed_requested && explicit_doppler) {
+        int status;
+        status = audio_doppler_tune_now_v6(
+            cfg,
+            "audio_active",
+            "audio-owned Doppler point tuned before live audio start",
+            track_response,
+            sizeof(track_response),
+            track_error,
+            sizeof(track_error),
+            &doppler_frequency_hz);
+
+        doppler_attempted = 1;
+
+        if (status == 200 && doppler_frequency_hz >= PLUTO_MIN_HZ && doppler_frequency_hz <= PLUTO_MAX_HZ) {
+            frequency_hz = doppler_frequency_hz;
+            doppler_used = 1;
+        } else {
+            char fallback_state[64] = "";
+            char fallback_path[PATH_BUF_SIZE] = "";
+            long long fallback_rx_hz = 0;
+
+            if (audio_read_active_state_rx_hz_v7(cfg, &fallback_rx_hz, fallback_state, sizeof(fallback_state), fallback_path, sizeof(fallback_path))) {
+                frequency_hz = fallback_rx_hz;
+                doppler_frequency_hz = fallback_rx_hz;
+                doppler_used = 1;
+                doppler_state_fallback = 1;
+                audio_write_track_state_v6(
+                    cfg,
+                    "audio_active",
+                    "",
+                    -1,
+                    "",
+                    fallback_rx_hz,
+                    "iio_attr:ad9361-phy/altvoltage0/frequency",
+                    "audio Listen using active Doppler tracker state fallback",
+                    fallback_path);
+            } else if (doppler_defaulted) {
+                doppler_fallback = 1;
+                frequency_hz = requested_frequency_hz;
+            } else {
+                char error_body[768];
+                char escaped_error[512];
+                json_escape(escaped_error, sizeof(escaped_error),
+                            track_error[0] ? track_error : "Doppler track is not ready for this pass");
+                snprintf(error_body, sizeof(error_body),
+                         "{\"ok\":false,\"error\":\"%s\",\"doppler_track\":true,\"requested_downlink_hz\":%lld}\n",
+                         escaped_error,
+                         requested_frequency_hz);
+                send_text(fd, 409, "Conflict", "application/json; charset=utf-8", error_body);
+                return;
+            }
+        }
+    }
+
     if (!start_live_audio_session(cfg, frequency_hz)) {
         send_audio_error_json(fd, 500, "Internal Server Error", "could not start live Pluto audio");
         return;
     }
 
+    if (doppler_used && !doppler_state_fallback) {
+        if (!audio_doppler_start_worker_v6(cfg)) {
+            stop_live_audio_session();
+            send_audio_error_json(fd, 500, "Internal Server Error", "could not start audio-owned automatic Doppler tracking");
+            return;
+        }
+    } else if (!doppler_used) {
+        audio_doppler_stop_worker_v6();
+    }
+
     snprintf(body, sizeof(body),
-             "{\"ok\":true,\"state\":\"running\",\"downlink_hz\":%lld}\n",
-             frequency_hz);
+             "{\"ok\":true,\"state\":\"running\",\"downlink_hz\":%lld,\"audio_hz\":%lld,\"requested_downlink_hz\":%lld,\"doppler_track\":%s,\"doppler_attempted\":%s,\"doppler_defaulted\":%s,\"doppler_fallback\":%s,\"doppler_state_fallback\":%s,\"noaa_fixed\":%s,\"fixed_requested\":%s,\"auto_track\":%s}\n",
+             frequency_hz,
+             frequency_hz,
+             requested_frequency_hz,
+             doppler_used ? "true" : "false",
+             doppler_attempted ? "true" : "false",
+             doppler_defaulted ? "true" : "false",
+             doppler_fallback ? "true" : "false",
+             doppler_state_fallback ? "true" : "false",
+             noaa_fixed ? "true" : "false",
+             fixed_requested ? "true" : "false",
+             doppler_used ? "true" : "false");
     send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
 }
 
@@ -3531,6 +4189,29 @@ static void *track_auto_worker(void *arg)
         write_track_state(cfg, "stopped", "", -1, "", 0, "", "Automatic Doppler tracking stopped", -1, -1, -1, -1, "not_attempted");
     }
     return NULL;
+}
+
+
+/* BACKEND_AUDIO_DOPPLER_TRACKED_START_V1 */
+static int ensure_track_auto_running_for_audio_v1(const struct app_config *cfg)
+{
+    int create_result;
+
+    pthread_mutex_lock(&g_track_lock);
+    if (g_track_auto_running) {
+        pthread_mutex_unlock(&g_track_lock);
+        return 1;
+    }
+    g_track_auto_running = 1;
+    pthread_mutex_unlock(&g_track_lock);
+
+    create_result = pthread_create(&g_track_thread, NULL, track_auto_worker, (void *)cfg);
+    if (create_result != 0) {
+        track_auto_set_running(0);
+        return 0;
+    }
+    pthread_detach(g_track_thread);
+    return 1;
 }
 
 static void send_radio_track_auto_start(int fd, const struct app_config *cfg)

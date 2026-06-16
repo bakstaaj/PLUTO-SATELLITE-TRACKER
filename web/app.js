@@ -1722,6 +1722,7 @@ setDl("radioStatus", entries);
         return segmentBytes;
       };
 
+      /* NOAA_AUDIO_DIAGNOSTIC_RECONNECT_UNTIL_STOP_V6: reconnect NOAA stream segments until user clicks Stop. */
       const reconnectLoop = async () => {
         while (!session.stopped && analogAudioSession === session) {
           try {
@@ -1754,6 +1755,239 @@ setDl("radioStatus", entries);
       };
 
       reconnectLoop();
+    }
+
+
+    /* NOAA_AUDIO_DIAGNOSTIC_V3
+     * Fixed-frequency audio path test. This intentionally bypasses Doppler
+     * planning/tracking but uses the same backend live audio start/stream/stop
+     * endpoints and the same browser PCM scheduling model as satellite Listen.
+     */
+    function noaaDiagnosticFrequencyHz() {
+      const select = document.getElementById("noaaDiagnosticFrequencySelect");
+      const value = Number(select ? select.value : 0);
+      return Number.isFinite(value) && value > 0 ? value : 162500000;
+    }
+
+    function noaaDiagnosticAudioUrls(frequencyHz) {
+      const params = new URLSearchParams({ downlink_hz: String(frequencyHz) });
+      return {
+        downlink: frequencyHz,
+        startUrl: `/api/radio/audio/live/start?${params.toString()}`,
+        streamUrl: `/api/radio/audio/live.wav?stream=1&${params.toString()}`,
+        stopUrl: `/api/radio/audio/live/stop`
+      };
+    }
+
+    function formatNoaaDiagnosticFrequency(frequencyHz) {
+      return `${(Number(frequencyHz) / 1000000).toFixed(3)} MHz`;
+    }
+
+    async function startNoaaDiagnosticAudio(button, statusNode) {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const sampleRate = 24000;
+      const targetChunkBytes = 4096 * 2;
+      const frequencyHz = noaaDiagnosticFrequencyHz();
+      const audioUrls = noaaDiagnosticAudioUrls(frequencyHz);
+      const sessionKey = `noaa:${frequencyHz}`;
+
+      if (!AudioCtx) {
+        throw new Error("Web Audio is not available in this browser.");
+      }
+
+      await stopAnalogAudio("Audio diagnostic stopped.");
+
+      if (statusNode?.isConnected) {
+        statusNode.textContent = `Tuning NOAA ${formatNoaaDiagnosticFrequency(frequencyHz)}...`;
+      }
+
+      try {
+        await getJson(`/api/radio/plan?${new URLSearchParams({
+          name: "NOAA Audio Diagnostic",
+          downlink: String(frequencyHz),
+          mode: "NFM",
+          description: "NOAA Weather Radio audio path diagnostic"
+        }).toString()}`);
+      } catch (_error) {
+        // Continue: live/start can tune directly by downlink_hz.
+      }
+
+      await postJson(audioUrls.startUrl, {});
+
+      const context = new AudioCtx({ sampleRate });
+      await context.resume();
+
+      const session = {
+        button,
+        context,
+        controller: null,
+        nextTime: context.currentTime + 0.35,
+        passKey: sessionKey,
+        reconnectCount: 0,
+        reconnectTimer: 0,
+        sources: [],
+        statusNode,
+        stopUrl: audioUrls.stopUrl,
+        stopped: false,
+        totalBytes: 0,
+        totalBuffers: 0
+      };
+      analogAudioSession = session;
+
+      button.textContent = "Stop";
+      if (statusNode?.isConnected) {
+        statusNode.textContent = `Opening NOAA ${formatNoaaDiagnosticFrequency(frequencyHz)} backend audio stream...`;
+      }
+
+      const schedulePcmBytes = (pcmBytes) => {
+        if (session.stopped || !pcmBytes.length) return;
+        const evenLength = pcmBytes.length - (pcmBytes.length % 2);
+        if (evenLength <= 0) return;
+
+        const audioBuffer = pcm16ToAudioBuffer(context, pcmBytes.slice(0, evenLength), sampleRate);
+        const source = context.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(context.destination);
+        source.onended = () => {
+          const index = session.sources.indexOf(source);
+          if (index >= 0) session.sources.splice(index, 1);
+        };
+
+        const startAt = Math.max(context.currentTime + 0.05, session.nextTime);
+        source.start(startAt);
+        session.nextTime = startAt + audioBuffer.duration;
+        session.sources.push(source);
+        session.totalBuffers += 1;
+
+        const bufferedSeconds = Math.max(0, session.nextTime - context.currentTime);
+        if (statusNode?.isConnected) {
+          statusNode.textContent = `Playing NOAA ${formatNoaaDiagnosticFrequency(frequencyHz)} (${bufferedSeconds.toFixed(1)}s buffered, reconnects ${session.reconnectCount}).`;
+        }
+      };
+
+      const readOneStreamSegment = async () => {
+        const controller = new AbortController();
+        session.controller = controller;
+        const streamUrl = `${audioUrls.streamUrl}&request=${Date.now()}&reconnect=${session.reconnectCount}`;
+        const response = await fetch(streamUrl, {
+          cache: "no-store",
+          signal: controller.signal
+        });
+
+        if (!response.ok) {
+          throw new Error(`${streamUrl}: ${response.status}`);
+        }
+        if (!response.body || !response.body.getReader) {
+          throw new Error("Browser streaming fetch is not available.");
+        }
+
+        const reader = response.body.getReader();
+        let pending = new Uint8Array();
+        let headerSkipped = false;
+        let segmentBytes = 0;
+
+        const processPending = (force = false) => {
+          if (!headerSkipped) {
+            if (pending.length < 44) return;
+            pending = pending.slice(44);
+            headerSkipped = true;
+          }
+
+          while (pending.length >= targetChunkBytes || (force && pending.length >= 2)) {
+            const take = force ? pending.length - (pending.length % 2) : targetChunkBytes;
+            const chunk = pending.slice(0, take);
+            pending = pending.slice(take);
+            schedulePcmBytes(chunk);
+          }
+        };
+
+        while (!session.stopped) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (!value || !value.length) continue;
+
+          segmentBytes += value.length;
+          session.totalBytes += value.length;
+          pending = concatUint8Arrays(pending, value);
+          processPending(false);
+
+          if (statusNode?.isConnected && session.totalBuffers === 0) {
+            statusNode.textContent = `Receiving NOAA diagnostic stream (${session.totalBytes} bytes)...`;
+          }
+        }
+
+        processPending(true);
+        return segmentBytes;
+      };
+
+      const reconnectLoop = async () => {
+        while (!session.stopped && analogAudioSession === session) {
+          try {
+            const segmentBytes = await readOneStreamSegment();
+            if (session.stopped || analogAudioSession !== session) return;
+
+            session.reconnectCount += 1;
+            const bufferedSeconds = Math.max(0, session.nextTime - context.currentTime);
+            if (statusNode?.isConnected) {
+              statusNode.textContent =
+                `NOAA stream segment ended after ${segmentBytes} bytes; reconnecting (${bufferedSeconds.toFixed(1)}s buffered).`;
+            }
+
+            const delayMs = bufferedSeconds > 0.8 ? 200 : 20;
+            await new Promise((resolve) => {
+              session.reconnectTimer = window.setTimeout(resolve, delayMs);
+            });
+            session.reconnectTimer = 0;
+          } catch (error) {
+            if (session.stopped || analogAudioSession !== session) return;
+            const message = error && error.message ? error.message : "NOAA audio diagnostic failed.";
+            if (statusNode?.isConnected) statusNode.textContent = message;
+            const statusBar = document.getElementById("status");
+            if (statusBar) statusBar.textContent = message;
+            await stopAnalogAudio(message);
+            return;
+          }
+        }
+      };
+
+      reconnectLoop();
+    }
+
+    function bindNoaaAudioDiagnostic() {
+      const button = document.getElementById("noaaDiagnosticListenButton");
+      const statusNode = document.getElementById("noaaDiagnosticStatus");
+      const select = document.getElementById("noaaDiagnosticFrequencySelect");
+      if (!button || !statusNode || !select) return;
+
+      button.addEventListener("click", async () => {
+        const sessionKey = `noaa:${noaaDiagnosticFrequencyHz()}`;
+        if (analogAudioSession && analogAudioSession.passKey === sessionKey) {
+          await stopAnalogAudio("Audio diagnostic stopped.");
+          return;
+        }
+
+        button.disabled = true;
+        try {
+          statusNode.textContent = "Starting NOAA audio diagnostic...";
+          await startNoaaDiagnosticAudio(button, statusNode);
+        } catch (error) {
+          await stopAnalogAudio();
+          button.textContent = "Listen";
+          statusNode.textContent = error.message || "Unable to start NOAA audio diagnostic.";
+          const statusBar = document.getElementById("status");
+          if (statusBar) statusBar.textContent = statusNode.textContent;
+        } finally {
+          button.disabled = false;
+        }
+      });
+
+      select.addEventListener("change", async () => {
+        if (analogAudioSession && String(analogAudioSession.passKey || "").startsWith("noaa:")) {
+          await stopAnalogAudio(`Selected NOAA ${formatNoaaDiagnosticFrequency(noaaDiagnosticFrequencyHz())}. Press Listen to test.`);
+        } else {
+          statusNode.textContent = `Selected NOAA ${formatNoaaDiagnosticFrequency(noaaDiagnosticFrequencyHz())}. Press Listen to test.`;
+        }
+      });
     }
 
 function bindAnalogAudio(pass, node) {
@@ -1816,8 +2050,26 @@ function bindAnalogAudio(pass, node) {
 
     function renderPassDetail(pass) {
       const node = document.getElementById("passDetail");
-      if (analogAudioSession && analogAudioSession.passKey !== passKey(pass)) {
+      /* NOAA_AUDIO_DIAGNOSTIC_KEEP_RUNNING_V6
+
+       * Do not let normal pass-detail refreshes stop the fixed-frequency
+
+       * NOAA audio diagnostic. NOAA uses a noaa:<hz> session key and
+
+       * should run until the user clicks Stop. Satellite Listen sessions
+
+       * still stop when the selected pass changes.
+
+       */
+
+      if (analogAudioSession &&
+
+          !String(analogAudioSession.passKey || "").startsWith("noaa:") &&
+
+          analogAudioSession.passKey !== passKey(pass)) {
+
         stopAnalogAudio();
+
       }
 
       currentSelectedPass = pass || null;
@@ -2270,6 +2522,12 @@ const tbody = document.getElementById("satellites");
         document.getElementById("status").textContent = error.message;
       });
     });
+
+
+    const noaaDiagnosticListenButton = document.getElementById("noaaDiagnosticListenButton");
+    if (noaaDiagnosticListenButton) {
+      bindNoaaAudioDiagnostic();
+    }
 
     document.getElementById("menuToggleButton").addEventListener("click", () => {
       toggleDrawer();

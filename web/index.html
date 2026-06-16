@@ -169,6 +169,31 @@
             </div>
           </section>
 
+          <!-- NOAA_AUDIO_DIAGNOSTIC_V3 -->
+          <section class="drawer-section" id="noaaAudioDiagnosticPanel">
+            <h2>Audio Diagnostics</h2>
+            <p class="meta">Tune a NOAA Weather Radio channel with the same backend decoded live audio path used by satellite Listen.</p>
+            <div class="form-grid">
+              <div class="field full-width">
+                <label for="noaaDiagnosticFrequencySelect">NOAA Weather Frequency</label>
+                <select id="noaaDiagnosticFrequencySelect">
+                  <option value="162400000">162.400 MHz</option>
+                  <option value="162425000">162.425 MHz</option>
+                  <option value="162450000">162.450 MHz</option>
+                  <option value="162475000">162.475 MHz</option>
+                  <option value="162500000" selected>162.500 MHz</option>
+                  <option value="162525000">162.525 MHz</option>
+                  <option value="162550000">162.550 MHz</option>
+                </select>
+              </div>
+            </div>
+            <div class="button-row">
+              <button id="noaaDiagnosticListenButton" type="button">Listen</button>
+            </div>
+            <div id="noaaDiagnosticStatus" class="meta">Ready to test the audio path.</div>
+          </section>
+
+
           <section class="drawer-section">
             <h2>Radio Status</h2>
             <dl id="radioStatus">
