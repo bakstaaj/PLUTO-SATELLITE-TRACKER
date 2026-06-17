@@ -2922,11 +2922,13 @@ const tbody = document.getElementById("satellites");
   }
 
   function rotatorSuggestedHostV2410() {
+    // ROTATOR_LAN_HOST_ERROR_SOURCE_V2_4_11
     const host = window.location && window.location.hostname ? String(window.location.hostname) : "";
-    if (host && host !== "localhost" && host !== "127.0.0.1") {
+    if (host && host !== "localhost" && host !== "127.0.0.1" && host !== "0.0.0.0") {
       return host;
     }
-    return "0.0.0.0";
+
+    return "192.168.3.1";
   }
 
   function updateRotatorDirtyNoticeV2410() {
@@ -3011,7 +3013,7 @@ const tbody = document.getElementById("satellites");
           normalizeRotatorHostForTypeV2410();
         }
 
-        markRotatorConfigDirtyV2410("Rotator settings changed. Click Apply / Save Now before testing or tracking.");
+        markRotatorConfigDirtyV2410("Rotator settings changed. Click Apply / Save Now before testing or tracking. Host is the LAN IP reachable from the Pluto.");
       });
     });
 
@@ -3078,7 +3080,7 @@ const tbody = document.getElementById("satellites");
     normalizeRotatorHostForTypeV2410();
 
     const type = textValue("rotatorType", "simulation");
-    const defaultHost = rotatorTypeUsesHostV2410(type) ? rotatorSuggestedHostV2410() : "0.0.0.0";
+    const defaultHost = rotatorSuggestedHostV2410();
 
     return {
       enabled: boolValue("rotatorEnabled"),
@@ -3104,7 +3106,7 @@ const tbody = document.getElementById("satellites");
     try {
       const type = cfg.type || "simulation";
       const connection = cfg.connection || {};
-      const defaultHost = rotatorTypeUsesHostV2410(type) ? rotatorSuggestedHostV2410() : "0.0.0.0";
+      const defaultHost = rotatorSuggestedHostV2410();
 
       setValue("rotatorEnabled", !!cfg.enabled);
       setValue("rotatorType", type);
@@ -3197,13 +3199,31 @@ function rotatorTargetSourceLabelV246(data) {
   if (raw.includes("simulation target") || raw.includes("test command") || raw.includes("rotator test")) {
     return "manual/test";
   }
+  if (
+    raw.includes("hamlib") ||
+    raw.includes("rotctld") ||
+    raw.includes("easycomm") ||
+    raw.includes("yaesu") ||
+    raw.includes("connection") ||
+    raw.includes("connect") ||
+    raw.includes("refused") ||
+    raw.includes("timed out") ||
+    raw.includes("timeout") ||
+    raw.includes("network") ||
+    raw.includes("unreachable")
+  ) {
+    return "network adapter error";
+  }
+  if (raw.includes("error")) {
+    return "error - check Host/Port and protocol";
+  }
   if (raw.includes("waiting") || raw.includes("idle") || raw.includes("stopped") || raw.includes("not_started")) {
     return "none";
   }
   if (data && data.source) {
     return String(data.source);
   }
-  return "unknown";
+  return "not reported";
 }
 
 function updateRotatorLiveTargetV242(data) {
@@ -3366,7 +3386,7 @@ async function loadRotatorState() {
         <div>
           <h2 id="rotatorControlTitle">Rotator Control</h2>
           <div id="rotatorLiveTarget" class="rotator-live-target">Target Az -- / El -- · waiting</div>
-          <p>Configure and test satellite antenna rotator control. Changes are not active until you click Apply / Save Config.</p>
+          <p>Configure and test satellite antenna rotator control. Changes are not active until you click Apply / Save Config. For Hamlib/EasyComm/Yaesu, Host must be a LAN IP reachable from the Pluto.</p>
         </div>
         <div class="rotator-modal-header-actions">
           <button type="button" id="rotatorHeaderSaveConfigBtn" class="rotator-small-button rotator-apply-button">Apply / Save Config</button>
@@ -3378,7 +3398,7 @@ async function loadRotatorState() {
       <div class="rotator-grid">
         ${createField("Enabled", '<input id="rotatorEnabled" type="checkbox" />')}
         ${createField("Type", `<select id="rotatorType">${typeOptions}</select>`)}
-        ${createField("Host", '<input id="rotatorHost" type="text" value="0.0.0.0" />')}
+        ${createField("Host", '<input id="rotatorHost" type="text" value="192.168.3.1" />')}
         ${createField("Port", '<input id="rotatorPort" type="number" value="4533" min="1" max="65535" />')}
         ${createField("Update sec", '<input id="rotatorUpdateInterval" type="number" value="2" min="1" max="60" />')}
         ${createField("Min move deg", '<input id="rotatorMinMove" type="number" value="1.0" step="0.1" />')}
