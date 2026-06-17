@@ -3029,6 +3029,24 @@ async function loadRotatorState() {
       "Rotator test failed.");
   }
 
+  // ROTATOR_UI_PROTOCOL_PREVIEW_V2_4_4
+  async function previewRotatorProtocolCommandV244() {
+    const type = textValue("rotatorType", "simulation");
+    const az = numberValue("rotatorTestAz", 180);
+    const el = numberValue("rotatorTestEl", 45);
+    const path =
+      `/api/rotator/protocol/preview?type=${encodeURIComponent(type)}` +
+      `&az=${encodeURIComponent(az)}&el=${encodeURIComponent(el)}`;
+    const data = await rotatorApi(path);
+    const ok = !!(data && data.http_ok && data.ok !== false);
+    setRotatorStatus(
+      ok ? "Rotator command preview. This did not move hardware." : "Rotator command preview failed.",
+      data,
+      !ok
+    );
+    return data;
+  }
+
   function createField(labelText, inputHtml) {
     return `<label class="rotator-field"><span>${labelText}</span>${inputHtml}</label>`;
   }
@@ -3077,6 +3095,7 @@ async function loadRotatorState() {
       <div class="rotator-test-row">
         ${createField("Test az", '<input id="rotatorTestAz" type="number" value="180" step="0.1" />')}
         ${createField("Test el", '<input id="rotatorTestEl" type="number" value="45" step="0.1" />')}
+        <button type="button" id="rotatorPreviewCommandBtn">Preview Command</button>
         <button type="button" id="rotatorTestBtn">Test Move</button>
       </div>
 
@@ -3104,6 +3123,7 @@ async function loadRotatorState() {
     document.getElementById("rotatorLoadConfigBtn")?.addEventListener("click", loadRotatorConfig);
     document.getElementById("rotatorSaveConfigBtn")?.addEventListener("click", saveRotatorConfig);
     document.getElementById("rotatorRefreshStateBtn")?.addEventListener("click", loadRotatorState);
+    document.getElementById("rotatorPreviewCommandBtn")?.addEventListener("click", previewRotatorProtocolCommandV244);
     document.getElementById("rotatorTestBtn")?.addEventListener("click", testRotator);
     document.getElementById("rotatorParkBtn")?.addEventListener("click", () => rotatorPost("/api/rotator/park", "Rotator park command sent.", "Rotator park failed."));
     document.getElementById("rotatorStopBtn")?.addEventListener("click", () => rotatorPost("/api/rotator/stop", "Rotator stop command sent.", "Rotator stop failed."));
@@ -3131,6 +3151,7 @@ async function loadRotatorState() {
     loadConfig: loadRotatorConfig,
     saveConfig: saveRotatorConfig,
     loadState: loadRotatorState,
+    previewCommand: previewRotatorProtocolCommandV244,
     test: testRotator
   };
 })();
