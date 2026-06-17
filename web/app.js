@@ -958,6 +958,26 @@
       }
     }
 
+    function bindRotatorModalOpenButtonsV248() {
+      // ROTATOR_MODAL_OPEN_BRIDGE_V2_4_9
+      const button = document.getElementById("openRotatorFromListenButton");
+      if (!button) return;
+
+      button.onclick = (event) => {
+        event.preventDefault();
+
+        if (window.plutoRotatorUi && typeof window.plutoRotatorUi.open === "function") {
+          window.plutoRotatorUi.open();
+          return;
+        }
+
+        const status = document.getElementById("analogAudioStatus") || document.getElementById("status");
+        if (status) {
+          status.textContent = "Rotator UI is still loading. Try again in a moment.";
+        }
+      };
+    }
+
     function renderMapPanel(pass, config) {
       const node = document.getElementById("mapPanel");
       if (!config) {
