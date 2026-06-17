@@ -1403,3 +1403,78 @@
 .rotator-live-target-active {
   font-weight: 600;
 }
+
+/* ROTATOR_MODAL_COLLAPSIBLE_MENU_V2_4_8 */
+.drawer-section-details {
+  display: block;
+}
+
+.drawer-section-summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #f8fafc;
+  list-style-position: inside;
+  padding: 0.15rem 0;
+}
+
+.drawer-section-details:not([open]) {
+  padding-bottom: 0;
+}
+
+.drawer-section-details[open] > .drawer-section-summary {
+  margin-bottom: 0.65rem;
+}
+
+.rotator-modal-open {
+  overflow: hidden;
+}
+
+.rotator-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(2, 6, 23, 0.72);
+}
+
+.rotator-modal-backdrop.open {
+  display: flex;
+}
+
+.rotator-modal {
+  width: min(980px, 96vw);
+  max-height: min(840px, 92vh);
+  overflow: auto;
+  border-radius: 0.9rem;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.5);
+}
+
+.rotator-modal .rotator-card {
+  margin: 0;
+}
+
+.rotator-modal-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.45rem;
+}
+
+.rotator-open-button {
+  min-width: 70px;
+}
+
+@media (max-width: 760px) {
+  .rotator-modal-backdrop {
+    align-items: stretch;
+    padding: 0.5rem;
+  }
+
+  .rotator-modal {
+    width: 100%;
+    max-height: 96vh;
+  }
+}

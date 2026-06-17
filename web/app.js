@@ -141,6 +141,33 @@
       }
     }
 
+    function installCollapsibleDrawerSectionsV248() {
+      // ROTATOR_MODAL_DIALOG_V2_4_8
+      document.querySelectorAll("#appDrawer .drawer-section").forEach((section, index) => {
+        if (section.dataset.collapsibleV248 === "1") return;
+
+        const heading = Array.from(section.children).find((child) => child.tagName === "H2");
+        if (!heading) return;
+
+        const details = document.createElement("details");
+        details.className = "drawer-section-details";
+        details.open = index === 0;
+
+        const summary = document.createElement("summary");
+        summary.className = "drawer-section-summary";
+        summary.textContent = heading.textContent.trim() || "Panel";
+        details.appendChild(summary);
+
+        heading.remove();
+        while (section.firstChild) {
+          details.appendChild(section.firstChild);
+        }
+
+        section.appendChild(details);
+        section.dataset.collapsibleV248 = "1";
+      });
+    }
+
     function observerDraftFromInputs() {
       return {
         name: document.getElementById("observerNameInput").value,
@@ -1016,6 +1043,7 @@
               </svg>
               <div class="listen-panel">
                 <button id="analogAudioToggleButton" type="button">Listen</button>
+                <button id="openRotatorFromListenButton" class="rotator-open-button" type="button">Rotator</button>
                 <span id="analogAudioStatus">Select a pass to listen.</span>
               </div>
             </div>
@@ -1033,6 +1061,7 @@
 
       renderLeafletMap(pass, config, focusPoint, activeTrackPoint);
       bindAnalogAudio(pass, node);
+      bindRotatorModalOpenButtonsV248();
       setMapLocationPickEnabled(mapLocationPickEnabled);
     }
 
@@ -2536,6 +2565,8 @@ const tbody = document.getElementById("satellites");
       }
     }
 
+    installCollapsibleDrawerSectionsV248();
+
     document.getElementById("syncTimeButton").addEventListener("click", (event) => {
       syncPlutoTime(event.currentTarget).catch((error) => {
         document.getElementById("status").textContent = error.message;
@@ -2620,6 +2651,7 @@ const tbody = document.getElementById("satellites");
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
         closePassDetailModal();
+        closeRotatorModalV248();
         closeDrawer();
       }
     });
@@ -3122,6 +3154,40 @@ async function loadRotatorState() {
     return `<label class="rotator-field"><span>${labelText}</span>${inputHtml}</label>`;
   }
 
+  function openRotatorModalV248() {
+    const modal = document.getElementById("rotatorControlModal");
+    if (!modal) return;
+
+    modal.hidden = false;
+    modal.classList.add("open");
+    document.body.classList.add("rotator-modal-open");
+    loadRotatorState().catch(() => {});
+  }
+
+  function closeRotatorModalV248() {
+    const modal = document.getElementById("rotatorControlModal");
+    if (!modal) return;
+
+    modal.classList.remove("open");
+    modal.hidden = true;
+    document.body.classList.remove("rotator-modal-open");
+  }
+
+  function bindRotatorModalOpenButtonsV248() {
+    ["openRotatorMenuButton", "openRotatorFromListenButton"].forEach((id) => {
+      const button = document.getElementById(id);
+      if (!button) return;
+
+      button.onclick = (event) => {
+        event.preventDefault();
+        openRotatorModalV248();
+        if (id === "openRotatorMenuButton" && typeof closeDrawer === "function") {
+          closeDrawer();
+        }
+      };
+    });
+  }
+
   function createRotatorPanel() {
     if (document.getElementById("rotatorControlPanel")) {
       return;
@@ -3129,17 +3195,31 @@ async function loadRotatorState() {
 
     const typeOptions = ROTATOR_TYPES.map(([value, label]) => `<option value="${value}">${label}</option>`).join("");
 
+    const modal = document.createElement("div");
+    modal.id = "rotatorControlModal";
+    modal.className = "rotator-modal-backdrop";
+    modal.hidden = true;
+
+    const dialog = document.createElement("div");
+    dialog.className = "rotator-modal";
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    dialog.setAttribute("aria-labelledby", "rotatorControlTitle");
+
     const panel = document.createElement("section");
     panel.id = "rotatorControlPanel";
     panel.className = "rotator-card";
     panel.innerHTML = `
       <div class="rotator-card-header">
         <div>
-          <h2>Rotator Control</h2>
+          <h2 id="rotatorControlTitle">Rotator Control</h2>
           <div id="rotatorLiveTarget" class="rotator-live-target">Target Az -- / El -- · waiting</div>
           <p>Configure and test satellite antenna rotator control. Simulation is safe for development.</p>
         </div>
-        <button type="button" id="rotatorRefreshStateBtn" class="rotator-small-button">Refresh</button>
+        <div class="rotator-modal-header-actions">
+          <button type="button" id="rotatorRefreshStateBtn" class="rotator-small-button">Refresh</button>
+          <button type="button" id="rotatorCloseDialogBtn" class="rotator-small-button">Close</button>
+        </div>
       </div>
 
       <div class="rotator-grid">
@@ -3181,19 +3261,20 @@ async function loadRotatorState() {
       <pre id="rotatorStatusText" class="rotator-status">Rotator UI ready. Load config to begin.</pre>
     `;
 
-    const preferredHost =
-      document.querySelector("#configPanel") ||
-      document.querySelector("[data-config-panel]") ||
-      document.querySelector(".config-panel") ||
-      document.querySelector("main") ||
-      document.querySelector("#app") ||
-      document.body;
+    dialog.appendChild(panel);
+    modal.appendChild(dialog);
+    document.body.appendChild(modal);
 
-    preferredHost.appendChild(panel);
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal) {
+        closeRotatorModalV248();
+      }
+    });
 
     document.getElementById("rotatorLoadConfigBtn")?.addEventListener("click", loadRotatorConfig);
     document.getElementById("rotatorSaveConfigBtn")?.addEventListener("click", saveRotatorConfig);
     document.getElementById("rotatorRefreshStateBtn")?.addEventListener("click", loadRotatorState);
+    document.getElementById("rotatorCloseDialogBtn")?.addEventListener("click", closeRotatorModalV248);
     document.getElementById("rotatorPreviewCommandBtn")?.addEventListener("click", previewRotatorProtocolCommandV244);
     document.getElementById("rotatorTestBtn")?.addEventListener("click", testRotator);
     document.getElementById("rotatorParkBtn")?.addEventListener("click", () => rotatorPost("/api/rotator/park", "Rotator park command sent.", "Rotator park failed."));
@@ -3201,6 +3282,7 @@ async function loadRotatorState() {
     document.getElementById("rotatorTrackStartBtn")?.addEventListener("click", () => rotatorPost("/api/rotator/track/start", "Rotator tracking started.", "Rotator tracking start failed."));
     document.getElementById("rotatorTrackStopBtn")?.addEventListener("click", () => rotatorPost("/api/rotator/track/stop", "Rotator tracking stopped.", "Rotator tracking stop failed."));
     document.getElementById("rotatorTrackStepBtn")?.addEventListener("click", () => rotatorPost("/api/rotator/track/step", "Rotator tracking step complete.", "Rotator tracking step failed."));
+    bindRotatorModalOpenButtonsV248();
     startRotatorLiveTargetPollingV242();
 
     loadRotatorConfig().catch((err) => setRotatorStatus("Rotator UI load failed.", { ok: false, error: String(err) }, true));
@@ -3223,6 +3305,8 @@ async function loadRotatorState() {
     saveConfig: saveRotatorConfig,
     loadState: loadRotatorState,
     previewCommand: previewRotatorProtocolCommandV244,
+    open: openRotatorModalV248,
+    close: closeRotatorModalV248,
     test: testRotator
   };
 })();
