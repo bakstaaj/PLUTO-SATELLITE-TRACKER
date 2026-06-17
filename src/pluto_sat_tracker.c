@@ -52,6 +52,8 @@ static volatile sig_atomic_t g_running = 1;
 static pthread_mutex_t g_track_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_t g_track_thread;
 static int g_track_auto_running = 0;
+static pthread_t g_rotator_thread;
+static int g_rotator_auto_running = 0; /* ROTATOR_CONTROL_FOUNDATION_V2_4_0 */
 static pthread_mutex_t g_radio_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t g_audio_live_lock = PTHREAD_MUTEX_INITIALIZER;
 static const char *g_audio_debug_log = "/tmp/pluto_audio_debug.log";
@@ -92,6 +94,15 @@ static void json_escape(char *dst, size_t dst_size, const char *src);
 static int json_string_value(const char *json, const char *key, char *out, size_t out_size);
 static int json_double_value(const char *json, const char *key, double *out);
 static int send_wav_stream(int fd, const struct app_config *cfg, const char *query);
+static void send_rotator_config(int fd, const struct app_config *cfg);
+static void save_rotator_config(int fd, const struct app_config *cfg, const char *body);
+static void send_rotator_state(int fd, const struct app_config *cfg);
+static void send_rotator_test(int fd, const struct app_config *cfg, const char *query);
+static void send_rotator_park(int fd, const struct app_config *cfg);
+static void send_rotator_stop(int fd, const struct app_config *cfg);
+static void send_rotator_track_start(int fd, const struct app_config *cfg);
+static void send_rotator_track_stop(int fd, const struct app_config *cfg);
+static void send_rotator_track_step(int fd, const struct app_config *cfg);
 static int apply_radio_track_step(
     const struct app_config *cfg,
     const char *state,
@@ -4334,6 +4345,464 @@ static void send_radio_tune(int fd, const struct app_config *cfg, const char *qu
     send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
 }
 
+
+/* ROTATOR_CONTROL_FOUNDATION_V2_4_0 */
+struct rotator_config {
+    int enabled;
+    char type[64];
+    char host[128];
+    int port;
+    double min_move_deg;
+    double az_offset_deg;
+    double el_offset_deg;
+    double min_el_deg;
+    double max_el_deg;
+    double park_az_deg;
+    double park_el_deg;
+    int update_interval_sec;
+    int park_on_los;
+};
+
+static void rotator_default_config(struct rotator_config *rot)
+{
+    memset(rot, 0, sizeof(*rot));
+    rot->enabled = 0;
+    snprintf(rot->type, sizeof(rot->type), "simulation");
+    snprintf(rot->host, sizeof(rot->host), "127.0.0.1");
+    rot->port = 4533;
+    rot->min_move_deg = 1.0;
+    rot->min_el_deg = 0.0;
+    rot->max_el_deg = 90.0;
+    rot->update_interval_sec = 2;
+}
+
+static int json_bool_value_v2_4(const char *json, const char *key, int *out)
+{
+    const char *p;
+    char needle[128];
+    if (!json || !key || !out) return 0;
+    snprintf(needle, sizeof(needle), "\"%s\"", key);
+    p = strstr(json, needle);
+    if (!p) return 0;
+    p = strchr(p, ':');
+    if (!p) return 0;
+    p++;
+    while (*p == ' ' || *p == '\t' || *p == '\r' || *p == '\n') p++;
+    if (strncmp(p, "true", 4) == 0 || strncmp(p, "1", 1) == 0) { *out = 1; return 1; }
+    if (strncmp(p, "false", 5) == 0 || strncmp(p, "0", 1) == 0) { *out = 0; return 1; }
+    return 0;
+}
+
+static int json_int_value_v2_4(const char *json, const char *key, int *out)
+{
+    long long value = 0;
+    if (!json_long_long_after(json, key, &value)) return 0;
+    *out = (int)value;
+    return 1;
+}
+
+static int rotator_config_path(const struct app_config *cfg, char *path, size_t path_size)
+{
+    if (!cfg || !path || path_size == 0) return 0;
+    join_path(path, path_size, cfg->config_dir, "rotator.json");
+    return 1;
+}
+
+static int rotator_state_path(const struct app_config *cfg, char *path, size_t path_size)
+{
+    if (!cfg || !path || path_size == 0) return 0;
+    join_path(path, path_size, cfg->data_dir, "rotator_state.json");
+    return 1;
+}
+
+static void rotator_config_to_json(const struct rotator_config *rot, char *body, size_t body_size)
+{
+    snprintf(body, body_size,
+             "{\n"
+             "  \"ok\": true,\n"
+             "  \"enabled\": %s,\n"
+             "  \"type\": \"%s\",\n"
+             "  \"connection\": {\"host\": \"%s\", \"port\": %d},\n"
+             "  \"update_interval_sec\": %d,\n"
+             "  \"min_move_deg\": %.2f,\n"
+             "  \"az_offset_deg\": %.2f,\n"
+             "  \"el_offset_deg\": %.2f,\n"
+             "  \"min_el_deg\": %.2f,\n"
+             "  \"max_el_deg\": %.2f,\n"
+             "  \"park_on_los\": %s,\n"
+             "  \"park_az_deg\": %.2f,\n"
+             "  \"park_el_deg\": %.2f,\n"
+             "  \"supported_types\": [\"simulation\", \"hamlib_rotctld\", \"satran\", \"easycomm2\", \"yaesu_gs232\"]\n"
+             "}\n",
+             rot->enabled ? "true" : "false", rot->type, rot->host, rot->port,
+             rot->update_interval_sec, rot->min_move_deg, rot->az_offset_deg, rot->el_offset_deg,
+             rot->min_el_deg, rot->max_el_deg, rot->park_on_los ? "true" : "false",
+             rot->park_az_deg, rot->park_el_deg);
+}
+
+static int rotator_load_config(const struct app_config *cfg, struct rotator_config *rot)
+{
+    char path[PATH_BUF_SIZE];
+    char *json = NULL;
+    size_t len = 0;
+    char value[128] = "";
+    double d = 0.0;
+    int i = 0;
+    rotator_default_config(rot);
+    rotator_config_path(cfg, path, sizeof(path));
+    if (read_file_to_string(path, &json, &len) != 0) return 0;
+    if (json_bool_value_v2_4(json, "enabled", &i)) rot->enabled = i;
+    if (json_string_value(json, "type", value, sizeof(value))) snprintf(rot->type, sizeof(rot->type), "%s", value);
+    if (json_string_value(json, "host", value, sizeof(value))) snprintf(rot->host, sizeof(rot->host), "%s", value);
+    if (json_int_value_v2_4(json, "port", &i)) rot->port = i;
+    if (json_int_value_v2_4(json, "update_interval_sec", &i)) { if (i < 1) i = 1; if (i > 60) i = 60; rot->update_interval_sec = i; }
+    if (json_double_value(json, "min_move_deg", &d)) rot->min_move_deg = d;
+    if (json_double_value(json, "az_offset_deg", &d)) rot->az_offset_deg = d;
+    if (json_double_value(json, "el_offset_deg", &d)) rot->el_offset_deg = d;
+    if (json_double_value(json, "min_el_deg", &d)) rot->min_el_deg = d;
+    if (json_double_value(json, "max_el_deg", &d)) rot->max_el_deg = d;
+    if (json_double_value(json, "park_az_deg", &d)) rot->park_az_deg = d;
+    if (json_double_value(json, "park_el_deg", &d)) rot->park_el_deg = d;
+    if (json_bool_value_v2_4(json, "park_on_los", &i)) rot->park_on_los = i;
+    if (rot->port <= 0 || rot->port > 65535) rot->port = 4533;
+    if (rot->max_el_deg < rot->min_el_deg) rot->max_el_deg = rot->min_el_deg;
+    free(json);
+    return 1;
+}
+
+static int rotator_write_config(const struct app_config *cfg, const struct rotator_config *rot)
+{
+    char path[PATH_BUF_SIZE], tmp_path[PATH_BUF_SIZE + 8], body[2048];
+    FILE *f;
+    rotator_config_path(cfg, path, sizeof(path));
+    snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
+    rotator_config_to_json(rot, body, sizeof(body));
+    f = fopen(tmp_path, "wb");
+    if (!f) return 0;
+    fwrite(body, 1, strlen(body), f);
+    fclose(f);
+    if (rename(tmp_path, path) != 0) { unlink(tmp_path); return 0; }
+    return 1;
+}
+
+static double rotator_clamp_el(const struct rotator_config *rot, double el)
+{
+    if (el < rot->min_el_deg) return rot->min_el_deg;
+    if (el > rot->max_el_deg) return rot->max_el_deg;
+    return el;
+}
+
+static double rotator_normalize_az(double az)
+{
+    while (az < 0.0) az += 360.0;
+    while (az >= 360.0) az -= 360.0;
+    return az;
+}
+
+static int rotator_write_state(const struct app_config *cfg, const struct rotator_config *rot, const char *state, double az_deg, double el_deg, const char *result, const char *message)
+{
+    char path[PATH_BUF_SIZE], tmp_path[PATH_BUF_SIZE + 8];
+    char state_json[128], type_json[128], result_json[256], message_json[512];
+    FILE *f;
+    time_t now = time(NULL);
+    rotator_state_path(cfg, path, sizeof(path));
+    snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
+    json_escape(state_json, sizeof(state_json), state ? state : "unknown");
+    json_escape(type_json, sizeof(type_json), rot ? rot->type : "unknown");
+    json_escape(result_json, sizeof(result_json), result ? result : "");
+    json_escape(message_json, sizeof(message_json), message ? message : "");
+    f = fopen(tmp_path, "wb");
+    if (!f) return 0;
+    fprintf(f,
+            "{\n"
+            "  \"ok\": true,\n"
+            "  \"enabled\": %s,\n"
+            "  \"type\": \"%s\",\n"
+            "  \"state\": \"%s\",\n"
+            "  \"target_az_deg\": %.2f,\n"
+            "  \"target_el_deg\": %.2f,\n"
+            "  \"last_command_epoch\": %ld,\n"
+            "  \"last_result\": \"%s\",\n"
+            "  \"message\": \"%s\"\n"
+            "}\n",
+            (rot && rot->enabled) ? "true" : "false", type_json, state_json, az_deg, el_deg, (long)now, result_json, message_json);
+    fclose(f);
+    if (rename(tmp_path, path) != 0) { unlink(tmp_path); return 0; }
+    return 1;
+}
+
+static int rotator_tcp_send_line(const char *host, int port, const char *line, char *reply, size_t reply_size)
+{
+    int sockfd = -1, ok = 0;
+    struct sockaddr_in addr;
+    struct timeval tv;
+    if (!host || !line || port <= 0 || port > 65535) return 0;
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0) return 0;
+    tv.tv_sec = 3;
+    tv.tv_usec = 0;
+    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons((uint16_t)port);
+    if (inet_pton(AF_INET, host, &addr.sin_addr) != 1) { close(sockfd); return 0; }
+    if (connect(sockfd, (struct sockaddr *)&addr, sizeof(addr)) != 0) { close(sockfd); return 0; }
+    if (send(sockfd, line, strlen(line), 0) == (ssize_t)strlen(line)) {
+        ok = 1;
+        if (reply && reply_size > 0) {
+            ssize_t n = recv(sockfd, reply, reply_size - 1, 0);
+            if (n > 0) reply[n] = '\0'; else reply[0] = '\0';
+        }
+    }
+    close(sockfd);
+    return ok;
+}
+
+static int rotator_send_target(const struct app_config *cfg, struct rotator_config *rot, double az_deg, double el_deg, char *result, size_t result_size)
+{
+    char line[128], reply[256] = "";
+    double target_az = rotator_normalize_az(az_deg + rot->az_offset_deg);
+    double target_el = rotator_clamp_el(rot, el_deg + rot->el_offset_deg);
+    if (!rot->enabled) {
+        snprintf(result, result_size, "rotator disabled");
+        rotator_write_state(cfg, rot, "disabled", target_az, target_el, "disabled", "rotator is disabled");
+        return 1;
+    }
+    if (strcmp(rot->type, "simulation") == 0) {
+        snprintf(result, result_size, "simulation target %.2f %.2f", target_az, target_el);
+        rotator_write_state(cfg, rot, "simulated", target_az, target_el, "simulated", result);
+        return 1;
+    }
+    if (strcmp(rot->type, "hamlib_rotctld") == 0) {
+        snprintf(line, sizeof(line), "P %.2f %.2f\n", target_az, target_el);
+        if (rotator_tcp_send_line(rot->host, rot->port, line, reply, sizeof(reply))) {
+            snprintf(result, result_size, "hamlib_rotctld sent P %.2f %.2f reply=%s", target_az, target_el, reply);
+            rotator_write_state(cfg, rot, "commanded", target_az, target_el, "written", result);
+            return 1;
+        }
+        snprintf(result, result_size, "hamlib_rotctld command failed to %s:%d", rot->host, rot->port);
+        rotator_write_state(cfg, rot, "error", target_az, target_el, "error", result);
+        return 0;
+    }
+    if (strcmp(rot->type, "satran") == 0 || strcmp(rot->type, "easycomm2") == 0 || strcmp(rot->type, "yaesu_gs232") == 0) {
+        snprintf(result, result_size, "%s adapter is configured but not implemented yet", rot->type);
+        rotator_write_state(cfg, rot, "unsupported", target_az, target_el, "unsupported", result);
+        return 0;
+    }
+    snprintf(result, result_size, "unknown rotator type: %s", rot->type);
+    rotator_write_state(cfg, rot, "error", target_az, target_el, "error", result);
+    return 0;
+}
+
+static int rotator_read_active_target(const struct app_config *cfg, double *az_out, double *el_out, char *source, size_t source_size)
+{
+    char path[PATH_BUF_SIZE];
+    char *json = NULL;
+    size_t len = 0;
+    double az = 0.0, el = 0.0;
+    int got_az = 0, got_el = 0;
+    join_path(path, sizeof(path), cfg->data_dir, "radio_track_state.json");
+    if (read_file_to_string(path, &json, &len) != 0) return 0;
+    got_az = json_double_value(json, "az_deg", &az) || json_double_value(json, "azimuth_deg", &az) || json_double_value(json, "target_az_deg", &az);
+    got_el = json_double_value(json, "el_deg", &el) || json_double_value(json, "elevation_deg", &el) || json_double_value(json, "target_el_deg", &el);
+    free(json);
+    if (!got_az || !got_el) return 0;
+    *az_out = az;
+    *el_out = el;
+    if (source && source_size > 0) snprintf(source, source_size, "%s", path);
+    return 1;
+}
+
+static void send_rotator_config(int fd, const struct app_config *cfg)
+{
+    struct rotator_config rot;
+    char body[2048];
+    rotator_load_config(cfg, &rot);
+    rotator_config_to_json(&rot, body, sizeof(body));
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
+}
+
+static void save_rotator_config(int fd, const struct app_config *cfg, const char *body)
+{
+    struct rotator_config rot;
+    char value[128] = "";
+    double d = 0.0;
+    int i = 0;
+    char response[256];
+    rotator_load_config(cfg, &rot);
+    if (body && body[0]) {
+        if (json_bool_value_v2_4(body, "enabled", &i)) rot.enabled = i;
+        if (json_string_value(body, "type", value, sizeof(value))) snprintf(rot.type, sizeof(rot.type), "%s", value);
+        if (json_string_value(body, "host", value, sizeof(value))) snprintf(rot.host, sizeof(rot.host), "%s", value);
+        if (json_int_value_v2_4(body, "port", &i)) rot.port = i;
+        if (json_int_value_v2_4(body, "update_interval_sec", &i)) { if (i < 1) i = 1; if (i > 60) i = 60; rot.update_interval_sec = i; }
+        if (json_double_value(body, "min_move_deg", &d)) rot.min_move_deg = d;
+        if (json_double_value(body, "az_offset_deg", &d)) rot.az_offset_deg = d;
+        if (json_double_value(body, "el_offset_deg", &d)) rot.el_offset_deg = d;
+        if (json_double_value(body, "min_el_deg", &d)) rot.min_el_deg = d;
+        if (json_double_value(body, "max_el_deg", &d)) rot.max_el_deg = d;
+        if (json_double_value(body, "park_az_deg", &d)) rot.park_az_deg = d;
+        if (json_double_value(body, "park_el_deg", &d)) rot.park_el_deg = d;
+        if (json_bool_value_v2_4(body, "park_on_los", &i)) rot.park_on_los = i;
+    }
+    if (!rotator_write_config(cfg, &rot)) {
+        send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"could not write rotator config\"}\n");
+        return;
+    }
+    snprintf(response, sizeof(response), "{\"ok\":true,\"message\":\"rotator config saved\",\"type\":\"%s\",\"enabled\":%s}\n", rot.type, rot.enabled ? "true" : "false");
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", response);
+}
+
+static void send_rotator_state(int fd, const struct app_config *cfg)
+{
+    char path[PATH_BUF_SIZE];
+    char *json = NULL;
+    size_t len = 0;
+    rotator_state_path(cfg, path, sizeof(path));
+    if (read_file_to_string(path, &json, &len) == 0) {
+        send_text(fd, 200, "OK", "application/json; charset=utf-8", json);
+        free(json);
+        return;
+    }
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", "{\"ok\":true,\"enabled\":false,\"type\":\"simulation\",\"state\":\"idle\",\"target_az_deg\":0.0,\"target_el_deg\":0.0,\"last_result\":\"not_started\",\"message\":\"rotator has not been commanded\"}\n");
+}
+
+static void send_rotator_test(int fd, const struct app_config *cfg, const char *query)
+{
+    struct rotator_config rot;
+    char az_text[64] = "", el_text[64] = "", result[512] = "", result_json[1024], body[1400];
+    double az = 0.0, el = 0.0;
+    int ok;
+    query_param(query, "az", az_text, sizeof(az_text));
+    query_param(query, "el", el_text, sizeof(el_text));
+    if (!az_text[0] || !el_text[0]) {
+        send_text(fd, 400, "Bad Request", "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"az and el query parameters are required\"}\n");
+        return;
+    }
+    az = atof(az_text);
+    el = atof(el_text);
+    rotator_load_config(cfg, &rot);
+    ok = rotator_send_target(cfg, &rot, az, el, result, sizeof(result));
+    json_escape(result_json, sizeof(result_json), result);
+    snprintf(body, sizeof(body), "{\"ok\":%s,\"type\":\"%s\",\"az_deg\":%.2f,\"el_deg\":%.2f,\"message\":\"%s\"}\n", ok ? "true" : "false", rot.type, az, el, result_json);
+    send_text(fd, ok ? 200 : 409, ok ? "OK" : "Conflict", "application/json; charset=utf-8", body);
+}
+
+static void send_rotator_park(int fd, const struct app_config *cfg)
+{
+    struct rotator_config rot;
+    char result[512] = "", result_json[1024], body[1400];
+    int ok;
+    rotator_load_config(cfg, &rot);
+    ok = rotator_send_target(cfg, &rot, rot.park_az_deg, rot.park_el_deg, result, sizeof(result));
+    json_escape(result_json, sizeof(result_json), result);
+    snprintf(body, sizeof(body), "{\"ok\":%s,\"state\":\"park\",\"message\":\"%s\"}\n", ok ? "true" : "false", result_json);
+    send_text(fd, ok ? 200 : 409, ok ? "OK" : "Conflict", "application/json; charset=utf-8", body);
+}
+
+static void send_rotator_stop(int fd, const struct app_config *cfg)
+{
+    struct rotator_config rot;
+    pthread_mutex_lock(&g_track_lock);
+    g_rotator_auto_running = 0;
+    pthread_mutex_unlock(&g_track_lock);
+    rotator_load_config(cfg, &rot);
+    rotator_write_state(cfg, &rot, "stopped", 0.0, 0.0, "stopped", "rotator tracking stopped");
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", "{\"ok\":true,\"state\":\"stopped\"}\n");
+}
+
+static int rotator_auto_should_run(void)
+{
+    int running;
+    pthread_mutex_lock(&g_track_lock);
+    running = g_rotator_auto_running;
+    pthread_mutex_unlock(&g_track_lock);
+    return running;
+}
+
+static void rotator_auto_set_running(int running)
+{
+    pthread_mutex_lock(&g_track_lock);
+    g_rotator_auto_running = running;
+    pthread_mutex_unlock(&g_track_lock);
+}
+
+static int rotator_track_step_once(const struct app_config *cfg, char *message, size_t message_size)
+{
+    struct rotator_config rot;
+    double az = 0.0, el = 0.0;
+    char source[PATH_BUF_SIZE] = "", result[512] = "";
+    rotator_load_config(cfg, &rot);
+    if (!rot.enabled) {
+        snprintf(message, message_size, "rotator disabled");
+        rotator_write_state(cfg, &rot, "disabled", 0.0, 0.0, "disabled", "rotator disabled");
+        return 1;
+    }
+    if (!rotator_read_active_target(cfg, &az, &el, source, sizeof(source))) {
+        snprintf(message, message_size, "no active az/el target in radio_track_state.json");
+        rotator_write_state(cfg, &rot, "waiting", 0.0, 0.0, "waiting", message);
+        return 0;
+    }
+    if (!rotator_send_target(cfg, &rot, az, el, result, sizeof(result))) {
+        snprintf(message, message_size, "%s", result);
+        return 0;
+    }
+    snprintf(message, message_size, "rotator target from %s: %s", source, result);
+    return 1;
+}
+
+static void *rotator_auto_worker(void *arg)
+{
+    const struct app_config *cfg = (const struct app_config *)arg;
+    while (rotator_auto_should_run()) {
+        struct rotator_config rot;
+        char message[512] = "";
+        rotator_track_step_once(cfg, message, sizeof(message));
+        rotator_load_config(cfg, &rot);
+        if (rot.update_interval_sec < 1) rot.update_interval_sec = 2;
+        sleep((unsigned int)rot.update_interval_sec);
+    }
+    return NULL;
+}
+
+static void send_rotator_track_start(int fd, const struct app_config *cfg)
+{
+    int create_result;
+    pthread_mutex_lock(&g_track_lock);
+    if (g_rotator_auto_running) {
+        pthread_mutex_unlock(&g_track_lock);
+        send_text(fd, 200, "OK", "application/json; charset=utf-8", "{\"ok\":true,\"state\":\"already_running\"}\n");
+        return;
+    }
+    g_rotator_auto_running = 1;
+    pthread_mutex_unlock(&g_track_lock);
+    create_result = pthread_create(&g_rotator_thread, NULL, rotator_auto_worker, (void *)cfg);
+    if (create_result != 0) {
+        rotator_auto_set_running(0);
+        send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"could not start rotator tracking thread\"}\n");
+        return;
+    }
+    pthread_detach(g_rotator_thread);
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", "{\"ok\":true,\"state\":\"tracking\"}\n");
+}
+
+static void send_rotator_track_stop(int fd, const struct app_config *cfg)
+{
+    (void)cfg;
+    rotator_auto_set_running(0);
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", "{\"ok\":true,\"state\":\"stopped\"}\n");
+}
+
+static void send_rotator_track_step(int fd, const struct app_config *cfg)
+{
+    char message[512] = "", message_json[1024], body[1400];
+    int ok = rotator_track_step_once(cfg, message, sizeof(message));
+    json_escape(message_json, sizeof(message_json), message);
+    snprintf(body, sizeof(body), "{\"ok\":%s,\"message\":\"%s\"}\n", ok ? "true" : "false", message_json);
+    send_text(fd, ok ? 200 : 409, ok ? "OK" : "Conflict", "application/json; charset=utf-8", body);
+}
+
 static void handle_request(
     int fd,
     const struct app_config *cfg,
@@ -4353,6 +4822,82 @@ static void handle_request(
     if (strcmp(method, "GET") != 0 && strcmp(method, "HEAD") != 0 && strcmp(method, "POST") != 0) {
         send_text(fd, 405, "Method Not Allowed", "application/json; charset=utf-8",
                   "{\"ok\":false,\"error\":\"method not allowed\"}\n");
+        return;
+    }
+
+    /* ROTATOR_ROUTE_GUARD_V2_4_0B: keep rotator API ahead of legacy POST/API 404 routing. */
+    if (strcmp(path, "/api/rotator/config") == 0) {
+        if (strcmp(method, "GET") == 0) {
+            send_rotator_config(fd, cfg);
+        } else if (strcmp(method, "POST") == 0) {
+            save_rotator_config(fd, cfg, body);
+        } else {
+            send_text(fd, 405, "Method Not Allowed", "application/json; charset=utf-8",
+                      "{\"ok\":false,\"error\":\"method not allowed\"}\n");
+        }
+        return;
+    }
+    if (strcmp(path, "/api/rotator/state") == 0) {
+        if (strcmp(method, "GET") == 0) {
+            send_rotator_state(fd, cfg);
+        } else {
+            send_text(fd, 405, "Method Not Allowed", "application/json; charset=utf-8",
+                      "{\"ok\":false,\"error\":\"method not allowed\"}\n");
+        }
+        return;
+    }
+    if (strcmp(path, "/api/rotator/test") == 0) {
+        if (strcmp(method, "POST") == 0) {
+            send_rotator_test(fd, cfg, query);
+        } else {
+            send_text(fd, 405, "Method Not Allowed", "application/json; charset=utf-8",
+                      "{\"ok\":false,\"error\":\"method not allowed\"}\n");
+        }
+        return;
+    }
+    if (strcmp(path, "/api/rotator/park") == 0) {
+        if (strcmp(method, "POST") == 0) {
+            send_rotator_park(fd, cfg);
+        } else {
+            send_text(fd, 405, "Method Not Allowed", "application/json; charset=utf-8",
+                      "{\"ok\":false,\"error\":\"method not allowed\"}\n");
+        }
+        return;
+    }
+    if (strcmp(path, "/api/rotator/stop") == 0) {
+        if (strcmp(method, "POST") == 0) {
+            send_rotator_stop(fd, cfg);
+        } else {
+            send_text(fd, 405, "Method Not Allowed", "application/json; charset=utf-8",
+                      "{\"ok\":false,\"error\":\"method not allowed\"}\n");
+        }
+        return;
+    }
+    if (strcmp(path, "/api/rotator/track/start") == 0) {
+        if (strcmp(method, "POST") == 0) {
+            send_rotator_track_start(fd, cfg);
+        } else {
+            send_text(fd, 405, "Method Not Allowed", "application/json; charset=utf-8",
+                      "{\"ok\":false,\"error\":\"method not allowed\"}\n");
+        }
+        return;
+    }
+    if (strcmp(path, "/api/rotator/track/stop") == 0) {
+        if (strcmp(method, "POST") == 0) {
+            send_rotator_track_stop(fd, cfg);
+        } else {
+            send_text(fd, 405, "Method Not Allowed", "application/json; charset=utf-8",
+                      "{\"ok\":false,\"error\":\"method not allowed\"}\n");
+        }
+        return;
+    }
+    if (strcmp(path, "/api/rotator/track/step") == 0) {
+        if (strcmp(method, "POST") == 0) {
+            send_rotator_track_step(fd, cfg);
+        } else {
+            send_text(fd, 405, "Method Not Allowed", "application/json; charset=utf-8",
+                      "{\"ok\":false,\"error\":\"method not allowed\"}\n");
+        }
         return;
     }
 
@@ -4394,6 +4939,43 @@ static void handle_request(
                strcmp(path, "/SatelliteTracker/app.js") == 0) {
         join_path(file_path, sizeof(file_path), cfg->web_dir, "app.js");
         send_file(fd, file_path);
+    if (strcmp(path, "/api/rotator/config") == 0 && strcmp(method, "GET") == 0) {
+        send_rotator_config(fd, cfg);
+        return;
+    }
+    if (strcmp(path, "/api/rotator/config") == 0 && strcmp(method, "POST") == 0) {
+        save_rotator_config(fd, cfg, body);
+        return;
+    }
+    if (strcmp(path, "/api/rotator/state") == 0 && strcmp(method, "GET") == 0) {
+        send_rotator_state(fd, cfg);
+        return;
+    }
+    if (strcmp(path, "/api/rotator/test") == 0 && strcmp(method, "POST") == 0) {
+        send_rotator_test(fd, cfg, query);
+        return;
+    }
+    if (strcmp(path, "/api/rotator/park") == 0 && strcmp(method, "POST") == 0) {
+        send_rotator_park(fd, cfg);
+        return;
+    }
+    if (strcmp(path, "/api/rotator/stop") == 0 && strcmp(method, "POST") == 0) {
+        send_rotator_stop(fd, cfg);
+        return;
+    }
+    if (strcmp(path, "/api/rotator/track/start") == 0 && strcmp(method, "POST") == 0) {
+        send_rotator_track_start(fd, cfg);
+        return;
+    }
+    if (strcmp(path, "/api/rotator/track/stop") == 0 && strcmp(method, "POST") == 0) {
+        send_rotator_track_stop(fd, cfg);
+        return;
+    }
+    if (strcmp(path, "/api/rotator/track/step") == 0 && strcmp(method, "POST") == 0) {
+        send_rotator_track_step(fd, cfg);
+        return;
+    }
+
     } else if (strcmp(path, "/api/status") == 0) {
         send_status(fd, cfg);
     } else if (strcmp(path, "/api/time/sync") == 0) {
