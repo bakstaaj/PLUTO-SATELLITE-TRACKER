@@ -3001,6 +3001,39 @@ function rotatorLiveTargetFormatV242(value) {
   return value === null ? "--" : `${value.toFixed(1)}°`;
 }
 
+function rotatorTargetSourceLabelV246(data) {
+  // ROTATOR_SOURCE_READOUT_V2_4_6
+  const raw = [
+    data && data.source,
+    data && data.message,
+    data && data.last_result,
+    data && data.state
+  ]
+    .filter((value) => value !== undefined && value !== null)
+    .map((value) => String(value).toLowerCase())
+    .join(" ");
+
+  if (raw.includes("selected_plan_point") || raw.includes("radio_track.json:selected")) {
+    return "selected pass";
+  }
+  if (raw.includes("radio_track_state.json")) {
+    return "radio state";
+  }
+  if (raw.includes("nearest_pass_point")) {
+    return "pass-list fallback";
+  }
+  if (raw.includes("simulation target") || raw.includes("test command") || raw.includes("rotator test")) {
+    return "manual/test";
+  }
+  if (raw.includes("waiting") || raw.includes("idle") || raw.includes("stopped") || raw.includes("not_started")) {
+    return "none";
+  }
+  if (data && data.source) {
+    return String(data.source);
+  }
+  return "unknown";
+}
+
 function updateRotatorLiveTargetV242(data) {
   // ROTATOR_UI_LIVE_TARGET_WAITING_FIX_V2_4_2B
   const box = document.getElementById("rotatorLiveTarget");
@@ -3010,7 +3043,8 @@ function updateRotatorLiveTargetV242(data) {
 
   const stateText = data && data.state ? String(data.state) : "unknown";
   const stateLower = stateText.toLowerCase();
-  const sourceText = data && data.source ? ` · ${data.source}` : "";
+  const sourceLabel = rotatorTargetSourceLabelV246(data);
+  const sourceText = sourceLabel ? ` · Rotator source: ${sourceLabel}` : "";
   const targetOnlyStates = new Set(["waiting", "idle", "stopped", "parked", "error", "unknown"]);
   let targetAz = rotatorLiveTargetValueV242(data, ["target_az_deg"]);
   let targetEl = rotatorLiveTargetValueV242(data, ["target_el_deg"]);
