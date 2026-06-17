@@ -1478,3 +1478,25 @@
     max-height: 96vh;
   }
 }
+
+/* ROTATOR_APPLY_SAVE_HOST_UX_CSS_V2_4_10 */
+.rotator-unsaved-notice {
+  margin: 0.8rem 0;
+  padding: 0.65rem 0.8rem;
+  border-radius: 0.55rem;
+  border: 1px solid #facc15;
+  background: #fef9c3;
+  color: #713f12;
+  font-weight: 600;
+}
+
+.rotator-apply-button {
+  font-weight: 700;
+}
+
+.rotator-save-needed {
+  border-color: #f59e0b !important;
+  background: #f59e0b !important;
+  color: #111827 !important;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.22);
+}

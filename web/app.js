@@ -2914,6 +2914,110 @@ const tbody = document.getElementById("satellites");
     ["yaesu_gs232", "Yaesu GS-232"]
   ];
 
+  let rotatorConfigDirtyV2410 = false;
+  let rotatorFormLoadingV2410 = false;
+
+  function rotatorTypeUsesHostV2410(type) {
+    return String(type || "simulation") !== "simulation";
+  }
+
+  function rotatorSuggestedHostV2410() {
+    const host = window.location && window.location.hostname ? String(window.location.hostname) : "";
+    if (host && host !== "localhost" && host !== "127.0.0.1") {
+      return host;
+    }
+    return "0.0.0.0";
+  }
+
+  function updateRotatorDirtyNoticeV2410() {
+    // ROTATOR_APPLY_SAVE_HOST_UX_V2_4_10
+    const notice = document.getElementById("rotatorUnsavedNotice");
+    const saveButton = document.getElementById("rotatorSaveConfigBtn");
+    const headerSaveButton = document.getElementById("rotatorHeaderSaveConfigBtn");
+
+    if (notice) {
+      notice.hidden = !rotatorConfigDirtyV2410;
+    }
+
+    [saveButton, headerSaveButton].forEach((button) => {
+      if (!button) return;
+      button.classList.toggle("rotator-save-needed", rotatorConfigDirtyV2410);
+      button.textContent = rotatorConfigDirtyV2410 ? "Apply / Save Now" : "Apply / Save Config";
+    });
+  }
+
+  function markRotatorConfigDirtyV2410(message) {
+    if (rotatorFormLoadingV2410) return;
+
+    rotatorConfigDirtyV2410 = true;
+    updateRotatorDirtyNoticeV2410();
+
+    if (message) {
+      setRotatorStatus(message, {
+        ok: true,
+        unsaved: true,
+        note: "Live rotator state still uses the last saved config until Apply / Save is clicked."
+      }, false);
+    }
+  }
+
+  function normalizeRotatorHostForTypeV2410() {
+    const type = textValue("rotatorType", "simulation");
+    const hostEl = document.getElementById("rotatorHost");
+    if (!hostEl || !rotatorTypeUsesHostV2410(type)) return;
+
+    const current = String(hostEl.value || "").trim();
+    if (!current || current === "127.0.0.1" || current === "localhost") {
+      hostEl.value = rotatorSuggestedHostV2410();
+    }
+  }
+
+  function rotatorRequireSavedConfigV2410(actionName) {
+    if (!rotatorConfigDirtyV2410) return true;
+
+    setRotatorStatus(`${actionName} blocked until rotator settings are applied.`, {
+      ok: false,
+      unsaved: true,
+      action: actionName,
+      next_step: "Click Apply / Save Now, then retry the action."
+    }, true);
+    updateRotatorDirtyNoticeV2410();
+    return false;
+  }
+
+  function bindRotatorConfigDirtyHandlersV2410() {
+    const ids = [
+      "rotatorEnabled",
+      "rotatorType",
+      "rotatorHost",
+      "rotatorPort",
+      "rotatorUpdateInterval",
+      "rotatorMinMove",
+      "rotatorAzOffset",
+      "rotatorElOffset",
+      "rotatorMinEl",
+      "rotatorMaxEl",
+      "rotatorParkOnLos",
+      "rotatorParkAz",
+      "rotatorParkEl"
+    ];
+
+    ids.forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+
+      el.addEventListener("change", () => {
+        if (id === "rotatorType") {
+          normalizeRotatorHostForTypeV2410();
+        }
+
+        markRotatorConfigDirtyV2410("Rotator settings changed. Click Apply / Save Now before testing or tracking.");
+      });
+    });
+
+    updateRotatorDirtyNoticeV2410();
+  }
+
   function rotatorApi(path, options) {
     return fetch(path, Object.assign({ cache: "no-store" }, options || {})).then(async (response) => {
       const text = await response.text();
@@ -2971,10 +3075,15 @@ const tbody = document.getElementById("satellites");
   }
 
   function rotatorConfigFromForm() {
+    normalizeRotatorHostForTypeV2410();
+
+    const type = textValue("rotatorType", "simulation");
+    const defaultHost = rotatorTypeUsesHostV2410(type) ? rotatorSuggestedHostV2410() : "0.0.0.0";
+
     return {
       enabled: boolValue("rotatorEnabled"),
-      type: textValue("rotatorType", "simulation"),
-      host: textValue("rotatorHost", "127.0.0.1"),
+      type,
+      host: textValue("rotatorHost", defaultHost),
       port: numberValue("rotatorPort", 4533),
       update_interval_sec: numberValue("rotatorUpdateInterval", 2),
       min_move_deg: numberValue("rotatorMinMove", 1.0),
@@ -2991,29 +3100,38 @@ const tbody = document.getElementById("satellites");
   function fillRotatorForm(cfg) {
     if (!cfg) return;
 
-    setValue("rotatorEnabled", !!cfg.enabled);
-    setValue("rotatorType", cfg.type || "simulation");
+    rotatorFormLoadingV2410 = true;
+    try {
+      const type = cfg.type || "simulation";
+      const connection = cfg.connection || {};
+      const defaultHost = rotatorTypeUsesHostV2410(type) ? rotatorSuggestedHostV2410() : "0.0.0.0";
 
-    const connection = cfg.connection || {};
-    setValue("rotatorHost", cfg.host || connection.host || "127.0.0.1");
-    setValue("rotatorPort", cfg.port || connection.port || 4533);
+      setValue("rotatorEnabled", !!cfg.enabled);
+      setValue("rotatorType", type);
+      setValue("rotatorHost", cfg.host || connection.host || defaultHost);
+      setValue("rotatorPort", cfg.port || connection.port || 4533);
 
-    setValue("rotatorUpdateInterval", cfg.update_interval_sec ?? 2);
-    setValue("rotatorMinMove", cfg.min_move_deg ?? 1.0);
-    setValue("rotatorAzOffset", cfg.az_offset_deg ?? 0.0);
-    setValue("rotatorElOffset", cfg.el_offset_deg ?? 0.0);
-    setValue("rotatorMinEl", cfg.min_el_deg ?? 0.0);
-    setValue("rotatorMaxEl", cfg.max_el_deg ?? 90.0);
-    setValue("rotatorParkOnLos", !!cfg.park_on_los);
-    setValue("rotatorParkAz", cfg.park_az_deg ?? 0.0);
-    setValue("rotatorParkEl", cfg.park_el_deg ?? 0.0);
+      setValue("rotatorUpdateInterval", cfg.update_interval_sec ?? 2);
+      setValue("rotatorMinMove", cfg.min_move_deg ?? 1.0);
+      setValue("rotatorAzOffset", cfg.az_offset_deg ?? 0.0);
+      setValue("rotatorElOffset", cfg.el_offset_deg ?? 0.0);
+      setValue("rotatorMinEl", cfg.min_el_deg ?? 0.0);
+      setValue("rotatorMaxEl", cfg.max_el_deg ?? 90.0);
+      setValue("rotatorParkOnLos", !!cfg.park_on_los);
+      setValue("rotatorParkAz", cfg.park_az_deg ?? 0.0);
+      setValue("rotatorParkEl", cfg.park_el_deg ?? 0.0);
+    } finally {
+      rotatorFormLoadingV2410 = false;
+    }
   }
 
   async function loadRotatorConfig() {
     const data = await rotatorApi("/api/rotator/config");
     if (data.http_ok) {
       fillRotatorForm(data);
-      setRotatorStatus("Rotator config loaded.", data, false);
+      rotatorConfigDirtyV2410 = false;
+      updateRotatorDirtyNoticeV2410();
+      setRotatorStatus("Rotator config loaded. Form matches saved active config.", data, false);
     } else {
       setRotatorStatus("Failed to load rotator config.", data, true);
     }
@@ -3028,8 +3146,10 @@ const tbody = document.getElementById("satellites");
       body: JSON.stringify(cfg)
     });
 
-    setRotatorStatus(data.http_ok ? "Rotator config saved." : "Failed to save rotator config.", data, !data.http_ok);
+    setRotatorStatus(data.http_ok ? "Rotator config applied and saved." : "Failed to apply/save rotator config.", data, !data.http_ok);
     if (data.http_ok) {
+      rotatorConfigDirtyV2410 = false;
+      updateRotatorDirtyNoticeV2410();
       await loadRotatorState();
     }
     return data;
@@ -3145,11 +3265,23 @@ async function loadRotatorState() {
   }
 
   async function testRotator() {
+    if (!rotatorRequireSavedConfigV2410("Test Move")) {
+      return null;
+    }
+
     const az = numberValue("rotatorTestAz", 180);
     const el = numberValue("rotatorTestEl", 45);
     return rotatorPost(`/api/rotator/test?az=${encodeURIComponent(az)}&el=${encodeURIComponent(el)}`,
       "Rotator test command sent.",
       "Rotator test failed.");
+  }
+
+  async function startRotatorTrackingV2410() {
+    if (!rotatorRequireSavedConfigV2410("Start Rotator Tracking")) {
+      return null;
+    }
+
+    return rotatorPost("/api/rotator/track/start", "Rotator tracking started.", "Rotator tracking start failed.");
   }
 
   // ROTATOR_UI_PROTOCOL_PREVIEW_V2_4_4
@@ -3234,9 +3366,10 @@ async function loadRotatorState() {
         <div>
           <h2 id="rotatorControlTitle">Rotator Control</h2>
           <div id="rotatorLiveTarget" class="rotator-live-target">Target Az -- / El -- · waiting</div>
-          <p>Configure and test satellite antenna rotator control. Simulation is safe for development.</p>
+          <p>Configure and test satellite antenna rotator control. Changes are not active until you click Apply / Save Config.</p>
         </div>
         <div class="rotator-modal-header-actions">
+          <button type="button" id="rotatorHeaderSaveConfigBtn" class="rotator-small-button rotator-apply-button">Apply / Save Config</button>
           <button type="button" id="rotatorRefreshStateBtn" class="rotator-small-button">Refresh</button>
           <button type="button" id="rotatorCloseDialogBtn" class="rotator-small-button">Close</button>
         </div>
@@ -3245,7 +3378,7 @@ async function loadRotatorState() {
       <div class="rotator-grid">
         ${createField("Enabled", '<input id="rotatorEnabled" type="checkbox" />')}
         ${createField("Type", `<select id="rotatorType">${typeOptions}</select>`)}
-        ${createField("Host", '<input id="rotatorHost" type="text" value="127.0.0.1" />')}
+        ${createField("Host", '<input id="rotatorHost" type="text" value="0.0.0.0" />')}
         ${createField("Port", '<input id="rotatorPort" type="number" value="4533" min="1" max="65535" />')}
         ${createField("Update sec", '<input id="rotatorUpdateInterval" type="number" value="2" min="1" max="60" />')}
         ${createField("Min move deg", '<input id="rotatorMinMove" type="number" value="1.0" step="0.1" />')}
@@ -3258,9 +3391,13 @@ async function loadRotatorState() {
         ${createField("Park el", '<input id="rotatorParkEl" type="number" value="0.0" step="0.1" />')}
       </div>
 
+      <div id="rotatorUnsavedNotice" class="rotator-unsaved-notice" hidden>
+        Unsaved rotator settings. Click <strong>Apply / Save Now</strong> before Preview/Test/Tracking. Live target still uses the last saved config.
+      </div>
+
       <div class="rotator-actions">
-        <button type="button" id="rotatorLoadConfigBtn">Load Config</button>
-        <button type="button" id="rotatorSaveConfigBtn">Save Config</button>
+        <button type="button" id="rotatorLoadConfigBtn">Load Saved Config</button>
+        <button type="button" id="rotatorSaveConfigBtn" class="rotator-apply-button">Apply / Save Config</button>
       </div>
 
       <div class="rotator-test-row">
@@ -3293,16 +3430,18 @@ async function loadRotatorState() {
 
     document.getElementById("rotatorLoadConfigBtn")?.addEventListener("click", loadRotatorConfig);
     document.getElementById("rotatorSaveConfigBtn")?.addEventListener("click", saveRotatorConfig);
+    document.getElementById("rotatorHeaderSaveConfigBtn")?.addEventListener("click", saveRotatorConfig);
     document.getElementById("rotatorRefreshStateBtn")?.addEventListener("click", loadRotatorState);
     document.getElementById("rotatorCloseDialogBtn")?.addEventListener("click", closeRotatorModalV248);
     document.getElementById("rotatorPreviewCommandBtn")?.addEventListener("click", previewRotatorProtocolCommandV244);
     document.getElementById("rotatorTestBtn")?.addEventListener("click", testRotator);
     document.getElementById("rotatorParkBtn")?.addEventListener("click", () => rotatorPost("/api/rotator/park", "Rotator park command sent.", "Rotator park failed."));
     document.getElementById("rotatorStopBtn")?.addEventListener("click", () => rotatorPost("/api/rotator/stop", "Rotator stop command sent.", "Rotator stop failed."));
-    document.getElementById("rotatorTrackStartBtn")?.addEventListener("click", () => rotatorPost("/api/rotator/track/start", "Rotator tracking started.", "Rotator tracking start failed."));
+    document.getElementById("rotatorTrackStartBtn")?.addEventListener("click", startRotatorTrackingV2410);
     document.getElementById("rotatorTrackStopBtn")?.addEventListener("click", () => rotatorPost("/api/rotator/track/stop", "Rotator tracking stopped.", "Rotator tracking stop failed."));
     document.getElementById("rotatorTrackStepBtn")?.addEventListener("click", () => rotatorPost("/api/rotator/track/step", "Rotator tracking step complete.", "Rotator tracking step failed."));
     bindRotatorModalOpenButtonsV248();
+    bindRotatorConfigDirtyHandlersV2410();
     startRotatorLiveTargetPollingV242();
 
     loadRotatorConfig().catch((err) => setRotatorStatus("Rotator UI load failed.", { ok: false, error: String(err) }, true));
