@@ -4736,9 +4736,118 @@ static int rotator_tcp_send_line(const char *host, int port, const char *line, c
     return ok;
 }
 
+
+/* ROTATOR_PROTOCOL_ADAPTERS_V2_4_3 */
+static int rotator_format_command_v2_4_3(
+    const char *type,
+    double az_deg,
+    double el_deg,
+    char *line,
+    size_t line_size,
+    char *label,
+    size_t label_size)
+{
+    int az_i;
+    int el_i;
+
+    if (!type || !line || line_size == 0) {
+        return 0;
+    }
+
+    if (strcmp(type, "hamlib_rotctld") == 0) {
+        snprintf(line, line_size, "P %.2f %.2f\n", az_deg, el_deg);
+        if (label && label_size > 0) {
+            snprintf(label, label_size, "hamlib_rotctld");
+        }
+        return 1;
+    }
+
+    if (strcmp(type, "easycomm2") == 0) {
+        snprintf(line, line_size, "AZ%.1f EL%.1f\n", az_deg, el_deg);
+        if (label && label_size > 0) {
+            snprintf(label, label_size, "easycomm2");
+        }
+        return 1;
+    }
+
+    if (strcmp(type, "yaesu_gs232") == 0) {
+        az_i = (int)(az_deg + 0.5);
+        el_i = (int)(el_deg + 0.5);
+        if (az_i < 0) {
+            az_i = 0;
+        }
+        if (az_i > 450) {
+            az_i = 450;
+        }
+        if (el_i < 0) {
+            el_i = 0;
+        }
+        if (el_i > 180) {
+            el_i = 180;
+        }
+        snprintf(line, line_size, "W%03d %03d\n", az_i, el_i);
+        if (label && label_size > 0) {
+            snprintf(label, label_size, "yaesu_gs232");
+        }
+        return 1;
+    }
+
+    return 0;
+}
+
+static void send_rotator_protocol_preview_v2_4_3(int fd, const char *query)
+{
+    char type[64] = "";
+    char az_text[64] = "";
+    char el_text[64] = "";
+    char command[128] = "";
+    char command_json[256];
+    char label[64] = "";
+    char body[768];
+    double az = 0.0;
+    double el = 0.0;
+
+    query_param(query, "type", type, sizeof(type));
+    query_param(query, "az", az_text, sizeof(az_text));
+    query_param(query, "el", el_text, sizeof(el_text));
+
+    if (!type[0] || !az_text[0] || !el_text[0]) {
+        send_text(fd, 400, "Bad Request", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"type, az, and el query parameters are required\"}\n");
+        return;
+    }
+
+    az = rotator_normalize_az(atof(az_text));
+    el = atof(el_text);
+    if (el < 0.0) {
+        el = 0.0;
+    }
+    if (el > 180.0) {
+        el = 180.0;
+    }
+
+    if (strcmp(type, "satran") == 0) {
+        send_text(fd, 409, "Conflict", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"type\":\"satran\",\"error\":\"SATRAN adapter protocol is pending confirmation\"}\n");
+        return;
+    }
+
+    if (!rotator_format_command_v2_4_3(type, az, el, command, sizeof(command), label, sizeof(label))) {
+        send_text(fd, 400, "Bad Request", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"unsupported rotator protocol type\"}\n");
+        return;
+    }
+
+    json_escape(command_json, sizeof(command_json), command);
+    snprintf(body, sizeof(body),
+             "{\"ok\":true,\"type\":\"%s\",\"az_deg\":%.2f,\"el_deg\":%.2f,\"command\":\"%s\"}\n",
+             label, az, el, command_json);
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
+}
+
 static int rotator_send_target(const struct app_config *cfg, struct rotator_config *rot, double az_deg, double el_deg, char *result, size_t result_size)
 {
-    char line[128], reply[256] = "";
+    char line[128], reply[256] = "", label[64] = "";
     double target_az = rotator_normalize_az(az_deg + rot->az_offset_deg);
     double target_el = rotator_clamp_el(rot, el_deg + rot->el_offset_deg);
     if (!rot->enabled) {
@@ -4751,19 +4860,18 @@ static int rotator_send_target(const struct app_config *cfg, struct rotator_conf
         rotator_write_state(cfg, rot, "simulated", target_az, target_el, "simulated", result);
         return 1;
     }
-    if (strcmp(rot->type, "hamlib_rotctld") == 0) {
-        snprintf(line, sizeof(line), "P %.2f %.2f\n", target_az, target_el);
+    if (rotator_format_command_v2_4_3(rot->type, target_az, target_el, line, sizeof(line), label, sizeof(label))) {
         if (rotator_tcp_send_line(rot->host, rot->port, line, reply, sizeof(reply))) {
-            snprintf(result, result_size, "hamlib_rotctld sent P %.2f %.2f reply=%s", target_az, target_el, reply);
+            snprintf(result, result_size, "%s sent command=%s reply=%s", label, line, reply);
             rotator_write_state(cfg, rot, "commanded", target_az, target_el, "written", result);
             return 1;
         }
-        snprintf(result, result_size, "hamlib_rotctld command failed to %s:%d", rot->host, rot->port);
+        snprintf(result, result_size, "%s command failed to %s:%d command=%s", label, rot->host, rot->port, line);
         rotator_write_state(cfg, rot, "error", target_az, target_el, "error", result);
         return 0;
     }
-    if (strcmp(rot->type, "satran") == 0 || strcmp(rot->type, "easycomm2") == 0 || strcmp(rot->type, "yaesu_gs232") == 0) {
-        snprintf(result, result_size, "%s adapter is configured but not implemented yet", rot->type);
+    if (strcmp(rot->type, "satran") == 0) {
+        snprintf(result, result_size, "satran adapter protocol is pending confirmation");
         rotator_write_state(cfg, rot, "unsupported", target_az, target_el, "unsupported", result);
         return 0;
     }
@@ -5130,6 +5238,15 @@ static void handle_request(
     if (strcmp(path, "/api/rotator/state") == 0) {
         if (strcmp(method, "GET") == 0) {
             send_rotator_state(fd, cfg);
+        } else {
+            send_text(fd, 405, "Method Not Allowed", "application/json; charset=utf-8",
+                      "{\"ok\":false,\"error\":\"method not allowed\"}\n");
+        }
+        return;
+    }
+    if (strcmp(path, "/api/rotator/protocol/preview") == 0) {
+        if (strcmp(method, "GET") == 0) {
+            send_rotator_protocol_preview_v2_4_3(fd, query);
         } else {
             send_text(fd, 405, "Method Not Allowed", "application/json; charset=utf-8",
                       "{\"ok\":false,\"error\":\"method not allowed\"}\n");
