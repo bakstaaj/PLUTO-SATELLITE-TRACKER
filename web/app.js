@@ -3177,15 +3177,35 @@ function rotatorLiveTargetFormatV242(value) {
 
 function rotatorTargetSourceLabelV246(data) {
   // ROTATOR_SOURCE_READOUT_V2_4_6
+  // ROTATOR_UI_SUCCESS_STATE_V2_4_13
   const raw = [
     data && data.source,
     data && data.message,
     data && data.last_result,
-    data && data.state
+    data && data.state,
+    data && data.type
   ]
     .filter((value) => value !== undefined && value !== null)
     .map((value) => String(value).toLowerCase())
     .join(" ");
+
+  const typeText = String((data && data.type) || "").toLowerCase();
+  const stateText = String((data && data.state) || "").toLowerCase();
+  const resultText = String((data && data.last_result) || "").toLowerCase();
+  const success =
+    resultText === "written" ||
+    resultText === "simulated" ||
+    stateText === "commanded" ||
+    stateText === "simulated" ||
+    stateText === "parked";
+
+  if (success) {
+    if (typeText === "easycomm2" || raw.includes("easycomm2")) return "easycomm2 / TCP";
+    if (typeText === "hamlib_rotctld" || raw.includes("hamlib") || raw.includes("rotctld")) return "hamlib rotctld / TCP";
+    if (typeText === "yaesu_gs232" || raw.includes("yaesu")) return "yaesu gs-232 / TCP";
+    if (typeText === "simulation" || raw.includes("simulation target")) return "simulation";
+    return "command accepted";
+  }
 
   if (raw.includes("selected_plan_point") || raw.includes("radio_track.json:selected")) {
     return "selected pass";
@@ -3199,11 +3219,10 @@ function rotatorTargetSourceLabelV246(data) {
   if (raw.includes("simulation target") || raw.includes("test command") || raw.includes("rotator test")) {
     return "manual/test";
   }
+  if (raw.includes("error")) {
+    return "error - check Host/Port and protocol";
+  }
   if (
-    raw.includes("hamlib") ||
-    raw.includes("rotctld") ||
-    raw.includes("easycomm") ||
-    raw.includes("yaesu") ||
     raw.includes("connection") ||
     raw.includes("connect") ||
     raw.includes("refused") ||
@@ -3213,9 +3232,6 @@ function rotatorTargetSourceLabelV246(data) {
     raw.includes("unreachable")
   ) {
     return "network adapter error";
-  }
-  if (raw.includes("error")) {
-    return "error - check Host/Port and protocol";
   }
   if (raw.includes("waiting") || raw.includes("idle") || raw.includes("stopped") || raw.includes("not_started")) {
     return "none";
