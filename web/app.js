@@ -895,6 +895,42 @@
       return "";
     }
 
+    /* ROTATOR_SELECTED_PASS_PLAN_V2_4_5 */
+    let selectedRotatorTrackPlanKeyV245 = "";
+
+    async function publishSelectedPassRotatorPlanV245(pass) {
+      if (!pass) return null;
+      const key = passKey(pass);
+      const plan = pass.doppler_plan || {};
+      const points = plan.points || [];
+      if (!key || !points.length) return null;
+      if (selectedRotatorTrackPlanKeyV245 === key) return null;
+
+      selectedRotatorTrackPlanKeyV245 = key;
+      const radio = pass.radio || {};
+      const payload = {
+        name: pass.name || "",
+        norad_id: pass.norad_id || 0,
+        aos_utc: pass.aos_utc || "",
+        tca_utc: pass.tca_utc || "",
+        los_utc: pass.los_utc || "",
+        mode: radio.mode || ((pass.modes || [])[0] || ""),
+        description: radio.description || "",
+        doppler_plan: plan
+      };
+
+      try {
+        return await postJson("/api/radio/track/plan", payload);
+      } catch (error) {
+        selectedRotatorTrackPlanKeyV245 = "";
+        const status = document.getElementById("status");
+        if (status) {
+          status.textContent = `Selected pass Doppler plan publish failed: ${error.message || error}`;
+        }
+        return null;
+      }
+    }
+
     function renderMapPanel(pass, config) {
       const node = document.getElementById("mapPanel");
       if (!config) {
@@ -2076,6 +2112,7 @@ function bindAnalogAudio(pass, node) {
       currentSelectedPassKey = passKey(pass);
       currentMapFocusTime = "";
       renderMapPanel(currentSelectedPass, currentObserverConfig);
+      publishSelectedPassRotatorPlanV245(currentSelectedPass).catch(() => {});
 
       if (!node) return;
       if (!pass) {

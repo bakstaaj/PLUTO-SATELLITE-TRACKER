@@ -4914,6 +4914,106 @@ static int rotator_read_active_target(const struct app_config *cfg, double *az_o
     }
 
     /*
+     * ROTATOR_SELECTED_PLAN_TARGET_V2_4_5
+     *
+     * Prefer the currently selected Doppler plan written by the browser through
+     * /api/radio/track/plan. This prevents the rotator from following the first
+     * active pass in passes.json when the user has selected a different
+     * overlapping pass.
+     */
+    runtime_file_path(path, sizeof(path), "radio_track.json");
+    if (read_file_to_string(path, &json, &len) == 0) {
+        const char *p = json;
+        time_t now_time = time(NULL);
+        long long now_epoch = (long long)now_time;
+        long long best_abs_dt = LLONG_MAX;
+        double best_az = 0.0;
+        double best_el = 0.0;
+        int found = 0;
+
+        while ((p = strstr(p, "\"time_utc\"")) != NULL) {
+            const char *object_start = p;
+            const char *time_start;
+            const char *next_point;
+            const char *object_end;
+            char object_buf[4096];
+            char time_value[64] = "";
+            size_t object_len;
+            long long point_epoch = 0;
+            long long abs_dt;
+            double point_az = 0.0;
+            double point_el = 0.0;
+            int point_has_az;
+            int point_has_el;
+
+            while (object_start > json && *object_start != '{') {
+                object_start--;
+            }
+
+            time_start = strchr(p, ':');
+            if (!time_start) {
+                break;
+            }
+            time_start++;
+            while (*time_start == ' ' || *time_start == '\t' || *time_start == '\r' || *time_start == '\n') {
+                time_start++;
+            }
+            if (*time_start != '"') {
+                p += 10;
+                continue;
+            }
+            time_start++;
+            snprintf(time_value, sizeof(time_value), "%.63s", time_start);
+            if (strchr(time_value, '"')) {
+                *strchr(time_value, '"') = '\0';
+            }
+
+            next_point = strstr(time_start, "\"time_utc\"");
+            object_end = next_point ? next_point : time_start + strlen(time_start);
+            object_len = (size_t)(object_end - object_start);
+            if (object_len >= sizeof(object_buf)) {
+                object_len = sizeof(object_buf) - 1;
+            }
+            memcpy(object_buf, object_start, object_len);
+            object_buf[object_len] = '\0';
+
+            point_has_az = json_double_value(object_buf, "az_deg", &point_az) ||
+                           json_double_value(object_buf, "azimuth_deg", &point_az) ||
+                           json_double_value(object_buf, "target_az_deg", &point_az) ||
+                           json_double_value(object_buf, "az", &point_az);
+            point_has_el = json_double_value(object_buf, "el_deg", &point_el) ||
+                           json_double_value(object_buf, "elevation_deg", &point_el) ||
+                           json_double_value(object_buf, "target_el_deg", &point_el) ||
+                           json_double_value(object_buf, "el", &point_el);
+
+            if (point_has_az && point_has_el && parse_iso_utc_epoch(time_value, &point_epoch)) {
+                long long dt = point_epoch - now_epoch;
+                abs_dt = dt < 0 ? -dt : dt;
+                if (abs_dt < best_abs_dt) {
+                    best_abs_dt = abs_dt;
+                    best_az = point_az;
+                    best_el = point_el;
+                    found = 1;
+                }
+            }
+
+            p = next_point ? next_point : time_start + strlen(time_start);
+        }
+
+        free(json);
+        json = NULL;
+
+        if (found && best_abs_dt <= 180) {
+            *az_out = best_az;
+            *el_out = best_el;
+            if (source && source_size > 0) {
+                snprintf(source, source_size, "%s:selected_plan_point", path);
+            }
+            return 1;
+        }
+    }
+
+    /*
      * Fallback: pass predictions already contain doppler_plan points with
      * azimuth_deg/elevation_deg. Use the nearest point around current time
      * so rotator tracking can work even when Doppler radio tracking is not
