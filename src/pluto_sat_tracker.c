@@ -3810,6 +3810,172 @@ static int write_track_state(
     return 1;
 }
 
+/* ROTATOR_AZEL_STATE_SAFE1: helpers for publishing selected Doppler point az/el */
+static int find_track_point_az_el_by_time_safe1(
+    const char *plan_json,
+    const char *target_time,
+    double *az_deg,
+    double *el_deg)
+{
+    const char *p = plan_json;
+    char time_value[64];
+
+    if (!plan_json || !target_time || !target_time[0] || !az_deg || !el_deg) {
+        return 0;
+    }
+
+    while ((p = strstr(p, "\"time_utc\"")) != NULL) {
+        const char *object_start = p;
+        const char *time_start;
+        const char *next_point;
+        const char *object_end;
+        size_t object_len;
+        char object_buf[4096];
+        double az = 0.0;
+        double el = 0.0;
+        int got_az;
+        int got_el;
+
+        while (object_start > plan_json && *object_start != '{') {
+            object_start--;
+        }
+
+        time_start = strchr(p, ':');
+        if (!time_start) {
+            break;
+        }
+        time_start++;
+        while (*time_start == ' ' || *time_start == '\t' || *time_start == '\r' || *time_start == '\n') {
+            time_start++;
+        }
+        if (*time_start != '"') {
+            p += 10;
+            continue;
+        }
+        time_start++;
+        snprintf(time_value, sizeof(time_value), "%.63s", time_start);
+        if (strchr(time_value, '"')) {
+            *strchr(time_value, '"') = '\0';
+        }
+
+        next_point = strstr(time_start, "\"time_utc\"");
+        object_end = next_point ? next_point : time_start + strlen(time_start);
+        object_len = (size_t)(object_end - object_start);
+        if (object_len >= sizeof(object_buf)) {
+            object_len = sizeof(object_buf) - 1;
+        }
+        memcpy(object_buf, object_start, object_len);
+        object_buf[object_len] = '\0';
+
+        if (strcmp(time_value, target_time) == 0) {
+            got_az = json_double_value(object_buf, "az_deg", &az) ||
+                     json_double_value(object_buf, "azimuth_deg", &az) ||
+                     json_double_value(object_buf, "target_az_deg", &az) ||
+                     json_double_value(object_buf, "az", &az);
+            got_el = json_double_value(object_buf, "el_deg", &el) ||
+                     json_double_value(object_buf, "elevation_deg", &el) ||
+                     json_double_value(object_buf, "target_el_deg", &el) ||
+                     json_double_value(object_buf, "el", &el);
+            if (!got_az || !got_el) {
+                return 0;
+            }
+            *az_deg = az;
+            *el_deg = el;
+            return 1;
+        }
+
+        p = next_point ? next_point : time_start + strlen(time_start);
+    }
+
+    return 0;
+}
+
+static int write_track_state_with_azel_safe1(
+    const struct app_config *cfg,
+    const char *state,
+    const char *name,
+    int point_index,
+    const char *point_time,
+    long long rx_hz,
+    const char *lo_path,
+    const char *message,
+    long long seconds_until_aos,
+    long long seconds_until_los,
+    long long seconds_since_los,
+    long long seconds_until_point,
+    const char *lo_write_result,
+    double az_deg,
+    double el_deg)
+{
+    char path[PATH_BUF_SIZE];
+    char tmp_path[PATH_BUF_SIZE + 8];
+    char name_json[512];
+    char message_json[512];
+    char lo_result_json[128];
+    FILE *f;
+    time_t now = time(NULL);
+
+    json_escape(name_json, sizeof(name_json), name ? name : "");
+    json_escape(message_json, sizeof(message_json), message ? message : "");
+    json_escape(lo_result_json, sizeof(lo_result_json), lo_write_result ? lo_write_result : "not_attempted");
+
+    join_path(path, sizeof(path), cfg->data_dir, "radio_track_state.json");
+    snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
+    f = fopen(tmp_path, "wb");
+    if (!f) {
+        return 0;
+    }
+
+    fprintf(f,
+            "{\n"
+            "  \"ok\": true,\n"
+            "  \"state\": \"%s\",\n"
+            "  \"updated_epoch\": %ld,\n"
+            "  \"name\": \"%s\",\n"
+            "  \"point_index\": %d,\n"
+            "  \"point_time_utc\": \"%s\",\n"
+            "  \"rx_hz\": %lld,\n"
+            "  \"lo_path\": \"%s\",\n"
+            "  \"seconds_until_aos\": %lld,\n"
+            "  \"seconds_until_los\": %lld,\n"
+            "  \"seconds_since_los\": %lld,\n"
+            "  \"seconds_until_point\": %lld,\n"
+            "  \"has_az_el\": true,\n"
+            "  \"az_deg\": %.3f,\n"
+            "  \"el_deg\": %.3f,\n"
+            "  \"target_az_deg\": %.3f,\n"
+            "  \"target_el_deg\": %.3f,\n"
+            "  \"lo_write_result\": \"%s\",\n"
+            "  \"message\": \"%s\"\n"
+            "}\n",
+            state,
+            (long)now,
+            name_json,
+            point_index,
+            point_time ? point_time : "",
+            rx_hz,
+            lo_path ? lo_path : "",
+            seconds_until_aos,
+            seconds_until_los,
+            seconds_since_los,
+            seconds_until_point,
+            az_deg,
+            el_deg,
+            az_deg,
+            el_deg,
+            lo_result_json,
+            message_json);
+    fclose(f);
+
+    if (rename(tmp_path, path) != 0) {
+        unlink(tmp_path);
+        return 0;
+    }
+    return 1;
+}
+
+
+
 static int read_track_window(
     const char *plan,
     long long *aos_epoch,
@@ -3897,6 +4063,9 @@ static int apply_radio_track_step(
     long long seconds_until_los = -1;
     long long seconds_until_point = -1;
     int point_index = -1;
+    double az_deg_safe1 = 0.0;
+    double el_deg_safe1 = 0.0;
+    int has_az_el_safe1 = 0;
     time_t now = time(NULL);
 
     runtime_file_path(path, sizeof(path), "radio_track.json");
@@ -3940,6 +4109,7 @@ static int apply_radio_track_step(
         snprintf(error, error_size, "track plan does not contain usable Doppler points");
         return 400;
     }
+    has_az_el_safe1 = find_track_point_az_el_by_time_safe1(plan, point_time, &az_deg_safe1, &el_deg_safe1);
     free(plan);
     if (point_epoch > (long long)now) {
         seconds_until_point = point_epoch - (long long)now;
@@ -3953,17 +4123,28 @@ static int apply_radio_track_step(
         return 500;
     }
 
-    if (!write_track_state(cfg, state, name, point_index, point_time, rx_hz, lo_path, message, seconds_until_aos, seconds_until_los, -1, seconds_until_point, "written")) {
+    if (has_az_el_safe1) {
+        if (!write_track_state_with_azel_safe1(cfg, state, name, point_index, point_time, rx_hz, lo_path, message, seconds_until_aos, seconds_until_los, -1, seconds_until_point, "written", az_deg_safe1, el_deg_safe1)) {
+            snprintf(error, error_size, "could not write Doppler track state");
+            return 500;
+        }
+    } else if (!write_track_state(cfg, state, name, point_index, point_time, rx_hz, lo_path, message, seconds_until_aos, seconds_until_los, -1, seconds_until_point, "written")) {
         snprintf(error, error_size, "could not write Doppler track state");
         return 500;
     }
 
     json_escape(name_json, sizeof(name_json), name);
     snprintf(response, response_size,
-             "{\"ok\":true,\"state\":\"%s\",\"name\":\"%s\",\"point_index\":%d,\"point_time_utc\":\"%s\",\"rx_hz\":%lld,\"lo_path\":\"%s\",\"seconds_until_los\":%lld,\"seconds_until_point\":%lld,\"lo_write_result\":\"written\"}\n",
-             state, name_json, point_index, point_time, rx_hz, lo_path, seconds_until_los, seconds_until_point);
+             "{\"ok\":true,\"state\":\"%s\",\"name\":\"%s\",\"point_index\":%d,\"point_time_utc\":\"%s\",\"rx_hz\":%lld,\"lo_path\":\"%s\",\"seconds_until_los\":%lld,\"seconds_until_point\":%lld,\"has_az_el\":%s,\"az_deg\":%.3f,\"el_deg\":%.3f,\"target_az_deg\":%.3f,\"target_el_deg\":%.3f,\"lo_write_result\":\"written\"}\n",
+             state, name_json, point_index, point_time, rx_hz, lo_path, seconds_until_los, seconds_until_point,
+             has_az_el_safe1 ? "true" : "false",
+             az_deg_safe1,
+             el_deg_safe1,
+             az_deg_safe1,
+             el_deg_safe1);
     return 200;
 }
+
 
 static void send_error_json(int fd, int status, const char *error)
 {
