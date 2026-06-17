@@ -1390,3 +1390,16 @@
   color: #fecaca;
 }
 
+/* ROTATOR_UI_LIVE_TARGET_V2_4_2 */
+.rotator-live-target {
+  margin: 0.35rem 0 0.75rem 0;
+  padding: 0.4rem 0.55rem;
+  border-radius: 0.45rem;
+  font-size: 0.92rem;
+  line-height: 1.35;
+  opacity: 0.9;
+}
+
+.rotator-live-target-active {
+  font-weight: 600;
+}

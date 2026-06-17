@@ -2946,8 +2946,71 @@ const tbody = document.getElementById("satellites");
     return data;
   }
 
-  async function loadRotatorState() {
+
+// ROTATOR_UI_LIVE_TARGET_V2_4_2
+let rotatorLiveTargetTimerV242 = null;
+
+function rotatorLiveTargetValueV242(data, keys) {
+  for (const key of keys) {
+    const value = data && data[key];
+    if (value !== undefined && value !== null && value !== "" && Number.isFinite(Number(value))) {
+      return Number(value);
+    }
+  }
+  return null;
+}
+
+function rotatorLiveTargetFormatV242(value) {
+  return value === null ? "--" : `${value.toFixed(1)}°`;
+}
+
+function updateRotatorLiveTargetV242(data) {
+  // ROTATOR_UI_LIVE_TARGET_WAITING_FIX_V2_4_2B
+  const box = document.getElementById("rotatorLiveTarget");
+  if (!box) {
+    return;
+  }
+
+  const stateText = data && data.state ? String(data.state) : "unknown";
+  const stateLower = stateText.toLowerCase();
+  const sourceText = data && data.source ? ` · ${data.source}` : "";
+  const targetOnlyStates = new Set(["waiting", "idle", "stopped", "parked", "error", "unknown"]);
+  let targetAz = rotatorLiveTargetValueV242(data, ["target_az_deg"]);
+  let targetEl = rotatorLiveTargetValueV242(data, ["target_el_deg"]);
+
+  if ((targetAz === null || targetEl === null) && !targetOnlyStates.has(stateLower)) {
+    targetAz = targetAz === null ? rotatorLiveTargetValueV242(data, ["az_deg", "azimuth_deg"]) : targetAz;
+    targetEl = targetEl === null ? rotatorLiveTargetValueV242(data, ["el_deg", "elevation_deg"]) : targetEl;
+  }
+
+  box.textContent =
+    `Target Az ${rotatorLiveTargetFormatV242(targetAz)} / ` +
+    `El ${rotatorLiveTargetFormatV242(targetEl)} · ${stateText}${sourceText}`;
+  box.classList.toggle("rotator-live-target-active", targetAz !== null && targetEl !== null);
+}
+
+function startRotatorLiveTargetPollingV242() {
+  if (rotatorLiveTargetTimerV242) {
+    return;
+  }
+
+  const refresh = () => {
+    if (!document.getElementById("rotatorLiveTarget")) {
+      return;
+    }
+    if (typeof loadRotatorState === "function") {
+      loadRotatorState().catch(() => {});
+    }
+  };
+
+  refresh();
+  rotatorLiveTargetTimerV242 = window.setInterval(refresh, 5000);
+}
+
+
+async function loadRotatorState() {
     const data = await rotatorApi("/api/rotator/state");
+    updateRotatorLiveTargetV242(data);
     setRotatorStatus(data.http_ok ? "Rotator state refreshed." : "Failed to refresh rotator state.", data, !data.http_ok);
     return data;
   }
@@ -2984,6 +3047,7 @@ const tbody = document.getElementById("satellites");
       <div class="rotator-card-header">
         <div>
           <h2>Rotator Control</h2>
+          <div id="rotatorLiveTarget" class="rotator-live-target">Target Az -- / El -- · waiting</div>
           <p>Configure and test satellite antenna rotator control. Simulation is safe for development.</p>
         </div>
         <button type="button" id="rotatorRefreshStateBtn" class="rotator-small-button">Refresh</button>
@@ -3046,6 +3110,7 @@ const tbody = document.getElementById("satellites");
     document.getElementById("rotatorTrackStartBtn")?.addEventListener("click", () => rotatorPost("/api/rotator/track/start", "Rotator tracking started.", "Rotator tracking start failed."));
     document.getElementById("rotatorTrackStopBtn")?.addEventListener("click", () => rotatorPost("/api/rotator/track/stop", "Rotator tracking stopped.", "Rotator tracking stop failed."));
     document.getElementById("rotatorTrackStepBtn")?.addEventListener("click", () => rotatorPost("/api/rotator/track/step", "Rotator tracking step complete.", "Rotator tracking step failed."));
+    startRotatorLiveTargetPollingV242();
 
     loadRotatorConfig().catch((err) => setRotatorStatus("Rotator UI load failed.", { ok: false, error: String(err) }, true));
 

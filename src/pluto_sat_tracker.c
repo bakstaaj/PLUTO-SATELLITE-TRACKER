@@ -94,6 +94,17 @@ static void json_escape(char *dst, size_t dst_size, const char *src);
 static int json_string_value(const char *json, const char *key, char *out, size_t out_size);
 static int json_double_value(const char *json, const char *key, double *out);
 static int send_wav_stream(int fd, const struct app_config *cfg, const char *query);
+static int apply_radio_track_step(
+    const struct app_config *cfg,
+    const char *state,
+    const char *message,
+    int enforce_pass_window,
+    char *response,
+    size_t response_size,
+    char *error,
+    size_t error_size);
+static int ensure_track_auto_running_for_audio_v1(const struct app_config *cfg);
+static void track_auto_set_running(int running);
 static void send_rotator_config(int fd, const struct app_config *cfg);
 static void save_rotator_config(int fd, const struct app_config *cfg, const char *body);
 static void send_rotator_state(int fd, const struct app_config *cfg);
@@ -2721,7 +2732,7 @@ static int audio_read_active_state_rx_hz_v7(
 static void send_live_audio_start(int fd, const struct app_config *cfg, const char *query)
 {
     char frequency_text[64] = "";
-    char body[1200];
+    char body[768];
     char track_response[1024];
     char track_error[256] = "";
     long long frequency_hz = 0;
@@ -2734,15 +2745,14 @@ static void send_live_audio_start(int fd, const struct app_config *cfg, const ch
     int fixed_requested =
         query_param_is_true_audio_doppler_v1(query, "fixed") ||
         query_param_is_true_audio_doppler_v1(query, "no_doppler") ||
-        query_param_is_false_audio_doppler_v6(query, "doppler") ||
-        query_param_is_false_audio_doppler_v6(query, "track") ||
-        query_param_is_false_audio_doppler_v6(query, "doppler_track");
+        query_param_is_false_audio_doppler_v3(query, "doppler") ||
+        query_param_is_false_audio_doppler_v3(query, "track") ||
+        query_param_is_false_audio_doppler_v3(query, "doppler_track");
     int noaa_fixed = 0;
     int doppler_attempted = 0;
     int doppler_used = 0;
     int doppler_defaulted = 0;
     int doppler_fallback = 0;
-    int doppler_state_fallback = 0;
 
     query_param(query, "downlink_hz", frequency_text, sizeof(frequency_text));
     if (frequency_text[0]) {
@@ -2758,6 +2768,13 @@ static void send_live_audio_start(int fd, const struct app_config *cfg, const ch
     requested_frequency_hz = frequency_hz;
     noaa_fixed = is_noaa_weather_frequency_v3(requested_frequency_hz);
 
+    /*
+     * BACKEND_AUDIO_DOPPLER_DEFAULT_V3:
+     * - NOAA is always fixed-frequency.
+     * - Satellite/non-NOAA audio defaults to Doppler if a valid plan is present.
+     * - Explicit doppler=1 requires a valid plan and returns an error if unavailable.
+     * - fixed=1/no_doppler=1/doppler=0 forces fixed tuning.
+     */
     if (!noaa_fixed && !fixed_requested && !explicit_doppler) {
         explicit_doppler = 1;
         doppler_defaulted = 1;
@@ -2765,56 +2782,35 @@ static void send_live_audio_start(int fd, const struct app_config *cfg, const ch
 
     if (!noaa_fixed && !fixed_requested && explicit_doppler) {
         int status;
-        status = audio_doppler_tune_now_v6(
+        doppler_attempted = 1;
+        status = apply_radio_track_step(
             cfg,
             "audio_active",
-            "audio-owned Doppler point tuned before live audio start",
+            "audio Doppler point tuned",
+            1,
             track_response,
             sizeof(track_response),
             track_error,
-            sizeof(track_error),
-            &doppler_frequency_hz);
+            sizeof(track_error));
 
-        doppler_attempted = 1;
-
-        if (status == 200 && doppler_frequency_hz >= PLUTO_MIN_HZ && doppler_frequency_hz <= PLUTO_MAX_HZ) {
+        if (status == 200 && json_long_long_after(track_response, "rx_hz", &doppler_frequency_hz) &&
+            doppler_frequency_hz >= PLUTO_MIN_HZ && doppler_frequency_hz <= PLUTO_MAX_HZ) {
             frequency_hz = doppler_frequency_hz;
             doppler_used = 1;
+        } else if (doppler_defaulted) {
+            doppler_fallback = 1;
+            frequency_hz = requested_frequency_hz;
         } else {
-            char fallback_state[64] = "";
-            char fallback_path[PATH_BUF_SIZE] = "";
-            long long fallback_rx_hz = 0;
-
-            if (audio_read_active_state_rx_hz_v7(cfg, &fallback_rx_hz, fallback_state, sizeof(fallback_state), fallback_path, sizeof(fallback_path))) {
-                frequency_hz = fallback_rx_hz;
-                doppler_frequency_hz = fallback_rx_hz;
-                doppler_used = 1;
-                doppler_state_fallback = 1;
-                audio_write_track_state_v6(
-                    cfg,
-                    "audio_active",
-                    "",
-                    -1,
-                    "",
-                    fallback_rx_hz,
-                    "iio_attr:ad9361-phy/altvoltage0/frequency",
-                    "audio Listen using active Doppler tracker state fallback",
-                    fallback_path);
-            } else if (doppler_defaulted) {
-                doppler_fallback = 1;
-                frequency_hz = requested_frequency_hz;
-            } else {
-                char error_body[768];
-                char escaped_error[512];
-                json_escape(escaped_error, sizeof(escaped_error),
-                            track_error[0] ? track_error : "Doppler track is not ready for this pass");
-                snprintf(error_body, sizeof(error_body),
-                         "{\"ok\":false,\"error\":\"%s\",\"doppler_track\":true,\"requested_downlink_hz\":%lld}\n",
-                         escaped_error,
-                         requested_frequency_hz);
-                send_text(fd, 409, "Conflict", "application/json; charset=utf-8", error_body);
-                return;
-            }
+            char error_body[768];
+            char escaped_error[512];
+            json_escape(escaped_error, sizeof(escaped_error),
+                        track_error[0] ? track_error : "Doppler track is not ready for this pass");
+            snprintf(error_body, sizeof(error_body),
+                     "{\"ok\":false,\"error\":\"%s\",\"doppler_track\":true,\"requested_downlink_hz\":%lld}\n",
+                     escaped_error,
+                     requested_frequency_hz);
+            send_text(fd, 409, "Conflict", "application/json; charset=utf-8", error_body);
+            return;
         }
     }
 
@@ -2823,18 +2819,19 @@ static void send_live_audio_start(int fd, const struct app_config *cfg, const ch
         return;
     }
 
-    if (doppler_used && !doppler_state_fallback) {
-        if (!audio_doppler_start_worker_v6(cfg)) {
+    if (doppler_used) {
+        if (!ensure_track_auto_running_for_audio_v1(cfg)) {
             stop_live_audio_session();
             send_audio_error_json(fd, 500, "Internal Server Error", "could not start audio-owned automatic Doppler tracking");
             return;
         }
-    } else if (!doppler_used) {
-        audio_doppler_stop_worker_v6();
+        g_audio_started_track_auto_v1 = 1;
+    } else {
+        g_audio_started_track_auto_v1 = 0;
     }
 
     snprintf(body, sizeof(body),
-             "{\"ok\":true,\"state\":\"running\",\"downlink_hz\":%lld,\"audio_hz\":%lld,\"requested_downlink_hz\":%lld,\"doppler_track\":%s,\"doppler_attempted\":%s,\"doppler_defaulted\":%s,\"doppler_fallback\":%s,\"doppler_state_fallback\":%s,\"noaa_fixed\":%s,\"fixed_requested\":%s,\"auto_track\":%s}\n",
+             "{\"ok\":true,\"state\":\"running\",\"downlink_hz\":%lld,\"audio_hz\":%lld,\"requested_downlink_hz\":%lld,\"doppler_track\":%s,\"doppler_attempted\":%s,\"doppler_defaulted\":%s,\"doppler_fallback\":%s,\"noaa_fixed\":%s,\"fixed_requested\":%s,\"auto_track\":%s}\n",
              frequency_hz,
              frequency_hz,
              requested_frequency_hz,
@@ -2842,7 +2839,6 @@ static void send_live_audio_start(int fd, const struct app_config *cfg, const ch
              doppler_attempted ? "true" : "false",
              doppler_defaulted ? "true" : "false",
              doppler_fallback ? "true" : "false",
-             doppler_state_fallback ? "true" : "false",
              noaa_fixed ? "true" : "false",
              fixed_requested ? "true" : "false",
              doppler_used ? "true" : "false");
@@ -4778,21 +4774,134 @@ static int rotator_send_target(const struct app_config *cfg, struct rotator_conf
 
 static int rotator_read_active_target(const struct app_config *cfg, double *az_out, double *el_out, char *source, size_t source_size)
 {
+    /* ROTATOR_PASSES_TARGET_FALLBACK_V2_4_2C */
     char path[PATH_BUF_SIZE];
     char *json = NULL;
     size_t len = 0;
     double az = 0.0, el = 0.0;
     int got_az = 0, got_el = 0;
+
+    if (!cfg || !az_out || !el_out) {
+        return 0;
+    }
+
     join_path(path, sizeof(path), cfg->data_dir, "radio_track_state.json");
-    if (read_file_to_string(path, &json, &len) != 0) return 0;
-    got_az = json_double_value(json, "az_deg", &az) || json_double_value(json, "azimuth_deg", &az) || json_double_value(json, "target_az_deg", &az);
-    got_el = json_double_value(json, "el_deg", &el) || json_double_value(json, "elevation_deg", &el) || json_double_value(json, "target_el_deg", &el);
-    free(json);
-    if (!got_az || !got_el) return 0;
-    *az_out = az;
-    *el_out = el;
-    if (source && source_size > 0) snprintf(source, source_size, "%s", path);
-    return 1;
+    if (read_file_to_string(path, &json, &len) == 0) {
+        got_az = json_double_value(json, "az_deg", &az) ||
+                 json_double_value(json, "azimuth_deg", &az) ||
+                 json_double_value(json, "target_az_deg", &az);
+        got_el = json_double_value(json, "el_deg", &el) ||
+                 json_double_value(json, "elevation_deg", &el) ||
+                 json_double_value(json, "target_el_deg", &el);
+        free(json);
+        json = NULL;
+        if (got_az && got_el) {
+            *az_out = az;
+            *el_out = el;
+            if (source && source_size > 0) {
+                snprintf(source, source_size, "%s", path);
+            }
+            return 1;
+        }
+    }
+
+    /*
+     * Fallback: pass predictions already contain doppler_plan points with
+     * azimuth_deg/elevation_deg. Use the nearest point around current time
+     * so rotator tracking can work even when Doppler radio tracking is not
+     * actively writing radio_track_state.json.
+     */
+    join_path(path, sizeof(path), cfg->data_dir, "passes.json");
+    if (read_file_to_string(path, &json, &len) == 0) {
+        const char *p = json;
+        time_t now_time = time(NULL);
+        long long now_epoch = (long long)now_time;
+        long long best_abs_dt = LLONG_MAX;
+        double best_az = 0.0;
+        double best_el = 0.0;
+        int found = 0;
+
+        while ((p = strstr(p, "\"time_utc\"")) != NULL) {
+            const char *object_start = p;
+            const char *time_start;
+            const char *next_point;
+            const char *object_end;
+            char object_buf[4096];
+            char time_value[64] = "";
+            size_t object_len;
+            long long point_epoch = 0;
+            long long abs_dt;
+            double point_az = 0.0;
+            double point_el = 0.0;
+            int point_has_az;
+            int point_has_el;
+
+            while (object_start > json && *object_start != '{') {
+                object_start--;
+            }
+
+            time_start = strchr(p, ':');
+            if (!time_start) {
+                break;
+            }
+            time_start++;
+            while (*time_start == ' ' || *time_start == '\t' || *time_start == '\r' || *time_start == '\n') {
+                time_start++;
+            }
+            if (*time_start != '"') {
+                p += 10;
+                continue;
+            }
+            time_start++;
+            snprintf(time_value, sizeof(time_value), "%.63s", time_start);
+            if (strchr(time_value, '"')) {
+                *strchr(time_value, '"') = '\0';
+            }
+
+            next_point = strstr(time_start, "\"time_utc\"");
+            object_end = next_point ? next_point : time_start + strlen(time_start);
+            object_len = (size_t)(object_end - object_start);
+            if (object_len >= sizeof(object_buf)) {
+                object_len = sizeof(object_buf) - 1;
+            }
+            memcpy(object_buf, object_start, object_len);
+            object_buf[object_len] = '\0';
+
+            point_has_az = json_double_value(object_buf, "az_deg", &point_az) ||
+                           json_double_value(object_buf, "azimuth_deg", &point_az) ||
+                           json_double_value(object_buf, "target_az_deg", &point_az);
+            point_has_el = json_double_value(object_buf, "el_deg", &point_el) ||
+                           json_double_value(object_buf, "elevation_deg", &point_el) ||
+                           json_double_value(object_buf, "target_el_deg", &point_el);
+
+            if (point_has_az && point_has_el && parse_iso_utc_epoch(time_value, &point_epoch)) {
+                long long dt = point_epoch - now_epoch;
+                abs_dt = dt < 0 ? -dt : dt;
+                if (abs_dt < best_abs_dt) {
+                    best_abs_dt = abs_dt;
+                    best_az = point_az;
+                    best_el = point_el;
+                    found = 1;
+                }
+            }
+
+            p = next_point ? next_point : time_start + strlen(time_start);
+        }
+
+        free(json);
+        json = NULL;
+
+        if (found && best_abs_dt <= 180) {
+            *az_out = best_az;
+            *el_out = best_el;
+            if (source && source_size > 0) {
+                snprintf(source, source_size, "%s:nearest_pass_point", path);
+            }
+            return 1;
+        }
+    }
+
+    return 0;
 }
 
 static void send_rotator_config(int fd, const struct app_config *cfg)
