@@ -58,6 +58,9 @@ The first repo milestone provides:
 
 For a practical UI walkthrough, see [docs/USER_WORKFLOW.md](docs/USER_WORKFLOW.md).
 
+<!-- ROTATOR_TCP_SMOKE_TEST_README_V2_4_12 -->
+For hardware-safe rotator protocol validation, see [docs/ROTATOR_TCP_SMOKE_TEST.md](docs/ROTATOR_TCP_SMOKE_TEST.md).
+
 ## Rotator Control Quick Start
 
 <!-- ROTATOR_WORKFLOW_DOCS_V2_4_7 -->
