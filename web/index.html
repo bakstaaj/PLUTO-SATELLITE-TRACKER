@@ -65,6 +65,37 @@
             </div>
           </div>
         </details>
+        <!-- ROTATOR_QUICK_START_MENU_V2_4_7 -->
+        <details>
+          <summary>Rotator Workflow</summary>
+          <div class="help-grid">
+            <div class="help-card">
+              <h3>Safe Test Order</h3>
+              <ol>
+                <li>Select the pass you want to follow from <code>Next Passes</code>.</li>
+                <li>Confirm the live rotator target changes and <code>Rotator source</code> shows <code>selected pass</code>.</li>
+                <li>Set rotator type, host, port, offsets, and elevation limits.</li>
+                <li>Click <code>Preview Command</code> to verify the exact command without moving hardware.</li>
+                <li>Use <code>Test Move</code> only after the preview looks correct.</li>
+                <li>Use <code>Start Rotator Tracking</code> to follow the selected pass.</li>
+                <li>Use <code>Stop Tracking</code>, <code>Stop</code>, or <code>Park</code> before changing hardware or settings.</li>
+              </ol>
+            </div>
+            <div class="help-card">
+              <h3>Supported Protocols</h3>
+              <ul>
+                <li><code>Simulation</code> is safest for workflow testing.</li>
+                <li><code>Hamlib rotctld TCP</code> sends <code>P &lt;az&gt; &lt;el&gt;</code>.</li>
+                <li><code>EasyComm II</code> sends <code>AZ... EL...</code>.</li>
+                <li><code>Yaesu GS-232</code> sends <code>Waaa eee</code>.</li>
+                <li><code>SATRAN MK2/MK3</code> is pending until the firmware protocol is confirmed.</li>
+              </ul>
+            </div>
+          </div>
+          <div class="help-note">
+            If multiple passes are active, selecting a pass publishes that pass plan and the rotator follows the selected pass.
+          </div>
+        </details>
         <details>
           <summary>Map And Focused Sample</summary>
           <div class="help-grid">

@@ -58,6 +58,31 @@ The first repo milestone provides:
 
 For a practical UI walkthrough, see [docs/USER_WORKFLOW.md](docs/USER_WORKFLOW.md).
 
+## Rotator Control Quick Start
+
+<!-- ROTATOR_WORKFLOW_DOCS_V2_4_7 -->
+
+The rotator workflow is designed to be safe by default. Use this order when
+testing a new antenna rotator or switching between active satellite passes:
+
+1. Open the web UI and confirm `Backend online`, `Time synced`, and a current pass list.
+2. Select the pass you want to follow from `Next Passes`. If multiple passes are active, the rotator follows the selected pass, not the first active pass in the list.
+3. In `Rotator Control`, confirm the live target azimuth/elevation changes and check the `Rotator source` label:
+   - `selected pass` means the selected pass Doppler plan is driving the target.
+   - `radio state` means the Doppler tracking state file is driving the target.
+   - `pass-list fallback` means the backend is using the nearest current point from `passes.json`.
+   - `manual/test` means a manual test move or simulation command last updated the state.
+4. Choose the rotator `Type`:
+   - `Simulation` is safe for UI and workflow testing.
+   - `Hamlib rotctld TCP` sends `P <az> <el>` commands to a Hamlib rotator daemon.
+   - `EasyComm II` sends `AZ... EL...` style commands.
+   - `Yaesu GS-232` sends `Waaa eee` style commands.
+   - `SATRAN MK2/MK3` remains intentionally pending until the exact firmware protocol is confirmed.
+5. Use `Preview Command` before moving hardware. This shows the exact protocol command and does not move the rotator.
+6. Use `Test Move` only after verifying type, host, port, offsets, elevation limits, and command preview.
+7. Use `Start Rotator Tracking` to let Pluto periodically send the selected pass target.
+8. Use `Stop Tracking`, `Stop`, or `Park` before changing hardware, cabling, offsets, or rotator type.
+
 ## Update Satellite Catalog
 
 From MSYS2 UCRT64 or another shell with Python 3:
