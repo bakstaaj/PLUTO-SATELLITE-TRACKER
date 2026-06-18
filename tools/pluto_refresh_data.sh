@@ -32,7 +32,10 @@ STATUS_FILE="${DATA_DIR}/refresh_status.json"
 STATUS_UPDATER="${TOOLS_DIR}/write_refresh_status.py"
 PASSES_JSON="${DATA_DIR}/passes.json"
 
+# MINIMUM_PASS_COUNT_REFRESH_V2_5_5
 QUICK_HOURS="${PLUTO_PASS_QUICK_HOURS:-1}"
+QUICK_MAX_HOURS="${PLUTO_PASS_QUICK_MAX_HOURS:-24}"
+QUICK_MIN_PASSES="${PLUTO_PASS_QUICK_MIN_PASSES:-10}"
 QUICK_LIMIT="${PLUTO_PASS_QUICK_LIMIT:-20}"
 QUICK_STEP_SECONDS="${PLUTO_PASS_QUICK_STEP_SECONDS:-120}"
 PASS_SAMPLE_SECONDS="${PLUTO_PASS_SAMPLE_SECONDS:-5}"
@@ -231,6 +234,8 @@ run_pass_generation() {
     --observer "${CONFIG_DIR}/observer.json" \
     --output "$OUTPUT" \
     --hours "$QUICK_HOURS" \
+    --max-hours "$QUICK_MAX_HOURS" \
+    --min-passes "$QUICK_MIN_PASSES" \
     --limit "$QUICK_LIMIT" \
     --step-seconds "$QUICK_STEP_SECONDS" \
     --pass-sample-seconds "$PASS_SAMPLE_SECONDS" \
@@ -277,6 +282,8 @@ start_pass_worker_background() {
     export PLUTO_TXN_DIR="$TXN_DIR"
     export PLUTO_REFRESH_START_UTC="$REFRESH_START_UTC"
     export PLUTO_PASS_QUICK_HOURS="$QUICK_HOURS"
+    export PLUTO_PASS_QUICK_MAX_HOURS="$QUICK_MAX_HOURS"
+    export PLUTO_PASS_QUICK_MIN_PASSES="$QUICK_MIN_PASSES"
     export PLUTO_PASS_QUICK_LIMIT="$QUICK_LIMIT"
     export PLUTO_PASS_QUICK_STEP_SECONDS="$QUICK_STEP_SECONDS"
     export PLUTO_PASS_SAMPLE_SECONDS="$PASS_SAMPLE_SECONDS"
@@ -290,7 +297,7 @@ case "$MODE" in
     ;;
   passes)
     clear_pass_locks
-    write_status "running" "passes" "Queued 1-hour pass scan on Pluto"
+    write_status "running" "passes" "Queued pass scan for at least ${QUICK_MIN_PASSES} passes on Pluto"
     start_pass_worker_background
     emit_existing_status_clean
     ;;
@@ -298,8 +305,8 @@ case "$MODE" in
     acquire_lock "/tmp/pluto_refresh_passes_worker.lock" "passes" "Pass refresh worker already in progress" "$QUICK_LOCK_MAX_AGE"
     QUICK_TMP="${TXN_DIR}/passes.quick.$$.json"
     rm -f "$QUICK_TMP" "${QUICK_TMP}.tmp" >/dev/null 2>&1 || true
-    write_status "running" "passes" "Generating 1-hour pass scan on Pluto"
-    run_pass_generation "$QUICK_TMP" || fail "1-hour pass scan failed"
+    write_status "running" "passes" "Generating pass scan for at least ${QUICK_MIN_PASSES} passes on Pluto"
+    run_pass_generation "$QUICK_TMP" || fail "minimum-pass pass scan failed"
     publish_generated_file "$QUICK_TMP" "$PASSES_JSON"
     write_generated_status passes "$PASSES_JSON" || fail "pass status update failed"
     rm -f "$QUICK_TMP" >/dev/null 2>&1 || true

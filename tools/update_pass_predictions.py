@@ -488,11 +488,15 @@ def load_json(path: str) -> Any:
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
-def build_predictions(args: argparse.Namespace) -> dict[str, Any]:
-    observer = load_json(args.observer)
-    catalog = load_json(args.catalog)
-    start = parse_utc(args.start_utc) if args.start_utc else utc_now()
-
+# MINIMUM_PASS_COUNT_REFRESH_V2_5_5
+def build_predictions_for_window(
+    catalog: dict[str, Any],
+    observer: dict[str, Any],
+    start: dt.datetime,
+    hours: float,
+    step_seconds: int,
+    pass_sample_seconds: int,
+) -> list[dict[str, Any]]:
     passes: list[dict[str, Any]] = []
     for satellite in catalog.get("satellites", []):
         passes.extend(
@@ -500,13 +504,42 @@ def build_predictions(args: argparse.Namespace) -> dict[str, Any]:
                 satellite,
                 observer,
                 start,
-                args.hours,
-                args.step_seconds,
-                args.pass_sample_seconds,
+                hours,
+                step_seconds,
+                pass_sample_seconds,
             )
         )
-
     passes.sort(key=lambda row: row["aos_utc"])
+    return passes
+
+
+def build_predictions(args: argparse.Namespace) -> dict[str, Any]:
+    observer = load_json(args.observer)
+    catalog = load_json(args.catalog)
+    start = parse_utc(args.start_utc) if args.start_utc else utc_now()
+
+    requested_hours = max(0.1, float(args.hours))
+    max_hours = max(requested_hours, float(args.max_hours))
+    min_passes = max(0, int(args.min_passes))
+    effective_hours = requested_hours
+    passes: list[dict[str, Any]] = []
+
+    while True:
+        passes = build_predictions_for_window(
+            catalog,
+            observer,
+            start,
+            effective_hours,
+            args.step_seconds,
+            args.pass_sample_seconds,
+        )
+        if min_passes <= 0 or len(passes) >= min_passes or effective_hours >= max_hours:
+            break
+        if effective_hours < 1.0:
+            effective_hours = min(1.0, max_hours)
+        else:
+            effective_hours = min(max_hours, effective_hours * 2.0)
+
     if args.limit > 0:
         passes = passes[: args.limit]
 
@@ -514,7 +547,10 @@ def build_predictions(args: argparse.Namespace) -> dict[str, Any]:
         "version": 1,
         "generated_utc": iso_utc(utc_now()),
         "start_utc": iso_utc(start),
-        "hours": args.hours,
+        "hours": effective_hours,
+        "requested_hours": requested_hours,
+        "max_hours": max_hours,
+        "min_passes": min_passes,
         "observer": observer,
         "metadata": {
             "minimum_elevation_deg": observer.get("minimum_elevation_deg", 10),
@@ -522,6 +558,10 @@ def build_predictions(args: argparse.Namespace) -> dict[str, Any]:
             "pass_count": len(passes),
             "step_seconds": args.step_seconds,
             "pass_sample_seconds": args.pass_sample_seconds,
+            "requested_hours": requested_hours,
+            "effective_hours": effective_hours,
+            "max_hours": max_hours,
+            "min_passes": min_passes,
         },
         "passes": passes,
     }
@@ -533,6 +573,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--observer", default="config/observer.example.json")
     parser.add_argument("--output", default="data/passes.json")
     parser.add_argument("--hours", type=float, default=24.0)
+    parser.add_argument("--max-hours", type=float, default=24.0)
+    parser.add_argument("--min-passes", type=int, default=0)
     parser.add_argument("--limit", type=int, default=80)
     parser.add_argument("--step-seconds", type=int, default=30)
     parser.add_argument("--pass-sample-seconds", type=int, default=5)
@@ -570,7 +612,11 @@ def main() -> int:
     meta = predictions["metadata"]
     print(f"wrote {output}")
     print(f"passes: {meta['pass_count']}")
-    print(f"window: {predictions['start_utc']} + {predictions['hours']}h")
+    print(
+        f"window: {predictions['start_utc']} + {predictions['hours']}h "
+        f"(requested {predictions.get('requested_hours', predictions['hours'])}h, "
+        f"min_passes {predictions.get('min_passes', 0)})"
+    )
     return 0
 
 
