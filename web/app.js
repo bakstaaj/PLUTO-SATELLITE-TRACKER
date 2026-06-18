@@ -978,6 +978,284 @@
       };
     }
 
+    /* SPECTRUM_WATERFALL_UI_V2_5_0 */
+    let spectrumWaterfallTimerV250 = 0;
+    let spectrumWaterfallRowsV250 = [];
+    let spectrumWaterfallFrameV250 = 0;
+
+    function spectrumWaterfallIsActivePassV250(pass) {
+      return !!(pass && passTimingState(pass) === "active");
+    }
+
+    function spectrumWaterfallStatusV250(message) {
+      const status = document.getElementById("analogAudioStatus") || document.getElementById("status");
+      if (status && message) {
+        status.textContent = message;
+      }
+    }
+
+    function createSpectrumWaterfallModalV250() {
+      if (document.getElementById("spectrumWaterfallModal")) return;
+
+      const modal = document.createElement("div");
+      modal.id = "spectrumWaterfallModal";
+      modal.className = "spectrum-waterfall-backdrop";
+      modal.hidden = true;
+      modal.innerHTML = `
+        <div class="spectrum-waterfall-modal" role="dialog" aria-modal="true" aria-labelledby="spectrumWaterfallTitle">
+          <div class="spectrum-waterfall-header">
+            <div>
+              <h2 id="spectrumWaterfallTitle">Spectrum / Waterfall</h2>
+              <div id="spectrumWaterfallSubtitle" class="spectrum-waterfall-subtitle">Select an active pass.</div>
+            </div>
+            <button id="spectrumWaterfallCloseButton" type="button" class="secondary">Close</button>
+          </div>
+          <div class="spectrum-waterfall-body">
+            <div class="spectrum-waterfall-panel">
+              <div class="spectrum-waterfall-panel-title">Spectrum</div>
+              <canvas id="spectrumCanvasV250" width="960" height="260"></canvas>
+            </div>
+            <div class="spectrum-waterfall-panel">
+              <div class="spectrum-waterfall-panel-title">Waterfall</div>
+              <canvas id="waterfallCanvasV250" width="960" height="380"></canvas>
+            </div>
+            <div id="spectrumWaterfallStatus" class="spectrum-waterfall-status">
+              UI renderer ready. Live backend FFT/sample stream will be connected in the next implementation step.
+            </div>
+          </div>
+        </div>
+      `;
+
+      modal.addEventListener("click", (event) => {
+        if (event.target === modal) {
+          closeSpectrumWaterfallModalV250();
+        }
+      });
+
+      document.body.appendChild(modal);
+      document.getElementById("spectrumWaterfallCloseButton")?.addEventListener("click", closeSpectrumWaterfallModalV250);
+    }
+
+    function closeSpectrumWaterfallModalV250() {
+      const modal = document.getElementById("spectrumWaterfallModal");
+      if (modal) {
+        modal.hidden = true;
+        modal.classList.remove("open");
+      }
+      if (spectrumWaterfallTimerV250) {
+        window.clearInterval(spectrumWaterfallTimerV250);
+        spectrumWaterfallTimerV250 = 0;
+      }
+      document.body.classList.remove("spectrum-waterfall-modal-open");
+    }
+
+    function spectrumWaterfallBinsV250(pass) {
+      const bins = 160;
+      const data = [];
+      const point = liveLookPointForPass(
+        pass,
+        trackedPointForPass(pass, lastTrackState),
+        focusedMapPoint(pass, lastTrackState)
+      );
+      const elevation = Number((point && point.elevation_deg) || pass.max_elevation_deg || 20);
+      const peakCenter = 0.5 + 0.10 * Math.sin(spectrumWaterfallFrameV250 / 9);
+      const secondaryCenter = 0.5 - 0.20 * Math.cos(spectrumWaterfallFrameV250 / 13);
+      const baseNoise = -116 + Math.min(22, Math.max(0, elevation) * 0.22);
+
+      for (let i = 0; i < bins; i += 1) {
+        const x = bins > 1 ? i / (bins - 1) : 0;
+        const main = 54 * Math.exp(-Math.pow((x - peakCenter) / 0.055, 2));
+        const secondary = 18 * Math.exp(-Math.pow((x - secondaryCenter) / 0.035, 2));
+        const ripple = 4 * Math.sin((i * 0.47) + (spectrumWaterfallFrameV250 * 0.31));
+        const noise = 3 * Math.sin((i * 1.73) + (spectrumWaterfallFrameV250 * 0.19));
+        data.push(Math.max(-125, Math.min(-42, baseNoise + main + secondary + ripple + noise)));
+      }
+
+      return data;
+    }
+
+    function drawSpectrumV250(canvas, bins) {
+      const ctx = canvas && canvas.getContext ? canvas.getContext("2d") : null;
+      if (!ctx || !bins.length) return;
+
+      const w = canvas.width;
+      const h = canvas.height;
+      const padL = 52;
+      const padR = 18;
+      const padT = 20;
+      const padB = 30;
+      const plotW = w - padL - padR;
+      const plotH = h - padT - padB;
+      const dbMin = -125;
+      const dbMax = -40;
+
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = "#07111c";
+      ctx.fillRect(0, 0, w, h);
+
+      ctx.strokeStyle = "rgba(148, 163, 184, 0.24)";
+      ctx.lineWidth = 1;
+      ctx.font = "12px system-ui, sans-serif";
+      ctx.fillStyle = "#9db1c3";
+
+      for (let db = -120; db <= -40; db += 20) {
+        const y = padT + ((dbMax - db) / (dbMax - dbMin)) * plotH;
+        ctx.beginPath();
+        ctx.moveTo(padL, y);
+        ctx.lineTo(w - padR, y);
+        ctx.stroke();
+        ctx.fillText(`${db} dB`, 8, y + 4);
+      }
+
+      for (let tick = 0; tick <= 4; tick += 1) {
+        const x = padL + (plotW * tick / 4);
+        ctx.beginPath();
+        ctx.moveTo(x, padT);
+        ctx.lineTo(x, padT + plotH);
+        ctx.stroke();
+      }
+
+      const centerX = padL + plotW / 2;
+      ctx.strokeStyle = "rgba(56, 189, 248, 0.55)";
+      ctx.setLineDash([6, 5]);
+      ctx.beginPath();
+      ctx.moveTo(centerX, padT);
+      ctx.lineTo(centerX, padT + plotH);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.strokeStyle = "#38bdf8";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      bins.forEach((db, index) => {
+        const x = padL + (index / (bins.length - 1)) * plotW;
+        const y = padT + ((dbMax - db) / (dbMax - dbMin)) * plotH;
+        if (index === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+
+      ctx.fillStyle = "#ecf4fb";
+      ctx.fillText("Relative frequency", padL + plotW / 2 - 48, h - 8);
+      ctx.fillStyle = "#9db1c3";
+      ctx.fillText("Browser preview renderer", w - 176, 16);
+    }
+
+    function waterfallColorV250(db) {
+      const normalized = Math.max(0, Math.min(1, (db + 125) / 85));
+      const r = Math.round(20 + normalized * 235);
+      const g = Math.round(45 + Math.max(0, normalized - 0.20) * 210);
+      const b = Math.round(80 + Math.max(0, 0.75 - normalized) * 160);
+      return `rgb(${r},${g},${b})`;
+    }
+
+    function drawWaterfallV250(canvas, rows) {
+      const ctx = canvas && canvas.getContext ? canvas.getContext("2d") : null;
+      if (!ctx || !rows.length) return;
+
+      const w = canvas.width;
+      const h = canvas.height;
+      const bins = rows[0].length;
+      const rowH = Math.max(1, Math.floor(h / Math.max(1, rows.length)));
+      const colW = w / bins;
+
+      ctx.fillStyle = "#07111c";
+      ctx.fillRect(0, 0, w, h);
+
+      rows.forEach((row, rowIndex) => {
+        const y = rowIndex * rowH;
+        row.forEach((db, index) => {
+          ctx.fillStyle = waterfallColorV250(db);
+          ctx.fillRect(Math.floor(index * colW), y, Math.ceil(colW), rowH);
+        });
+      });
+
+      ctx.strokeStyle = "rgba(255,255,255,0.28)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(w / 2, 0);
+      ctx.lineTo(w / 2, h);
+      ctx.stroke();
+    }
+
+    function renderSpectrumWaterfallV250() {
+      if (!spectrumWaterfallIsActivePassV250(currentSelectedPass)) {
+        closeSpectrumWaterfallModalV250();
+        spectrumWaterfallStatusV250("Spectrum/waterfall is available only while the selected pass is active.");
+        return;
+      }
+
+      const title = currentSelectedPass.name || "Active pass";
+      const point = liveLookPointForPass(
+        currentSelectedPass,
+        trackedPointForPass(currentSelectedPass, lastTrackState),
+        focusedMapPoint(currentSelectedPass, lastTrackState)
+      );
+      const subtitle = document.getElementById("spectrumWaterfallSubtitle");
+      const status = document.getElementById("spectrumWaterfallStatus");
+      const spectrumCanvas = document.getElementById("spectrumCanvasV250");
+      const waterfallCanvas = document.getElementById("waterfallCanvasV250");
+
+      if (subtitle) {
+        const az = point && Number.isFinite(Number(point.azimuth_deg)) ? Number(point.azimuth_deg).toFixed(1) : "--";
+        const el = point && Number.isFinite(Number(point.elevation_deg)) ? Number(point.elevation_deg).toFixed(1) : "--";
+        subtitle.textContent = `${title} · active · Az ${az}° / El ${el}°`;
+      }
+
+      if (status) {
+        status.textContent = "Spectrum/waterfall UI foundation active. Display is a browser-rendered preview until backend FFT/sample data is connected.";
+      }
+
+      spectrumWaterfallFrameV250 += 1;
+      const bins = spectrumWaterfallBinsV250(currentSelectedPass);
+      spectrumWaterfallRowsV250.unshift(bins);
+      const maxRows = 96;
+      if (spectrumWaterfallRowsV250.length > maxRows) {
+        spectrumWaterfallRowsV250.length = maxRows;
+      }
+
+      drawSpectrumV250(spectrumCanvas, bins);
+      drawWaterfallV250(waterfallCanvas, spectrumWaterfallRowsV250);
+    }
+
+    function openSpectrumWaterfallModalV250() {
+      if (!spectrumWaterfallIsActivePassV250(currentSelectedPass)) {
+        spectrumWaterfallStatusV250("Spectrum/waterfall is available only while the selected pass is active.");
+        return;
+      }
+
+      createSpectrumWaterfallModalV250();
+      const modal = document.getElementById("spectrumWaterfallModal");
+      if (!modal) return;
+
+      spectrumWaterfallRowsV250 = [];
+      modal.hidden = false;
+      modal.classList.add("open");
+      document.body.classList.add("spectrum-waterfall-modal-open");
+      renderSpectrumWaterfallV250();
+
+      if (spectrumWaterfallTimerV250) {
+        window.clearInterval(spectrumWaterfallTimerV250);
+      }
+      spectrumWaterfallTimerV250 = window.setInterval(renderSpectrumWaterfallV250, 850);
+    }
+
+    function bindSpectrumWaterfallButtonV250() {
+      const button = document.getElementById("openSpectrumWaterfallButton");
+      if (!button) return;
+
+      const active = spectrumWaterfallIsActivePassV250(currentSelectedPass);
+      button.disabled = !active;
+      button.title = active
+        ? "Open spectrum and waterfall display for the active selected pass."
+        : "Spectrum/waterfall is available only while the selected pass is active.";
+
+      button.onclick = (event) => {
+        event.preventDefault();
+        openSpectrumWaterfallModalV250();
+      };
+    }
+
     function renderMapPanel(pass, config) {
       const node = document.getElementById("mapPanel");
       if (!config) {
@@ -1064,6 +1342,7 @@
               <div class="listen-panel">
                 <button id="analogAudioToggleButton" type="button">Listen</button>
                 <button id="openRotatorFromListenButton" class="rotator-open-button" type="button">Rotator</button>
+                <button id="openSpectrumWaterfallButton" class="spectrum-open-button" type="button" disabled>Spectrum</button>
                 <span id="analogAudioStatus">Select a pass to listen.</span>
               </div>
             </div>
@@ -1082,6 +1361,7 @@
       renderLeafletMap(pass, config, focusPoint, activeTrackPoint);
       bindAnalogAudio(pass, node);
       bindRotatorModalOpenButtonsV248();
+      bindSpectrumWaterfallButtonV250();
       setMapLocationPickEnabled(mapLocationPickEnabled);
     }
 
@@ -2672,6 +2952,7 @@ const tbody = document.getElementById("satellites");
       if (event.key === "Escape") {
         closePassDetailModal();
         closeRotatorModalV248();
+        closeSpectrumWaterfallModalV250();
         closeDrawer();
       }
     });

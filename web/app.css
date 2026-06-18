@@ -1500,3 +1500,118 @@
   color: #111827 !important;
   box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.22);
 }
+
+/* SPECTRUM_WATERFALL_UI_V2_5_0 */
+.spectrum-open-button {
+  min-width: 78px;
+}
+
+.spectrum-waterfall-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2600;
+  background: rgba(0, 0, 0, 0.68);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+}
+
+.spectrum-waterfall-backdrop[hidden] {
+  display: none;
+}
+
+.spectrum-waterfall-modal {
+  width: min(1100px, 96vw);
+  max-height: min(880px, 94vh);
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+
+.spectrum-waterfall-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: #0c1824;
+  border-bottom: 1px solid var(--line);
+}
+
+.spectrum-waterfall-header h2 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+
+.spectrum-waterfall-subtitle,
+.spectrum-waterfall-status {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.spectrum-waterfall-body {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.spectrum-waterfall-panel {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #07111c;
+  overflow: hidden;
+}
+
+.spectrum-waterfall-panel-title {
+  padding: 8px 10px;
+  color: var(--ink);
+  background: #0f1d2a;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.spectrum-waterfall-panel canvas {
+  display: block;
+  width: 100%;
+  background: #07111c;
+}
+
+#spectrumCanvasV250 {
+  aspect-ratio: 48 / 13;
+}
+
+#waterfallCanvasV250 {
+  aspect-ratio: 48 / 19;
+}
+
+.spectrum-waterfall-status {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel2);
+}
+
+body.spectrum-waterfall-modal-open {
+  overflow: hidden;
+}
+
+@media (max-width: 760px) {
+  .spectrum-waterfall-modal {
+    width: 98vw;
+  }
+
+  .spectrum-waterfall-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
