@@ -1171,33 +1171,154 @@
       return `rgb(${r},${g},${b})`;
     }
 
+        /* SMOOTH_WATERFALL_RENDER_V2_5_6 */
+    function waterfallClampV256(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function waterfallLerpV256(a, b, t) {
+      return a + (b - a) * t;
+    }
+
+    function waterfallPaletteV256(db) {
+      const floorDb = -120;
+      const ceilingDb = -35;
+      const t = waterfallClampV256((Number(db || floorDb) - floorDb) / (ceilingDb - floorDb), 0, 1);
+      const stops = [
+        [0.00, 4, 8, 20],
+        [0.18, 12, 32, 68],
+        [0.38, 18, 93, 132],
+        [0.58, 42, 172, 161],
+        [0.76, 212, 194, 82],
+        [0.91, 239, 122, 54],
+        [1.00, 255, 245, 190]
+      ];
+
+      for (let i = 1; i < stops.length; i += 1) {
+        if (t <= stops[i][0]) {
+          const prev = stops[i - 1];
+          const next = stops[i];
+          const local = (t - prev[0]) / Math.max(0.0001, next[0] - prev[0]);
+          return [
+            Math.round(waterfallLerpV256(prev[1], next[1], local)),
+            Math.round(waterfallLerpV256(prev[2], next[2], local)),
+            Math.round(waterfallLerpV256(prev[3], next[3], local))
+          ];
+        }
+      }
+      return [255, 245, 190];
+    }
+
+    function waterfallSampleRowV256(row, x, width) {
+      if (!Array.isArray(row) || !row.length) return -120;
+      if (row.length === 1 || width <= 1) return Number(row[0] || -120);
+
+      const pos = (x / Math.max(1, width - 1)) * (row.length - 1);
+      const i0 = Math.floor(pos);
+      const i1 = Math.min(row.length - 1, i0 + 1);
+      const frac = pos - i0;
+      const a = Number(row[i0]);
+      const b = Number(row[i1]);
+      const av = Number.isFinite(a) ? a : -120;
+      const bv = Number.isFinite(b) ? b : av;
+      return waterfallLerpV256(av, bv, frac);
+    }
+
     function drawWaterfallV250(canvas, rows) {
-      const ctx = canvas && canvas.getContext ? canvas.getContext("2d") : null;
-      if (!ctx || !rows.length) return;
+      const ctx = canvas.getContext("2d");
+      const rect = canvas.getBoundingClientRect();
+      const scale = window.devicePixelRatio || 1;
+      const w = Math.max(320, Math.floor(rect.width * scale));
+      const h = Math.max(180, Math.floor(rect.height * scale));
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+      }
 
-      const w = canvas.width;
-      const h = canvas.height;
-      const bins = rows[0].length;
-      const rowH = Math.max(1, Math.floor(h / Math.max(1, rows.length)));
-      const colW = w / bins;
+      ctx.clearRect(0, 0, w, h);
+      const padL = 46 * scale;
+      const padR = 16 * scale;
+      const padT = 16 * scale;
+      const padB = 24 * scale;
+      const plotW = Math.max(1, Math.floor(w - padL - padR));
+      const plotH = Math.max(1, Math.floor(h - padT - padB));
 
-      ctx.fillStyle = "#07111c";
+      const gradient = ctx.createLinearGradient(0, 0, 0, h);
+      gradient.addColorStop(0, "#06111f");
+      gradient.addColorStop(1, "#020617");
+      ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, w, h);
 
-      rows.forEach((row, rowIndex) => {
-        const y = rowIndex * rowH;
-        row.forEach((db, index) => {
-          ctx.fillStyle = waterfallColorV250(db);
-          ctx.fillRect(Math.floor(index * colW), y, Math.ceil(colW), rowH);
-        });
-      });
+      ctx.strokeStyle = "rgba(148, 163, 184, 0.20)";
+      ctx.lineWidth = 1 * scale;
+      for (let i = 0; i <= 4; i += 1) {
+        const x = padL + (plotW * i) / 4;
+        ctx.beginPath();
+        ctx.moveTo(x, padT);
+        ctx.lineTo(x, padT + plotH);
+        ctx.stroke();
+      }
 
-      ctx.strokeStyle = "rgba(255,255,255,0.28)";
-      ctx.lineWidth = 1;
+      const validRows = (rows || []).filter((row) => Array.isArray(row) && row.length);
+      if (!validRows.length) {
+        ctx.fillStyle = "#94a3b8";
+        ctx.font = `${13 * scale}px system-ui, sans-serif`;
+        ctx.fillText("Waiting for spectrum rows...", padL, padT + 28 * scale);
+      } else {
+        const historyRows = validRows.slice(0, Math.min(validRows.length, 220));
+        const srcW = Math.min(480, Math.max(160, plotW));
+        const srcH = Math.max(2, historyRows.length);
+        const rowCanvas = document.createElement("canvas");
+        rowCanvas.width = srcW;
+        rowCanvas.height = srcH;
+        const rowCtx = rowCanvas.getContext("2d");
+        const image = rowCtx.createImageData(srcW, srcH);
+
+        for (let y = 0; y < srcH; y += 1) {
+          const row = historyRows[y];
+          for (let x = 0; x < srcW; x += 1) {
+            const db = waterfallSampleRowV256(row, x, srcW);
+            const [r, g, b] = waterfallPaletteV256(db);
+            const idx = (y * srcW + x) * 4;
+            image.data[idx] = r;
+            image.data[idx + 1] = g;
+            image.data[idx + 2] = b;
+            image.data[idx + 3] = 255;
+          }
+        }
+
+        rowCtx.putImageData(image, 0, 0);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(rowCanvas, 0, 0, srcW, srcH, padL, padT, plotW, plotH);
+
+        const topFade = ctx.createLinearGradient(0, padT, 0, padT + plotH);
+        topFade.addColorStop(0.00, "rgba(255,255,255,0.10)");
+        topFade.addColorStop(0.06, "rgba(255,255,255,0.00)");
+        topFade.addColorStop(1.00, "rgba(0,0,0,0.10)");
+        ctx.fillStyle = topFade;
+        ctx.fillRect(padL, padT, plotW, plotH);
+      }
+
+      const centerX = padL + plotW / 2;
+      ctx.setLineDash([5 * scale, 5 * scale]);
+      ctx.strokeStyle = "rgba(224, 242, 254, 0.78)";
+      ctx.lineWidth = 1 * scale;
       ctx.beginPath();
-      ctx.moveTo(w / 2, 0);
-      ctx.lineTo(w / 2, h);
+      ctx.moveTo(centerX, padT);
+      ctx.lineTo(centerX, padT + plotH);
       ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.strokeStyle = "rgba(226, 232, 240, 0.34)";
+      ctx.strokeRect(padL, padT, plotW, plotH);
+
+      ctx.fillStyle = "#cbd5e1";
+      ctx.font = `${11 * scale}px system-ui, sans-serif`;
+      ctx.fillText("-1.2 MHz", padL, h - 7 * scale);
+      const centerText = "Center";
+      ctx.fillText(centerText, centerX - ctx.measureText(centerText).width / 2, h - 7 * scale);
+      ctx.fillText("+1.2 MHz", w - padR - 56 * scale, h - 7 * scale);
     }
 
     /* SPECTRUM_SELECTED_FREQ_PARAM_V2_5_3 */
