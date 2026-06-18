@@ -1624,3 +1624,8 @@ body.spectrum-waterfall-modal-open {
 .listen-panel {
   flex-wrap: wrap;
 }
+
+/* REAL_SPECTRUM_SNAPSHOT_V2_5_2 */
+.spectrum-waterfall-status {
+  white-space: normal;
+}

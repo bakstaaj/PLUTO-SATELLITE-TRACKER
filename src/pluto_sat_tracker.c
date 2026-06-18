@@ -94,6 +94,7 @@ static void json_escape(char *dst, size_t dst_size, const char *src);
 static int json_string_value(const char *json, const char *key, char *out, size_t out_size);
 static int json_double_value(const char *json, const char *key, double *out);
 static int send_wav_stream(int fd, const struct app_config *cfg, const char *query);
+static void send_radio_spectrum_snapshot_v252(int fd, const struct app_config *cfg, const char *query);
 static int apply_radio_track_step(
     const struct app_config *cfg,
     const char *state,
@@ -5301,6 +5302,320 @@ static void send_rotator_track_step(int fd, const struct app_config *cfg)
     send_text(fd, ok ? 200 : 409, ok ? "OK" : "Conflict", "application/json; charset=utf-8", body);
 }
 
+
+/* REAL_SPECTRUM_SNAPSHOT_V2_5_2 */
+#define SPECTRUM_V252_SAMPLE_RATE_HZ 2400000
+#define SPECTRUM_V252_CAPTURE_FRAMES 2048
+#define SPECTRUM_V252_DFT_SAMPLES 1024
+#define SPECTRUM_V252_DEFAULT_BINS 160
+#define SPECTRUM_V252_MAX_BINS 192
+#define SPECTRUM_V252_PI 3.14159265358979323846264338327950288
+
+static int spectrum_parse_ll_v252(const char *text, long long *out)
+{
+    char *end = NULL;
+    long long value;
+    if (!text || !*text || !out) return 0;
+    errno = 0;
+    value = strtoll(text, &end, 10);
+    if (errno != 0 || !end || *end != '\0') return 0;
+    *out = value;
+    return 1;
+}
+
+static int spectrum_parse_int_v252(const char *text, int *out)
+{
+    char *end = NULL;
+    long value;
+    if (!text || !*text || !out) return 0;
+    errno = 0;
+    value = strtol(text, &end, 10);
+    if (errno != 0 || !end || *end != '\0') return 0;
+    *out = (int)value;
+    return 1;
+}
+
+static int spectrum_cmd_ok_v252(const char *cmd)
+{
+    int rc;
+    if (!cmd || !*cmd) return 0;
+    rc = system(cmd);
+    return !(rc == -1 || !WIFEXITED(rc) || WEXITSTATUS(rc) != 0);
+}
+
+static int spectrum_configure_rx_v252(long long center_hz, int stream_index, char *error, size_t error_size)
+{
+    char cmd[512];
+
+    (void)stream_index;
+
+    snprintf(cmd, sizeof(cmd), "/usr/bin/iio_attr -u local: -c ad9361-phy altvoltage0 frequency %lld >/dev/null 2>&1", center_hz);
+    if (!spectrum_cmd_ok_v252(cmd)) {
+        snprintf(error, error_size, "could not set RX LO to %lld Hz", center_hz);
+        return 0;
+    }
+
+    snprintf(cmd, sizeof(cmd), "/usr/bin/iio_attr -u local: -c ad9361-phy voltage0 sampling_frequency %d >/dev/null 2>&1", SPECTRUM_V252_SAMPLE_RATE_HZ);
+    (void)spectrum_cmd_ok_v252(cmd);
+    snprintf(cmd, sizeof(cmd), "/usr/bin/iio_attr -u local: -c ad9361-phy voltage1 sampling_frequency %d >/dev/null 2>&1", SPECTRUM_V252_SAMPLE_RATE_HZ);
+    (void)spectrum_cmd_ok_v252(cmd);
+    snprintf(cmd, sizeof(cmd), "/usr/bin/iio_attr -u local: -c ad9361-phy voltage0 rf_bandwidth %d >/dev/null 2>&1", SPECTRUM_V252_SAMPLE_RATE_HZ);
+    (void)spectrum_cmd_ok_v252(cmd);
+    snprintf(cmd, sizeof(cmd), "/usr/bin/iio_attr -u local: -c ad9361-phy voltage1 rf_bandwidth %d >/dev/null 2>&1", SPECTRUM_V252_SAMPLE_RATE_HZ);
+    (void)spectrum_cmd_ok_v252(cmd);
+
+    return 1;
+}
+
+static int spectrum_frequency_from_state_v252(const struct app_config *cfg, long long *freq_hz, char *source, size_t source_size)
+{
+    char path[PATH_BUF_SIZE];
+    char *json = NULL;
+    size_t len = 0;
+
+    (void)cfg;
+
+    runtime_file_path(path, sizeof(path), "radio_track_state.json");
+    if (read_file_to_string(path, &json, &len) == 0) {
+        (void)len;
+        if (json_long_long_after(json, "rx_hz", freq_hz) ||
+            json_long_long_after(json, "downlink_hz", freq_hz) ||
+            json_long_long_after(json, "current_rx_lo_hz", freq_hz)) {
+            if (source && source_size > 0) snprintf(source, source_size, "radio_track_state.json");
+            free(json);
+            return 1;
+        }
+        free(json);
+        json = NULL;
+    }
+
+    runtime_file_path(path, sizeof(path), "radio_target.json");
+    if (read_file_to_string(path, &json, &len) == 0) {
+        (void)len;
+        if (json_long_long_after(json, "downlink_hz", freq_hz)) {
+            if (source && source_size > 0) snprintf(source, source_size, "radio_target.json");
+            free(json);
+            return 1;
+        }
+        free(json);
+    }
+
+    return 0;
+}
+
+static size_t spectrum_capture_iq_v252(double *i_out, double *q_out, size_t max_samples, int stream_index, char *error, size_t error_size)
+{
+    unsigned char raw[SPECTRUM_V252_CAPTURE_FRAMES * 8];
+    FILE *pipef;
+    size_t got;
+    size_t stride;
+    size_t frames;
+    size_t n;
+    const char *cmd = "/usr/bin/iio_readdev -u local: -b 2048 -s 2048 cf-ad9361-lpc 2>/dev/null";
+
+    if (!i_out || !q_out || max_samples == 0) {
+        snprintf(error, error_size, "invalid capture buffer");
+        return 0;
+    }
+
+    pipef = popen(cmd, "r");
+    if (!pipef) {
+        snprintf(error, error_size, "could not start iio_readdev");
+        return 0;
+    }
+
+    got = fread(raw, 1, sizeof(raw), pipef);
+    (void)pclose(pipef);
+
+    if (got < 4) {
+        snprintf(error, error_size, "iio_readdev returned no IQ samples");
+        return 0;
+    }
+
+    stride = (got >= 8 && (got % 8) == 0) ? 8u : 4u;
+    frames = got / stride;
+    if (frames > max_samples) frames = max_samples;
+
+    for (n = 0; n < frames; n++) {
+        size_t off = n * stride;
+        int16_t ri;
+        int16_t rq;
+        if (stride == 8 && stream_index > 0) off += 4;
+        if (off + 3 >= got) break;
+        ri = (int16_t)((uint16_t)raw[off] | ((uint16_t)raw[off + 1] << 8));
+        rq = (int16_t)((uint16_t)raw[off + 2] | ((uint16_t)raw[off + 3] << 8));
+        i_out[n] = (double)ri;
+        q_out[n] = (double)rq;
+    }
+
+    return n;
+}
+
+static void spectrum_compute_bins_v252(const double *i_in, const double *q_in, size_t sample_count, int bin_count, double *db_out)
+{
+    double mean_i = 0.0;
+    double mean_q = 0.0;
+    size_t n;
+    int b;
+
+    if (!i_in || !q_in || !db_out || sample_count == 0 || bin_count <= 0) return;
+
+    for (n = 0; n < sample_count; n++) {
+        mean_i += i_in[n];
+        mean_q += q_in[n];
+    }
+    mean_i /= (double)sample_count;
+    mean_q /= (double)sample_count;
+
+    for (b = 0; b < bin_count; b++) {
+        double norm = (bin_count > 1) ? ((double)b / (double)(bin_count - 1) - 0.5) : 0.0;
+        double step = -2.0 * SPECTRUM_V252_PI * norm;
+        double cw = cos(step);
+        double sw = sin(step);
+        double c = 1.0;
+        double s = 0.0;
+        double re = 0.0;
+        double im = 0.0;
+        double win_sum = 0.0;
+
+        for (n = 0; n < sample_count; n++) {
+            double wi = (sample_count > 1) ? (0.5 - 0.5 * cos((2.0 * SPECTRUM_V252_PI * (double)n) / (double)(sample_count - 1))) : 1.0;
+            double ii = (i_in[n] - mean_i) * wi;
+            double qq = (q_in[n] - mean_q) * wi;
+            double next_c;
+
+            re += ii * c + qq * s;
+            im += qq * c - ii * s;
+            win_sum += wi;
+
+            next_c = c * cw - s * sw;
+            s = s * cw + c * sw;
+            c = next_c;
+        }
+
+        {
+            double mag = sqrt((re * re) + (im * im));
+            double scaled = mag / ((win_sum > 0.0 ? win_sum : (double)sample_count) * 2048.0);
+            double db = 20.0 * log10(scaled + 1.0e-12);
+            if (db < -140.0) db = -140.0;
+            if (db > 20.0) db = 20.0;
+            db_out[b] = db;
+        }
+    }
+}
+
+static void send_radio_spectrum_snapshot_v252(int fd, const struct app_config *cfg, const char *query)
+{
+    long long center_hz = 0;
+    char freq_text[64] = "";
+    char bins_text[32] = "";
+    char stream_text[32] = "";
+    char source[128] = "query";
+    char error[256] = "";
+    int bin_count = SPECTRUM_V252_DEFAULT_BINS;
+    int stream_index = 0;
+    double i_samples[SPECTRUM_V252_DFT_SAMPLES];
+    double q_samples[SPECTRUM_V252_DFT_SAMPLES];
+    double db_bins[SPECTRUM_V252_MAX_BINS];
+    size_t sample_count;
+    char *body;
+    size_t body_size = 65536;
+    size_t used = 0;
+    int b;
+
+    query_param(query, "freq_hz", freq_text, sizeof(freq_text));
+    query_param(query, "bins", bins_text, sizeof(bins_text));
+    query_param(query, "stream_index", stream_text, sizeof(stream_text));
+
+    if (bins_text[0]) {
+        if (!spectrum_parse_int_v252(bins_text, &bin_count)) bin_count = SPECTRUM_V252_DEFAULT_BINS;
+        if (bin_count < 32) bin_count = 32;
+        if (bin_count > SPECTRUM_V252_MAX_BINS) bin_count = SPECTRUM_V252_MAX_BINS;
+    }
+
+    if (stream_text[0]) {
+        if (!spectrum_parse_int_v252(stream_text, &stream_index)) stream_index = 0;
+        if (stream_index < 0 || stream_index > 1) stream_index = 0;
+    }
+
+    if (freq_text[0]) {
+        if (!spectrum_parse_ll_v252(freq_text, &center_hz)) {
+            send_text(fd, 400, "Bad Request", "application/json; charset=utf-8",
+                      "{\"ok\":false,\"error\":\"freq_hz must be an integer Hz value\"}\n");
+            return;
+        }
+        snprintf(source, sizeof(source), "query");
+    } else if (!spectrum_frequency_from_state_v252(cfg, &center_hz, source, sizeof(source))) {
+        send_text(fd, 409, "Conflict", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"no active radio frequency is available; pass freq_hz for a smoke test\"}\n");
+        return;
+    }
+
+    if (center_hz < PLUTO_MIN_HZ || center_hz > PLUTO_MAX_HZ) {
+        send_text(fd, 400, "Bad Request", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"center frequency is outside Pluto range\"}\n");
+        return;
+    }
+
+    pthread_mutex_lock(&g_radio_lock);
+    if (!spectrum_configure_rx_v252(center_hz, stream_index, error, sizeof(error))) {
+        pthread_mutex_unlock(&g_radio_lock);
+        char body_error[512];
+        char error_json[384];
+        json_escape(error_json, sizeof(error_json), error);
+        snprintf(body_error, sizeof(body_error), "{\"ok\":false,\"error\":\"%s\"}\n", error_json);
+        send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8", body_error);
+        return;
+    }
+
+    sample_count = spectrum_capture_iq_v252(i_samples, q_samples, SPECTRUM_V252_DFT_SAMPLES, stream_index, error, sizeof(error));
+    pthread_mutex_unlock(&g_radio_lock);
+
+    if (sample_count < 64) {
+        char body_error[512];
+        char error_json[384];
+        json_escape(error_json, sizeof(error_json), error);
+        snprintf(body_error, sizeof(body_error), "{\"ok\":false,\"error\":\"%s\"}\n", error_json);
+        send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8", body_error);
+        return;
+    }
+
+    spectrum_compute_bins_v252(i_samples, q_samples, sample_count, bin_count, db_bins);
+
+    body = (char *)malloc(body_size);
+    if (!body) {
+        send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"out of memory\"}\n");
+        return;
+    }
+
+    used += (size_t)snprintf(body + used, body_size - used,
+        "{\"ok\":true,\"state\":\"ok\",\"source\":\"%s\",\"center_hz\":%lld,"
+        "\"sample_rate_hz\":%d,\"sample_count\":%lu,\"stream_index\":%d,"
+        "\"bin_count\":%d,\"bins\":[",
+        source,
+        center_hz,
+        SPECTRUM_V252_SAMPLE_RATE_HZ,
+        (unsigned long)sample_count,
+        stream_index,
+        bin_count);
+
+    for (b = 0; b < bin_count && used + 96 < body_size; b++) {
+        double frac = (bin_count > 1) ? ((double)b / (double)(bin_count - 1) - 0.5) : 0.0;
+        long offset_hz = (long)lrint(frac * (double)SPECTRUM_V252_SAMPLE_RATE_HZ);
+        used += (size_t)snprintf(body + used, body_size - used,
+            "%s{\"offset_hz\":%ld,\"db\":%.2f}",
+            b ? "," : "",
+            offset_hz,
+            db_bins[b]);
+    }
+
+    snprintf(body + used, body_size - used, "]}\n");
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
+    free(body);
+}
+
+
 static void handle_request(
     int fd,
     const struct app_config *cfg,
@@ -5314,6 +5629,16 @@ static void handle_request(
     /* BACKEND_STREAMING_AUDIO_STREAM_ROUTE_V1D_EARLY_GUARD: keep continuous browser audio out of fragile router branches. */
     if (strcmp(path, "/api/radio/audio/live/stream.wav") == 0) {
         send_live_audio_stream_v1h(fd, query);
+        return;
+    }
+
+    if (strcmp(path, "/api/radio/spectrum/snapshot") == 0) {
+        if (strcmp(method, "GET") == 0) {
+            send_radio_spectrum_snapshot_v252(fd, cfg, query);
+        } else {
+            send_text(fd, 405, "Method Not Allowed", "application/json; charset=utf-8",
+                      "{\"ok\":false,\"error\":\"method not allowed\"}\n");
+        }
         return;
     }
 

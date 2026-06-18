@@ -1020,7 +1020,7 @@
               <canvas id="waterfallCanvasV250" width="960" height="380"></canvas>
             </div>
             <div id="spectrumWaterfallStatus" class="spectrum-waterfall-status">
-              UI renderer ready. Live backend FFT/sample stream will be connected in the next implementation step.
+              Ready to request live Pluto spectrum snapshots.
             </div>
           </div>
         </div>
@@ -1138,7 +1138,7 @@
       ctx.fillStyle = "#ecf4fb";
       ctx.fillText("Relative frequency", padL + plotW / 2 - 48, h - 8);
       ctx.fillStyle = "#9db1c3";
-      ctx.fillText("Browser preview renderer", w - 176, 16);
+      ctx.fillText("Live Pluto snapshot", w - 176, 16);
     }
 
     function waterfallColorV250(db) {
@@ -1178,7 +1178,7 @@
       ctx.stroke();
     }
 
-    function renderSpectrumWaterfallV250() {
+    async function renderSpectrumWaterfallV250() {
       if (!spectrumWaterfallIsActivePassV250(currentSelectedPass)) {
         closeSpectrumWaterfallModalV250();
         spectrumWaterfallStatusV250("Spectrum/waterfall is available only while the selected pass is active.");
@@ -1203,11 +1203,28 @@
       }
 
       if (status) {
-        status.textContent = "Spectrum/waterfall UI foundation active. Display is a browser-rendered preview until backend FFT/sample data is connected.";
+        status.textContent = "Waiting for live Pluto spectrum snapshot...";
       }
 
       spectrumWaterfallFrameV250 += 1;
-      const bins = spectrumWaterfallBinsV250(currentSelectedPass);
+      let bins = [];
+      try {
+        const snapshot = await getJson(`/api/radio/spectrum/snapshot?bins=160&request=${Date.now()}`);
+        bins = (snapshot.bins || []).map((bin) => Number(bin.db)).filter((value) => Number.isFinite(value));
+        if (!bins.length) {
+          throw new Error("Spectrum snapshot returned no bins.");
+        }
+        if (status) {
+          status.textContent =
+            `Live spectrum from Pluto · ${(Number(snapshot.center_hz || 0) / 1000000).toFixed(3)} MHz · ` +
+            `${snapshot.bin_count || bins.length} bins · ${snapshot.sample_count || 0} IQ samples`;
+        }
+      } catch (error) {
+        if (status) {
+          status.textContent = `Spectrum backend snapshot failed: ${error.message || error}`;
+        }
+        return;
+      }
       spectrumWaterfallRowsV250.unshift(bins);
       const maxRows = 96;
       if (spectrumWaterfallRowsV250.length > maxRows) {
