@@ -1178,6 +1178,78 @@
       ctx.stroke();
     }
 
+    /* SPECTRUM_SELECTED_FREQ_PARAM_V2_5_3 */
+    function spectrumWaterfallFrequencyHzV253(pass) {
+      if (!pass) return 0;
+
+      const trackState = lastTrackState || {};
+      const activePoint = trackedPointForPass(pass, trackState);
+      const focusPoint = focusedMapPoint(pass, trackState);
+      const livePoint = liveLookPointForPass(pass, activePoint, focusPoint);
+      const radio = pass.radio || {};
+      const downlinks = Array.isArray(pass.downlinks_hz) ? pass.downlinks_hz : [];
+      const plan = pass.doppler_plan || {};
+      const points = Array.isArray(plan.points) ? plan.points : [];
+      let nearestPlanPoint = null;
+
+      if (points.length) {
+        const now = Date.now();
+        let bestDelta = Infinity;
+        points.forEach((point) => {
+          const t = Date.parse(point.time_utc || "");
+          if (!Number.isFinite(t)) return;
+          const delta = Math.abs(t - now);
+          if (delta < bestDelta) {
+            bestDelta = delta;
+            nearestPlanPoint = point;
+          }
+        });
+      }
+
+      const candidates = [
+        trackState.rx_hz,
+        trackState.downlink_hz,
+        trackState.center_hz,
+        livePoint && livePoint.rx_hz,
+        livePoint && livePoint.downlink_hz,
+        livePoint && livePoint.frequency_hz,
+        activePoint && activePoint.rx_hz,
+        activePoint && activePoint.downlink_hz,
+        activePoint && activePoint.frequency_hz,
+        focusPoint && focusPoint.rx_hz,
+        focusPoint && focusPoint.downlink_hz,
+        nearestPlanPoint && nearestPlanPoint.rx_hz,
+        nearestPlanPoint && nearestPlanPoint.downlink_hz,
+        nearestPlanPoint && nearestPlanPoint.frequency_hz,
+        radio.downlink_hz,
+        pass.downlink_hz,
+        downlinks[0]
+      ];
+
+      for (const candidate of candidates) {
+        const value = Number(candidate || 0);
+        if (Number.isFinite(value) && value > 0) {
+          return Math.round(value);
+        }
+      }
+
+      return 0;
+    }
+
+    function spectrumWaterfallSnapshotUrlV253(pass) {
+      const freqHz = spectrumWaterfallFrequencyHzV253(pass);
+      const params = new URLSearchParams();
+      params.set("bins", "160");
+      params.set("request", String(Date.now()));
+      if (freqHz > 0) {
+        params.set("freq_hz", String(freqHz));
+      }
+      return {
+        url: `/api/radio/spectrum/snapshot?${params.toString()}`,
+        freqHz
+      };
+    }
+
     async function renderSpectrumWaterfallV250() {
       if (!spectrumWaterfallIsActivePassV250(currentSelectedPass)) {
         closeSpectrumWaterfallModalV250();
@@ -1209,14 +1281,18 @@
       spectrumWaterfallFrameV250 += 1;
       let bins = [];
       try {
-        const snapshot = await getJson(`/api/radio/spectrum/snapshot?bins=160&request=${Date.now()}`);
+        const request = spectrumWaterfallSnapshotUrlV253(currentSelectedPass);
+        if (!request.freqHz) {
+          throw new Error("Selected active pass does not have a usable downlink frequency.");
+        }
+        const snapshot = await getJson(request.url);
         bins = (snapshot.bins || []).map((bin) => Number(bin.db)).filter((value) => Number.isFinite(value));
         if (!bins.length) {
           throw new Error("Spectrum snapshot returned no bins.");
         }
         if (status) {
           status.textContent =
-            `Live spectrum from Pluto · ${(Number(snapshot.center_hz || 0) / 1000000).toFixed(3)} MHz · ` +
+            `Live spectrum from Pluto · ${(Number(snapshot.center_hz || request.freqHz || 0) / 1000000).toFixed(3)} MHz · ` +
             `${snapshot.bin_count || bins.length} bins · ${snapshot.sample_count || 0} IQ samples`;
         }
       } catch (error) {
