@@ -982,6 +982,7 @@
     let spectrumWaterfallTimerV250 = 0;
     let spectrumWaterfallRowsV250 = [];
     let spectrumWaterfallFrameV250 = 0;
+    let spectrumWaterfallCenterHzV254 = 0; /* SPECTRUM_CENTER_FREQ_LABEL_V2_5_4 */
 
     function spectrumWaterfallIsActivePassV250(pass) {
       return !!(pass && passTimingState(pass) === "active");
@@ -1074,6 +1075,13 @@
       return data;
     }
 
+    /* SPECTRUM_CENTER_FREQ_LABEL_V2_5_4 */
+    function spectrumWaterfallFormatCenterMHzV254(freqHz) {
+      const hz = Number(freqHz || 0);
+      if (!Number.isFinite(hz) || hz <= 0) return "";
+      return `${(hz / 1000000).toFixed(6)} MHz`;
+    }
+
     function drawSpectrumV250(canvas, bins) {
       const ctx = canvas && canvas.getContext ? canvas.getContext("2d") : null;
       if (!ctx || !bins.length) return;
@@ -1123,6 +1131,20 @@
       ctx.lineTo(centerX, padT + plotH);
       ctx.stroke();
       ctx.setLineDash([]);
+
+      const centerLabelV254 = spectrumWaterfallFormatCenterMHzV254(spectrumWaterfallCenterHzV254);
+      if (centerLabelV254) {
+        ctx.font = "12px system-ui, sans-serif";
+        const labelWidth = ctx.measureText(centerLabelV254).width;
+        const labelX = Math.max(padL + 6, Math.min(w - padR - labelWidth - 10, centerX - labelWidth / 2));
+        const labelY = padT + 14;
+        ctx.fillStyle = "rgba(7, 17, 28, 0.82)";
+        ctx.fillRect(labelX - 5, labelY - 12, labelWidth + 10, 16);
+        ctx.strokeStyle = "rgba(56, 189, 248, 0.45)";
+        ctx.strokeRect(labelX - 5, labelY - 12, labelWidth + 10, 16);
+        ctx.fillStyle = "#e0f2fe";
+        ctx.fillText(centerLabelV254, labelX, labelY);
+      }
 
       ctx.strokeStyle = "#38bdf8";
       ctx.lineWidth = 2;
@@ -1290,6 +1312,7 @@
         if (!bins.length) {
           throw new Error("Spectrum snapshot returned no bins.");
         }
+        spectrumWaterfallCenterHzV254 = Number(snapshot.center_hz || request.freqHz || 0);
         if (status) {
           status.textContent =
             `Live spectrum from Pluto · ${(Number(snapshot.center_hz || request.freqHz || 0) / 1000000).toFixed(3)} MHz · ` +
