@@ -1343,7 +1343,7 @@
                 <button id="analogAudioToggleButton" type="button">Listen</button>
                 <button id="openRotatorFromListenButton" class="rotator-open-button" type="button">Rotator</button>
                 <button id="openSpectrumWaterfallButton" class="spectrum-open-button" type="button" disabled>Spectrum</button>
-                <span id="analogAudioStatus">Select a pass to listen.</span>
+                <span id="analogAudioStatus" class="listen-panel-status-hidden" hidden></span>
               </div>
             </div>
           </div>
@@ -2355,6 +2355,7 @@ setDl("radioStatus", entries);
       });
     }
 
+/* SPECTRUM_BUTTON_ROW_CLEANUP_V2_5_1 */
 function bindAnalogAudio(pass, node) {
       const button = node.querySelector("#analogAudioToggleButton");
       const status = node.querySelector("#analogAudioStatus");

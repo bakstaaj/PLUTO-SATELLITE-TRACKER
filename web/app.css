@@ -1615,3 +1615,12 @@ body.spectrum-waterfall-modal-open {
     flex-direction: column;
   }
 }
+
+/* SPECTRUM_BUTTON_ROW_CLEANUP_V2_5_1 */
+.listen-panel .listen-panel-status-hidden {
+  display: none !important;
+}
+
+.listen-panel {
+  flex-wrap: wrap;
+}
