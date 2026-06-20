@@ -7666,3 +7666,209 @@ function passActionInactiveTextV286(pass) {
   window.setInterval(cleanupV286D, 1200);
 })();
 /* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6D_PROTOCOL_LABEL_FIX_END */
+
+/* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6E_BEGIN
+ * Polish v2.8.6 pass action controls: protocol-aware compact blue buttons,
+ * Details button shape alignment, and no redundant Listen/Receive control under
+ * the sky/azimuth plot.  UI-only; backend C remains unchanged.
+ */
+(function installActivePassActionButtonPolishV286E() {
+  if (window.__plutoActivePassActionButtonPolishV286E) return;
+  window.__plutoActivePassActionButtonPolishV286E = true;
+
+  function textV286E(value) {
+    if (value === undefined || value === null) return "";
+    if (Array.isArray(value)) return value.map(textV286E).join(" ");
+    if (typeof value === "object") {
+      try { return JSON.stringify(value); } catch (_error) { return ""; }
+    }
+    return String(value);
+  }
+
+  function passProtocolTextV286E(pass) {
+    const radio = (pass && pass.radio) || {};
+    return [
+      radio.mode,
+      radio.type,
+      radio.status,
+      radio.description,
+      pass && pass.mode,
+      pass && pass.modes,
+      pass && pass.name,
+      pass && pass.transmitters,
+      pass && pass.downlinks,
+      pass && pass.uplinks
+    ].map(textV286E).join(" ").toUpperCase();
+  }
+
+  function passActionClassificationV286E(pass) {
+    const text = passProtocolTextV286E(pass);
+    if (/APRS/.test(text)) return { kind: "receive", family: "APRS", label: "Receive: APRS" };
+    if (/(AX\.?25|AX25|PACKET)/.test(text)) return { kind: "receive", family: "Packet", label: "Receive: Packet" };
+    if (/(CW|MORSE|A1A)/.test(text)) return { kind: "receive", family: "CW", label: "Receive: CW" };
+    if (/(AFSK|1200\s*BAUD|1K2)/.test(text)) return { kind: "receive", family: "AFSK", label: "Receive: AFSK" };
+    if (/(G3RUH|9K6|9600|GMSK|GFSK|FSK|BPSK|QPSK|PSK|TELEMETRY|DIGITAL|DATA)/.test(text)) {
+      return { kind: "receive", family: "Digital", label: "Receive: Digital" };
+    }
+    if (/(FM|NFM|WFM|AM|SSB|USB|LSB|VOICE|F3E|A3E|J3E)/.test(text)) {
+      return { kind: "listen", family: "Voice", label: "Listen" };
+    }
+    return { kind: "listen", family: "Voice", label: "Listen" };
+  }
+
+  function actionStateV286E(pass) {
+    try {
+      if (typeof passTimingState === "function") return passTimingState(pass);
+    } catch (_error) {}
+    return "unknown";
+  }
+
+  function actionIsActiveV286E(pass) {
+    return actionStateV286E(pass) === "active";
+  }
+
+  function actionDownlinkV286E(pass) {
+    const radio = (pass && pass.radio) || {};
+    return radio.downlink_hz || ((pass && pass.downlinks_hz) || [])[0] || "";
+  }
+
+  function actionTargetAvailableV286E(pass) {
+    if (!pass || !actionDownlinkV286E(pass)) return false;
+    try {
+      if (typeof isPassTunable === "function") return !!isPassTunable(pass);
+    } catch (_error) {}
+    return true;
+  }
+
+  function inactiveTextV286E(pass) {
+    const label = passActionClassificationV286E(pass).label;
+    if (!pass) return `${label} is inactive until a pass is selected.`;
+    if (!actionTargetAvailableV286E(pass)) return `${label} is unavailable because this pass has no tunable downlink.`;
+    const state = actionStateV286E(pass);
+    if (state === "upcoming") return `${label} becomes active at AOS (${typeof formatTime === "function" ? formatTime(pass.aos_utc) : pass.aos_utc || "scheduled AOS"}).`;
+    if (state === "stale") return `${label} is inactive because this pass has ended.`;
+    return `${label} is inactive until the pass is active.`;
+  }
+
+  window.passActionClassificationV286E = passActionClassificationV286E;
+
+  try {
+    passActionLabelV286 = function passActionProtocolLabelV286E(pass) {
+      return passActionClassificationV286E(pass).label;
+    };
+  } catch (_error) {}
+
+  try {
+    passActionKindV286 = function passActionProtocolKindV286E(pass) {
+      return passActionClassificationV286E(pass).kind;
+    };
+  } catch (_error) {}
+
+  try {
+    passActionInactiveTextV286 = inactiveTextV286E;
+  } catch (_error) {}
+
+  try {
+    applyPassActionButtonVisualsV286 = function applyPassActionButtonVisualsPolishedV286E(button, pass) {
+      if (!button) return false;
+      const classification = passActionClassificationV286E(pass);
+      const active = actionIsActiveV286E(pass);
+      const target = actionTargetAvailableV286E(pass);
+      button.classList.add("pass-action-button-v286", "pass-action-button-v286e");
+      button.classList.toggle("pass-action-receive-v286", classification.kind === "receive");
+      button.classList.toggle("pass-action-listen-v286", classification.kind === "listen");
+      button.dataset.passActionKindV286 = classification.kind;
+      button.dataset.passActionFamilyV286e = classification.family;
+      button.dataset.passActiveV286 = active ? "1" : "0";
+      if (!/^Stop/i.test(String(button.textContent || ""))) {
+        button.textContent = classification.label;
+      }
+      button.disabled = !(active && target);
+      button.title = active && target ? `${classification.label} active for this pass.` : inactiveTextV286E(pass);
+      button.setAttribute("aria-disabled", button.disabled ? "true" : "false");
+      return active && target;
+    };
+  } catch (_error) {}
+
+  function hideSkyPrimaryActionsV286E(root) {
+    const scope = root || document;
+    scope.querySelectorAll(
+      ".listen-panel #analogAudioToggleButton, " +
+      ".listen-panel #receiveDecodePlaceholderButtonV282, " +
+      ".listen-panel #linearTransponderDecodeCwButtonV2632"
+    ).forEach((button) => {
+      button.classList.add("sky-primary-action-hidden-v286e");
+      button.setAttribute("aria-hidden", "true");
+      button.tabIndex = -1;
+    });
+
+    scope.querySelectorAll(".listen-panel #analogAudioStatus, .listen-panel #receiveDecodeStatusV282").forEach((status) => {
+      status.hidden = true;
+      status.classList.add("sky-primary-action-hidden-v286e");
+    });
+  }
+
+  function polishPassRowsV286E(root) {
+    const scope = root || document;
+    scope.querySelectorAll(".pass-row").forEach((row) => {
+      const actionButton = row.querySelector(".pass-row-action-button-v286");
+      const detailsButton = row.querySelector(".pass-detail-button");
+      const readiness = row.querySelector(".radio-ok, .radio-warn");
+      if (actionButton) {
+        actionButton.classList.add("pass-action-button-v286e", "pass-row-action-button-v286e");
+        if (typeof currentSelectedPass !== "undefined") {
+          const strong = row.querySelector("strong");
+          const selectedName = currentSelectedPass && currentSelectedPass.name;
+          if (selectedName && strong && strong.textContent === selectedName) {
+            try { applyPassActionButtonVisualsV286(actionButton, currentSelectedPass); } catch (_error) {}
+          }
+        }
+      }
+      if (detailsButton) {
+        detailsButton.classList.add("pass-detail-button-v286e", "pass-action-button-v286e");
+      }
+      if (readiness) {
+        readiness.classList.add("pass-radio-readiness-hidden-v286e");
+      }
+    });
+  }
+
+  function polishAllV286E() {
+    hideSkyPrimaryActionsV286E(document);
+    polishPassRowsV286E(document);
+  }
+
+  if (typeof renderMapPanel === "function" && renderMapPanel.activePassActionPolishWrappedV286E !== true) {
+    const previousRenderMapPanelV286E = renderMapPanel;
+    renderMapPanel = function renderMapPanelActivePassActionPolishV286E() {
+      const result = previousRenderMapPanelV286E.apply(this, arguments);
+      try { hideSkyPrimaryActionsV286E(document); } catch (_error) {}
+      return result;
+    };
+    renderMapPanel.activePassActionPolishWrappedV286E = true;
+  }
+
+  if (typeof renderPasses === "function" && renderPasses.activePassActionPolishWrappedV286E !== true) {
+    const previousRenderPassesV286E = renderPasses;
+    renderPasses = function renderPassesActivePassActionPolishV286E() {
+      const result = previousRenderPassesV286E.apply(this, arguments);
+      try { polishPassRowsV286E(document); } catch (_error) {}
+      return result;
+    };
+    renderPasses.activePassActionPolishWrappedV286E = true;
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", polishAllV286E, { once: true });
+  } else {
+    polishAllV286E();
+  }
+
+  const observer = new MutationObserver(() => {
+    window.clearTimeout(window.__plutoActionButtonPolishTimerV286E || 0);
+    window.__plutoActionButtonPolishTimerV286E = window.setTimeout(polishAllV286E, 60);
+  });
+  if (document.body) observer.observe(document.body, { childList: true, subtree: true });
+  window.setInterval(polishAllV286E, 2000);
+})();
+/* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6E_END */
