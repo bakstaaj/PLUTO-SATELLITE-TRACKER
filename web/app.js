@@ -7192,3 +7192,129 @@ try {
   }
 })();
 
+/* RECEIVE_DIAGNOSTICS_PANEL_V2_8_4
+ * UI-only selected-pass receive/decode readiness panel.  This does not start
+ * hardware, touch backend C, or change the existing Listen audio path.
+ */
+function receiveDiagnosticsModeTextV284(pass) {
+  const radio = pass && pass.radio ? pass.radio : {};
+  const modes = Array.isArray(pass && pass.modes) ? pass.modes : [];
+  return String(radio.mode || modes[0] || radio.description || "").trim();
+}
+
+function receiveDiagnosticsDownlinkHzV284(pass) {
+  const radio = pass && pass.radio ? pass.radio : {};
+  const downlinks = Array.isArray(pass && pass.downlinks_hz) ? pass.downlinks_hz : [];
+  return Number(radio.downlink_hz || downlinks[0] || 0);
+}
+
+function receiveDiagnosticsFamilyV284(pass) {
+  const radio = pass && pass.radio ? pass.radio : {};
+  const text = [
+    receiveDiagnosticsModeTextV284(pass),
+    radio.description || "",
+    Array.isArray(pass && pass.modes) ? pass.modes.join(" ") : "",
+    pass && pass.name ? pass.name : ""
+  ].join(" ").toUpperCase();
+
+  if (/APRS/.test(text)) return { family: "APRS", action: "Receive", target: "AX.25/APRS packet decoder", kind: "digital" };
+  if (/AX\.?25|PACKET/.test(text)) return { family: "Packet", action: "Receive", target: "AX.25 packet decoder", kind: "digital" };
+  if (/AFSK/.test(text)) return { family: "AFSK", action: "Receive", target: "AFSK demodulator plus packet decoder", kind: "digital" };
+  if (/FSK|GFSK|MSK|GMSK|BPSK|QPSK|PSK/.test(text)) return { family: "FSK/PSK", action: "Receive", target: "symbol demodulator and telemetry decoder", kind: "digital" };
+  if (/CW|MORSE|BEACON/.test(text)) return { family: "CW", action: "Receive", target: "CW tone detector and Morse decoder", kind: "digital" };
+  if (/TELEMETRY|DATA|DIGITAL|BPSK|9K6|1K2|1200|9600/.test(text)) return { family: "Telemetry", action: "Receive", target: "telemetry decoder matched to satellite mode", kind: "digital" };
+  if (/FM|NFM|WFM|AM|VOICE|SSB|USB|LSB/.test(text)) return { family: "Voice", action: "Listen", target: "analog audio monitor", kind: "voice" };
+  return { family: "Unknown", action: "Receive", target: "mode-specific decoder after capture support is added", kind: "unknown" };
+}
+
+function receiveDiagnosticsTimingV284(pass) {
+  try {
+    if (typeof passTimingState === "function") return passTimingState(pass);
+  } catch (_error) {
+  }
+  return "unknown";
+}
+
+function receiveDiagnosticsTunableV284(pass) {
+  try {
+    return typeof isPassTunable === "function" && isPassTunable(pass);
+  } catch (_error) {
+    return false;
+  }
+}
+
+function renderReceiveDiagnosticsPanelV284(pass) {
+  const statusNode = document.getElementById("receiveDiagnosticsStatusV284");
+  const noteNode = document.getElementById("receiveDiagnosticsNoteV284");
+  if (!statusNode) return;
+
+  const selected = pass || currentSelectedPass || null;
+  if (!selected) {
+    setDl("receiveDiagnosticsStatusV284", [
+      ["Selected pass", "Select Details from Next Passes."],
+      ["Receive state", "Idle"]
+    ]);
+    if (noteNode) noteNode.textContent = "Select a pass to inspect receive/decode readiness.";
+    return;
+  }
+
+  const downlink = receiveDiagnosticsDownlinkHzV284(selected);
+  const mode = receiveDiagnosticsModeTextV284(selected) || "Unknown";
+  const family = receiveDiagnosticsFamilyV284(selected);
+  const tunable = receiveDiagnosticsTunableV284(selected);
+  const timing = receiveDiagnosticsTimingV284(selected);
+  const action = family.action;
+  const receiveReady = tunable && timing !== "stale";
+
+  setDl("receiveDiagnosticsStatusV284", [
+    ["Selected pass", selected.name || "Unnamed satellite"],
+    ["Mode", mode],
+    ["Receive family", family.family],
+    ["Operator action", action],
+    ["Downlink", downlink ? formatHz(downlink) : "No downlink"],
+    ["Pluto tunable", tunable ? "Yes" : "No"],
+    ["Pass timing", timing],
+    ["Future decoder target", family.target],
+    ["Phase", receiveReady ? "Ready for future Track → Capture → Decode workflow" : "Not ready for receive capture"]
+  ]);
+
+  if (noteNode) {
+    if (family.kind === "voice") {
+      noteNode.textContent = "Voice-style passes should continue to use Listen. Receive is reserved for decode/capture modes.";
+    } else if (receiveReady) {
+      noteNode.textContent = "Receive Phase 1 is UI guidance only. A later backend step will add capture/decode for this mode family.";
+    } else {
+      noteNode.textContent = "This pass is not currently ready for receive capture; check downlink, tunable status, and pass timing.";
+    }
+  }
+}
+
+function bindReceiveDiagnosticsPanelV284() {
+  const button = document.getElementById("refreshReceiveDiagnosticsButtonV284");
+  if (button && button.dataset.receiveDiagnosticsBoundV284 !== "1") {
+    button.dataset.receiveDiagnosticsBoundV284 = "1";
+    button.addEventListener("click", () => renderReceiveDiagnosticsPanelV284(currentSelectedPass));
+  }
+  renderReceiveDiagnosticsPanelV284(currentSelectedPass);
+}
+
+(function installReceiveDiagnosticsPanelV284() {
+  const install = () => {
+    bindReceiveDiagnosticsPanelV284();
+    if (typeof renderPassDetail === "function" && renderPassDetail.receiveDiagnosticsWrappedV284 !== true) {
+      const originalRenderPassDetailV284 = renderPassDetail;
+      renderPassDetail = function receiveDiagnosticsRenderPassDetailWrapperV284(pass) {
+        const result = originalRenderPassDetailV284.apply(this, arguments);
+        try { renderReceiveDiagnosticsPanelV284(pass); } catch (_error) {}
+        return result;
+      };
+      renderPassDetail.receiveDiagnosticsWrappedV284 = true;
+    }
+  };
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", install, { once: true });
+  } else {
+    install();
+  }
+})();
+

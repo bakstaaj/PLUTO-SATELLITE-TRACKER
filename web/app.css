@@ -2304,3 +2304,12 @@ body.spectrum-waterfall-modal-open {
 .receive-step-v283 span {
   color: #475569;
 }
+
+/* RECEIVE_DIAGNOSTICS_PANEL_V2_8_4 */
+#receiveDiagnosticsPanelV284 dl dd {
+  overflow-wrap: anywhere;
+}
+#receiveDiagnosticsNoteV284 {
+  margin-top: 0.45rem;
+}
+
