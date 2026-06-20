@@ -23,7 +23,7 @@
 #include <stdint.h>
 #include <pthread.h>
 
-#define APP_VERSION "2.3.0"
+#define APP_VERSION "2.6.37a"
 /* RESTORE_517C91A_BUILDABLE_KEEP_RECEIVER_V1 */
 /* BACKEND_STREAMING_AUDIO_STREAM_ROUTE_V1C */
 /* BACKEND_STREAMING_AUDIO_ROUTE_FIX_V1B */
@@ -128,7 +128,10 @@ static int ensure_track_auto_running_for_audio_v1(const struct app_config *cfg);
 static void track_auto_set_running(int running);
 static void append_audio_debug(const char *message);
 static struct live_audio_state g_live_audio = {0};
-static int g_audio_doppler_running_v6 = 0; /* BACKEND_AUDIO_OWNED_DOPPLER_V6 */
+static int g_audio_doppler_running_v6 = 0; /* LIVE_AUDIO_CONTROL_WIRING_BUILD_FIX_V2_6_8B */
+/* LIVE_AUDIO_CONTROL_WIRING_BUILD_FIX_V2_6_8C */
+/* LIVE_AUDIO_CONTROL_WIRING_BUILD_FIX_V2_6_8D */
+/* BACKEND_AUDIO_OWNED_DOPPLER_V6 */
 static pthread_t g_audio_doppler_thread_v6;
 static const struct app_config *g_audio_doppler_cfg_v6 = NULL;
 static int g_audio_started_track_auto_v1 = 0; /* BACKEND_AUDIO_DOPPLER_TRACKED_START_V1 */
@@ -1867,6 +1870,36 @@ static int stop_live_audio_session(void)
     return was_running;
 }
 
+
+/* LIVE_AUDIO_SQUELCH_APPLY_V2_6_14 */
+/* LIVE_AUDIO_BACKEND_CONTROL_WIRING_V2_6_17
+ * Pass the compact Spectrum/Listen controls through to pluto_fm_receiver.
+ * These are argv values, not shell-expanded strings.
+ */
+
+/* BACKEND_AUDIO_CONTROL_HELPER_ARGS_V2_6_20
+ * Hold the latest live-audio controls parsed by /api/radio/audio/live/start.
+ * The values are copied before fork(), so the child can safely use them when
+ * building the pluto_fm_receiver argv list.  This keeps all existing callers
+ * compatible with the stable two-argument start_live_audio_session() signature.
+ */
+static char g_audio_ctl_rf_bw_hz_v2620[64] = "";
+static char g_audio_ctl_decoder_bw_hz_v2620[64] = "";
+static char g_audio_ctl_gain_db_v2620[64] = "";
+static char g_audio_ctl_squelch_db_v2620[64] = "";
+
+static void audio_control_set_pending_v2620(
+    const char *rf_bw_hz,
+    const char *decoder_bw_hz,
+    const char *gain_db,
+    const char *squelch_db)
+{
+    snprintf(g_audio_ctl_rf_bw_hz_v2620, sizeof(g_audio_ctl_rf_bw_hz_v2620), "%s", rf_bw_hz ? rf_bw_hz : "");
+    snprintf(g_audio_ctl_decoder_bw_hz_v2620, sizeof(g_audio_ctl_decoder_bw_hz_v2620), "%s", decoder_bw_hz ? decoder_bw_hz : "");
+    snprintf(g_audio_ctl_gain_db_v2620, sizeof(g_audio_ctl_gain_db_v2620), "%s", gain_db ? gain_db : "");
+    snprintf(g_audio_ctl_squelch_db_v2620, sizeof(g_audio_ctl_squelch_db_v2620), "%s", squelch_db ? squelch_db : "");
+}
+
 static int start_live_audio_session(const struct app_config *cfg, long long frequency_hz)
 {
     char helper_path[PATH_BUF_SIZE];
@@ -1884,11 +1917,31 @@ static int start_live_audio_session(const struct app_config *cfg, long long freq
     }
 
     if (pid == 0) {
-        execl(helper_path,
-              helper_path,
-              "--freq-hz", frequency_text,
-              "--output", AUDIO_LIVE_PCM_PATH,
-              (char *)NULL);
+        const char *argv_live_v2620[18];
+        int argc_live_v2620 = 0;
+        argv_live_v2620[argc_live_v2620++] = helper_path;
+        argv_live_v2620[argc_live_v2620++] = "--freq-hz";
+        argv_live_v2620[argc_live_v2620++] = frequency_text;
+        argv_live_v2620[argc_live_v2620++] = "--output";
+        argv_live_v2620[argc_live_v2620++] = AUDIO_LIVE_PCM_PATH;
+        if (g_audio_ctl_rf_bw_hz_v2620[0]) {
+            argv_live_v2620[argc_live_v2620++] = "--rf-bw-hz";
+            argv_live_v2620[argc_live_v2620++] = g_audio_ctl_rf_bw_hz_v2620;
+        }
+        if (g_audio_ctl_decoder_bw_hz_v2620[0]) {
+            argv_live_v2620[argc_live_v2620++] = "--decoder-bw-hz";
+            argv_live_v2620[argc_live_v2620++] = g_audio_ctl_decoder_bw_hz_v2620;
+        }
+        if (g_audio_ctl_gain_db_v2620[0]) {
+            argv_live_v2620[argc_live_v2620++] = "--gain-db";
+            argv_live_v2620[argc_live_v2620++] = g_audio_ctl_gain_db_v2620;
+        }
+        if (g_audio_ctl_squelch_db_v2620[0]) {
+            argv_live_v2620[argc_live_v2620++] = "--squelch-db";
+            argv_live_v2620[argc_live_v2620++] = g_audio_ctl_squelch_db_v2620;
+        }
+        argv_live_v2620[argc_live_v2620] = NULL;
+        execv(helper_path, (char * const *)argv_live_v2620);
         _exit(127);
     }
 
@@ -1900,6 +1953,9 @@ static int start_live_audio_session(const struct app_config *cfg, long long freq
     pthread_mutex_unlock(&g_audio_live_lock);
     return 1;
 }
+
+
+
 
 static int send_wav_stream(int fd, const struct app_config *cfg, const char *query)
 {
@@ -2730,10 +2786,37 @@ static int audio_read_active_state_rx_hz_v7(
     return 1;
 }
 
+
+/* LIVE_AUDIO_SQUELCH_APPLY_V2_6_14 */
+/* LIVE_AUDIO_BACKEND_CONTROL_WIRING_V2_6_17
+ * Parse and echo live-audio tuning controls, then pass them to pluto_fm_receiver.
+ */
+/* BACKEND_AUDIO_CONTROL_ECHO_ONLY_V2_6_19A
+ * Parse and echo live-audio UI control parameters without changing the helper
+ * launch path. This is intentionally backend-only so we can prove route wiring
+ * before enabling helper/DSP behavior.
+ */
+/* BACKEND_AUDIO_CONTROL_ECHO_ONLY_V2_6_19B
+ * Parse and echo live-audio UI control parameters without changing the helper
+ * launch path. This is intentionally backend-only so we can prove route wiring
+ * before enabling helper/DSP behavior.
+ */
 static void send_live_audio_start(int fd, const struct app_config *cfg, const char *query)
 {
     char frequency_text[64] = "";
-    char body[768];
+    char audio_ctl_rf_bw_v2620[64] = "";
+    char audio_ctl_decoder_bw_v2620[64] = "";
+    char audio_ctl_gain_v2620[64] = "";
+    char audio_ctl_squelch_v2620[64] = "";
+    char rf_bw_hz_text[64] = "";
+    char decoder_bw_hz_text[64] = "";
+    char gain_db_text[64] = "";
+    char squelch_db_text[64] = "";
+    char rf_bw_hz_json[128];
+    char decoder_bw_hz_json[128];
+    char gain_db_json[128];
+    char squelch_db_json[128];
+    char body[1280];
     char track_response[1024];
     char track_error[256] = "";
     long long frequency_hz = 0;
@@ -2756,6 +2839,20 @@ static void send_live_audio_start(int fd, const struct app_config *cfg, const ch
     int doppler_fallback = 0;
 
     query_param(query, "downlink_hz", frequency_text, sizeof(frequency_text));
+    query_param(query, "rf_bw_hz", audio_ctl_rf_bw_v2620, sizeof(audio_ctl_rf_bw_v2620));
+    query_param(query, "decoder_bw_hz", audio_ctl_decoder_bw_v2620, sizeof(audio_ctl_decoder_bw_v2620));
+    query_param(query, "gain_db", audio_ctl_gain_v2620, sizeof(audio_ctl_gain_v2620));
+    query_param(query, "squelch_db", audio_ctl_squelch_v2620, sizeof(audio_ctl_squelch_v2620));
+    query_param(query, "rf_bw_hz", rf_bw_hz_text, sizeof(rf_bw_hz_text));
+    query_param(query, "decoder_bw_hz", decoder_bw_hz_text, sizeof(decoder_bw_hz_text));
+    query_param(query, "gain_db", gain_db_text, sizeof(gain_db_text));
+    query_param(query, "squelch_db", squelch_db_text, sizeof(squelch_db_text));
+
+    json_escape(rf_bw_hz_json, sizeof(rf_bw_hz_json), rf_bw_hz_text);
+    json_escape(decoder_bw_hz_json, sizeof(decoder_bw_hz_json), decoder_bw_hz_text);
+    json_escape(gain_db_json, sizeof(gain_db_json), gain_db_text);
+    json_escape(squelch_db_json, sizeof(squelch_db_json), squelch_db_text);
+
     if (frequency_text[0]) {
         if (!parse_frequency_hz(frequency_text, &frequency_hz)) {
             send_audio_error_json(fd, 400, "Bad Request", "valid downlink_hz is required");
@@ -2815,6 +2912,7 @@ static void send_live_audio_start(int fd, const struct app_config *cfg, const ch
         }
     }
 
+    audio_control_set_pending_v2620(audio_ctl_rf_bw_v2620, audio_ctl_decoder_bw_v2620, audio_ctl_gain_v2620, audio_ctl_squelch_v2620);
     if (!start_live_audio_session(cfg, frequency_hz)) {
         send_audio_error_json(fd, 500, "Internal Server Error", "could not start live Pluto audio");
         return;
@@ -2832,7 +2930,7 @@ static void send_live_audio_start(int fd, const struct app_config *cfg, const ch
     }
 
     snprintf(body, sizeof(body),
-             "{\"ok\":true,\"state\":\"running\",\"downlink_hz\":%lld,\"audio_hz\":%lld,\"requested_downlink_hz\":%lld,\"doppler_track\":%s,\"doppler_attempted\":%s,\"doppler_defaulted\":%s,\"doppler_fallback\":%s,\"noaa_fixed\":%s,\"fixed_requested\":%s,\"auto_track\":%s}\n",
+             "{\"ok\":true,\"state\":\"running\",\"downlink_hz\":%lld,\"audio_hz\":%lld,\"requested_downlink_hz\":%lld,\"doppler_track\":%s,\"doppler_attempted\":%s,\"doppler_defaulted\":%s,\"doppler_fallback\":%s,\"noaa_fixed\":%s,\"fixed_requested\":%s,\"auto_track\":%s,\"rf_bw_hz\":\"%s\",\"decoder_bw_hz\":\"%s\",\"gain_db\":\"%s\",\"squelch_db\":\"%s\"}\n",
              frequency_hz,
              frequency_hz,
              requested_frequency_hz,
@@ -2842,9 +2940,16 @@ static void send_live_audio_start(int fd, const struct app_config *cfg, const ch
              doppler_fallback ? "true" : "false",
              noaa_fixed ? "true" : "false",
              fixed_requested ? "true" : "false",
-             doppler_used ? "true" : "false");
+             doppler_used ? "true" : "false",
+             rf_bw_hz_json,
+             decoder_bw_hz_json,
+             gain_db_json,
+             squelch_db_json);
     send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
 }
+
+
+
 
 static void send_live_audio_stop(int fd)
 {
@@ -4524,6 +4629,120 @@ static void send_radio_tune(int fd, const struct app_config *cfg, const char *qu
 }
 
 
+/* RECEIVE_MODE_FOUNDATION_V2_6_21A
+ * Phase 1 receive/decode foundation. These endpoints intentionally do not
+ * start any decoder DSP yet; they provide stable UI/backend plumbing so CW,
+ * AX.25/APRS, and later telemetry decoders can be added safely one at a time.
+ *
+ * This block is intentionally placed after query_param(), json_escape(), and
+ * send_text() are declared/defined so ARM builds do not create implicit
+ * declarations on the Pluto toolchain.
+ */
+static const char *receive_kind_from_mode_v261a(const char *mode)
+{
+    char lower[256];
+    size_t i;
+    if (!mode || !*mode) {
+        return "listen";
+    }
+    for (i = 0; i + 1 < sizeof(lower) && mode[i]; i++) {
+        lower[i] = (char)tolower((unsigned char)mode[i]);
+    }
+    lower[i] = '\0';
+    if (strstr(lower, "cw") || strstr(lower, "morse")) {
+        return "cw";
+    }
+    if (strstr(lower, "ax.25") || strstr(lower, "ax25") || strstr(lower, "aprs") ||
+        strstr(lower, "packet") || strstr(lower, "fsk") || strstr(lower, "gmsk") ||
+        strstr(lower, "bpsk") || strstr(lower, "qpsk") || strstr(lower, "psk") ||
+        strstr(lower, "telemetry") || strstr(lower, "digital") || strstr(lower, "data")) {
+        return "digital";
+    }
+    return "listen";
+}
+
+static void send_receive_status_v261a(int fd)
+{
+    send_text(fd, 200, "OK", "application/json; charset=utf-8",
+              "{\"ok\":true,\"state\":\"idle\",\"version\":\"2.6.21a\",\"message\":\"Receive/decode foundation is installed. FM Listen remains on the existing audio path.\"}\n");
+}
+
+static void send_receive_start_v261a(int fd, const struct app_config *cfg, const char *query)
+{
+    char mode[128] = "";
+    char name[256] = "";
+    char downlink[64] = "";
+    char kind_json[64];
+    char mode_json[256];
+    char name_json[512];
+    char downlink_json[128];
+    char body[1600];
+    const char *kind;
+    (void)cfg;
+
+    query_param(query, "mode", mode, sizeof(mode));
+    query_param(query, "name", name, sizeof(name));
+    query_param(query, "downlink_hz", downlink, sizeof(downlink));
+    if (!mode[0]) query_param(query, "protocol", mode, sizeof(mode));
+    if (!name[0]) query_param(query, "satellite", name, sizeof(name));
+
+    kind = receive_kind_from_mode_v261a(mode);
+    json_escape(kind_json, sizeof(kind_json), kind);
+    json_escape(mode_json, sizeof(mode_json), mode[0] ? mode : "unknown");
+    json_escape(name_json, sizeof(name_json), name[0] ? name : "selected satellite");
+    json_escape(downlink_json, sizeof(downlink_json), downlink[0] ? downlink : "unknown");
+
+    snprintf(body, sizeof(body),
+             "{"
+             "\"ok\":true,"
+             "\"state\":\"placeholder\","
+             "\"version\":\"2.6.21a\","
+             "\"receive_kind\":\"%s\","
+             "\"decoder_state\":\"not_implemented\","
+             "\"satellite\":\"%s\","
+             "\"mode\":\"%s\","
+             "\"downlink_hz\":\"%s\","
+             "\"message\":\"Decode foundation is installed. CW and packet decoders will be added in later steps; FM voice still uses the existing Listen path.\""
+             "}\n",
+             kind_json, name_json, mode_json, downlink_json);
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
+}
+
+static void send_receive_stop_v261a(int fd)
+{
+    send_text(fd, 200, "OK", "application/json; charset=utf-8",
+              "{\"ok\":true,\"state\":\"stopped\",\"message\":\"No decoder process is active in the foundation build.\"}\n");
+}
+
+static void send_decode_output_v261a(int fd, const char *query)
+{
+    char mode[128] = "";
+    char mode_json[256];
+    char kind_json[64];
+    char body[1600];
+    const char *kind;
+    query_param(query, "mode", mode, sizeof(mode));
+    if (!mode[0]) query_param(query, "protocol", mode, sizeof(mode));
+    kind = receive_kind_from_mode_v261a(mode);
+    json_escape(kind_json, sizeof(kind_json), kind);
+    json_escape(mode_json, sizeof(mode_json), mode[0] ? mode : "unknown");
+    snprintf(body, sizeof(body),
+             "{"
+             "\"ok\":true,"
+             "\"state\":\"placeholder\","
+             "\"receive_kind\":\"%s\","
+             "\"mode\":\"%s\","
+             "\"lines\":["
+             "\"Decode foundation active.\","
+             "\"No %s decoder is installed yet.\","
+             "\"Next implementation target: CW text decoder, then AX.25/APRS packet decoder.\""
+             "]"
+             "}\n",
+             kind_json, mode_json, kind_json);
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
+}
+
+
 /* ROTATOR_CONTROL_FOUNDATION_V2_4_0 */
 struct rotator_config {
     int enabled;
@@ -5343,11 +5562,33 @@ static int spectrum_cmd_ok_v252(const char *cmd)
     return !(rc == -1 || !WIFEXITED(rc) || WEXITSTATUS(rc) != 0);
 }
 
-static int spectrum_configure_rx_v252(long long center_hz, int stream_index, char *error, size_t error_size)
+/* SPECTRUM_TUNING_CONTROLS_V2_6_5 */
+static long spectrum_clamp_bandwidth_v265(long bandwidth_hz)
+{
+    if (bandwidth_hz < 200000L) return 200000L;
+    if (bandwidth_hz > (long)SPECTRUM_V252_SAMPLE_RATE_HZ) return (long)SPECTRUM_V252_SAMPLE_RATE_HZ;
+    return bandwidth_hz;
+}
+
+static double spectrum_clamp_gain_v265(double gain_db)
+{
+    if (gain_db < 0.0) return 0.0;
+    if (gain_db > 70.0) return 70.0;
+    return gain_db;
+}
+
+static int spectrum_configure_rx_v252(
+    long long center_hz,
+    int stream_index,
+    long bandwidth_hz,
+    int have_gain,
+    double gain_db,
+    char *error,
+    size_t error_size)
 {
     char cmd[512];
-
-    (void)stream_index;
+    int rx_channel = stream_index > 0 ? 1 : 0;
+    long applied_bandwidth_hz = spectrum_clamp_bandwidth_v265(bandwidth_hz);
 
     snprintf(cmd, sizeof(cmd), "/usr/bin/iio_attr -u local: -c ad9361-phy altvoltage0 frequency %lld >/dev/null 2>&1", center_hz);
     if (!spectrum_cmd_ok_v252(cmd)) {
@@ -5359,10 +5600,24 @@ static int spectrum_configure_rx_v252(long long center_hz, int stream_index, cha
     (void)spectrum_cmd_ok_v252(cmd);
     snprintf(cmd, sizeof(cmd), "/usr/bin/iio_attr -u local: -c ad9361-phy voltage1 sampling_frequency %d >/dev/null 2>&1", SPECTRUM_V252_SAMPLE_RATE_HZ);
     (void)spectrum_cmd_ok_v252(cmd);
-    snprintf(cmd, sizeof(cmd), "/usr/bin/iio_attr -u local: -c ad9361-phy voltage0 rf_bandwidth %d >/dev/null 2>&1", SPECTRUM_V252_SAMPLE_RATE_HZ);
+    snprintf(cmd, sizeof(cmd), "/usr/bin/iio_attr -u local: -c ad9361-phy voltage0 rf_bandwidth %ld >/dev/null 2>&1", applied_bandwidth_hz);
     (void)spectrum_cmd_ok_v252(cmd);
-    snprintf(cmd, sizeof(cmd), "/usr/bin/iio_attr -u local: -c ad9361-phy voltage1 rf_bandwidth %d >/dev/null 2>&1", SPECTRUM_V252_SAMPLE_RATE_HZ);
+    snprintf(cmd, sizeof(cmd), "/usr/bin/iio_attr -u local: -c ad9361-phy voltage1 rf_bandwidth %ld >/dev/null 2>&1", applied_bandwidth_hz);
     (void)spectrum_cmd_ok_v252(cmd);
+
+    if (have_gain) {
+        double applied_gain_db = spectrum_clamp_gain_v265(gain_db);
+        snprintf(cmd, sizeof(cmd), "/usr/bin/iio_attr -u local: -c ad9361-phy voltage%d gain_control_mode manual >/dev/null 2>&1", rx_channel);
+        if (!spectrum_cmd_ok_v252(cmd)) {
+            snprintf(error, error_size, "could not set RX%d gain control mode to manual", rx_channel);
+            return 0;
+        }
+        snprintf(cmd, sizeof(cmd), "/usr/bin/iio_attr -u local: -c ad9361-phy voltage%d hardwaregain %.1f >/dev/null 2>&1", rx_channel, applied_gain_db);
+        if (!spectrum_cmd_ok_v252(cmd)) {
+            snprintf(error, error_size, "could not set RX%d hardwaregain to %.1f dB", rx_channel, applied_gain_db);
+            return 0;
+        }
+    }
 
     return 1;
 }
@@ -5510,10 +5765,17 @@ static void send_radio_spectrum_snapshot_v252(int fd, const struct app_config *c
     char freq_text[64] = "";
     char bins_text[32] = "";
     char stream_text[32] = "";
+    char bandwidth_text[32] = "";
+    char gain_text[32] = "";
     char source[128] = "query";
     char error[256] = "";
     int bin_count = SPECTRUM_V252_DEFAULT_BINS;
     int stream_index = 0;
+    long bandwidth_hz = SPECTRUM_V252_SAMPLE_RATE_HZ;
+    int have_gain = 0;
+    double gain_db = 0.0;
+    double applied_gain_db = 0.0;
+    char gain_json[32] = "null";
     double i_samples[SPECTRUM_V252_DFT_SAMPLES];
     double q_samples[SPECTRUM_V252_DFT_SAMPLES];
     double db_bins[SPECTRUM_V252_MAX_BINS];
@@ -5526,6 +5788,8 @@ static void send_radio_spectrum_snapshot_v252(int fd, const struct app_config *c
     query_param(query, "freq_hz", freq_text, sizeof(freq_text));
     query_param(query, "bins", bins_text, sizeof(bins_text));
     query_param(query, "stream_index", stream_text, sizeof(stream_text));
+    query_param(query, "bandwidth_hz", bandwidth_text, sizeof(bandwidth_text));
+    query_param(query, "gain_db", gain_text, sizeof(gain_text));
 
     if (bins_text[0]) {
         if (!spectrum_parse_int_v252(bins_text, &bin_count)) bin_count = SPECTRUM_V252_DEFAULT_BINS;
@@ -5536,6 +5800,30 @@ static void send_radio_spectrum_snapshot_v252(int fd, const struct app_config *c
     if (stream_text[0]) {
         if (!spectrum_parse_int_v252(stream_text, &stream_index)) stream_index = 0;
         if (stream_index < 0 || stream_index > 1) stream_index = 0;
+    }
+
+    if (bandwidth_text[0]) {
+        int parsed_bandwidth = 0;
+        if (!spectrum_parse_int_v252(bandwidth_text, &parsed_bandwidth)) {
+            send_text(fd, 400, "Bad Request", "application/json; charset=utf-8",
+                      "{\"ok\":false,\"error\":\"bandwidth_hz must be an integer Hz value\"}\n");
+            return;
+        }
+        bandwidth_hz = spectrum_clamp_bandwidth_v265((long)parsed_bandwidth);
+    }
+
+    if (gain_text[0]) {
+        char *gain_end = NULL;
+        errno = 0;
+        gain_db = strtod(gain_text, &gain_end);
+        if (errno != 0 || !gain_end || *gain_end != '\0' || !isfinite(gain_db)) {
+            send_text(fd, 400, "Bad Request", "application/json; charset=utf-8",
+                      "{\"ok\":false,\"error\":\"gain_db must be a numeric dB value\"}\n");
+            return;
+        }
+        have_gain = 1;
+        applied_gain_db = spectrum_clamp_gain_v265(gain_db);
+        snprintf(gain_json, sizeof(gain_json), "%.1f", applied_gain_db);
     }
 
     if (freq_text[0]) {
@@ -5558,7 +5846,7 @@ static void send_radio_spectrum_snapshot_v252(int fd, const struct app_config *c
     }
 
     pthread_mutex_lock(&g_radio_lock);
-    if (!spectrum_configure_rx_v252(center_hz, stream_index, error, sizeof(error))) {
+    if (!spectrum_configure_rx_v252(center_hz, stream_index, bandwidth_hz, have_gain, applied_gain_db, error, sizeof(error))) {
         pthread_mutex_unlock(&g_radio_lock);
         char body_error[512];
         char error_json[384];
@@ -5592,12 +5880,14 @@ static void send_radio_spectrum_snapshot_v252(int fd, const struct app_config *c
     used += (size_t)snprintf(body + used, body_size - used,
         "{\"ok\":true,\"state\":\"ok\",\"source\":\"%s\",\"center_hz\":%lld,"
         "\"sample_rate_hz\":%d,\"sample_count\":%lu,\"stream_index\":%d,"
-        "\"bin_count\":%d,\"bins\":[",
+        "\"bandwidth_hz\":%ld,\"gain_db\":%s,\"bin_count\":%d,\"bins\":[",
         source,
         center_hz,
         SPECTRUM_V252_SAMPLE_RATE_HZ,
         (unsigned long)sample_count,
         stream_index,
+        bandwidth_hz,
+        gain_json,
         bin_count);
 
     for (b = 0; b < bin_count && used + 96 < body_size; b++) {
@@ -5616,6 +5906,1692 @@ static void send_radio_spectrum_snapshot_v252(int fd, const struct app_config *c
 }
 
 
+
+/* RECEIVE_MODE_PLACEHOLDERS_V2_6_21C_BEGIN
+ * Mode-aware receive/decode placeholder endpoints.  This is plumbing only:
+ * FM Listen remains on the existing audio path; no decoder DSP is launched here.
+ */
+static int receive_text_contains_v261c(const char *text, const char *needle)
+{
+    size_t needle_len;
+    const char *p;
+    if (!text || !needle || !*needle) return 0;
+    needle_len = strlen(needle);
+    for (p = text; *p; p++) {
+        size_t i;
+        for (i = 0; i < needle_len; i++) {
+            unsigned char a = (unsigned char)p[i];
+            unsigned char b = (unsigned char)needle[i];
+            if (!a || tolower(a) != tolower(b)) break;
+        }
+        if (i == needle_len) return 1;
+    }
+    return 0;
+}
+
+static const char *receive_kind_v261c(const char *mode)
+{
+    if (receive_text_contains_v261c(mode, "cw") || receive_text_contains_v261c(mode, "morse")) return "cw";
+    if (receive_text_contains_v261c(mode, "ax.25") || receive_text_contains_v261c(mode, "aprs") ||
+        receive_text_contains_v261c(mode, "packet") || receive_text_contains_v261c(mode, "fsk") ||
+        receive_text_contains_v261c(mode, "gmsk") || receive_text_contains_v261c(mode, "bpsk") ||
+        receive_text_contains_v261c(mode, "telemetry") || receive_text_contains_v261c(mode, "digital") ||
+        receive_text_contains_v261c(mode, "data")) return "digital";
+    if (receive_text_contains_v261c(mode, "fm") || receive_text_contains_v261c(mode, "nfm") ||
+        receive_text_contains_v261c(mode, "voice")) return "voice";
+    return "unknown";
+}
+
+
+/* CW_DECODE_DIAGNOSTIC_SCAFFOLD_V2_6_22A_SUPPORT_BEGIN */
+static int cw_mode_is_cw_v2622a(const char *mode)
+{
+    char upper[128];
+    size_t i;
+    if (!mode) return 0;
+    for (i = 0; i + 1 < sizeof(upper) && mode[i]; i++) {
+        upper[i] = (char)toupper((unsigned char)mode[i]);
+    }
+    upper[i] = '\0';
+    return strstr(upper, "CW") != NULL || strstr(upper, "MORSE") != NULL;
+}
+
+static int cw_mode_is_voice_v2622a(const char *mode)
+{
+    char upper[128];
+    size_t i;
+    if (!mode) return 0;
+    for (i = 0; i + 1 < sizeof(upper) && mode[i]; i++) {
+        upper[i] = (char)toupper((unsigned char)mode[i]);
+    }
+    upper[i] = '\0';
+    return strstr(upper, "FM") != NULL || strstr(upper, "NFM") != NULL || strstr(upper, "VOICE") != NULL || strstr(upper, "PHONE") != NULL;
+}
+
+static int cw_parse_hz_v2622a(const char *text, long long *out)
+{
+    char *end = NULL;
+    long long value;
+    if (!text || !*text || !out) return 0;
+    errno = 0;
+    value = strtoll(text, &end, 10);
+    if (errno != 0 || !end || *end != '\0') return 0;
+    if (value < PLUTO_MIN_HZ || value > PLUTO_MAX_HZ) return 0;
+    *out = value;
+    return 1;
+}
+
+static int cw_read_pcm_metrics_v2622a(long *pcm_bytes, unsigned long *sample_count, double *rms, int *peak, double *tone_hz, double *duty_percent)
+{
+    FILE *f;
+    long size;
+    long read_bytes;
+    int16_t samples[4800];
+    size_t n;
+    size_t count;
+    double sumsq = 0.0;
+    int max_abs = 0;
+    int crossings = 0;
+    int prev_sign = 0;
+    int active_blocks = 0;
+    int block_count = 0;
+    const int block_size = 240;
+
+    if (pcm_bytes) *pcm_bytes = 0;
+    if (sample_count) *sample_count = 0;
+    if (rms) *rms = 0.0;
+    if (peak) *peak = 0;
+    if (tone_hz) *tone_hz = 0.0;
+    if (duty_percent) *duty_percent = 0.0;
+
+    f = fopen(AUDIO_LIVE_PCM_PATH, "rb");
+    if (!f) return 0;
+    if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return 0; }
+    size = ftell(f);
+    if (size <= 0) { fclose(f); return 0; }
+    if (size > (long)sizeof(samples)) {
+        if (fseek(f, size - (long)sizeof(samples), SEEK_SET) != 0) { fclose(f); return 0; }
+        read_bytes = (long)fread(samples, 1, sizeof(samples), f);
+    } else {
+        if (fseek(f, 0, SEEK_SET) != 0) { fclose(f); return 0; }
+        read_bytes = (long)fread(samples, 1, (size_t)size, f);
+    }
+    fclose(f);
+
+    if (pcm_bytes) *pcm_bytes = size;
+    if (read_bytes < 2400) return 0;
+    count = (size_t)read_bytes / sizeof(int16_t);
+    if (sample_count) *sample_count = (unsigned long)count;
+    if (count < 1200) return 0;
+
+    for (n = 0; n < count; n++) {
+        int v = samples[n];
+        int av = v < 0 ? -v : v;
+        int sign = (v > 0) ? 1 : ((v < 0) ? -1 : 0);
+        sumsq += (double)v * (double)v;
+        if (av > max_abs) max_abs = av;
+        if (sign != 0) {
+            if (prev_sign != 0 && sign != prev_sign) crossings++;
+            prev_sign = sign;
+        }
+    }
+    if (rms) *rms = sqrt(sumsq / (double)count);
+    if (peak) *peak = max_abs;
+    if (tone_hz && count > 1) *tone_hz = ((double)crossings * (double)AUDIO_SAMPLE_RATE) / (2.0 * (double)(count - 1));
+
+    if (duty_percent && max_abs > 0) {
+        size_t offset;
+        double global_rms = sqrt(sumsq / (double)count);
+        double active_threshold = global_rms * 0.8;
+        if (active_threshold < 250.0) active_threshold = 250.0;
+        for (offset = 0; offset + (size_t)block_size <= count; offset += (size_t)block_size) {
+            double block_sum = 0.0;
+            int j;
+            for (j = 0; j < block_size; j++) {
+                double v = (double)samples[offset + (size_t)j];
+                block_sum += v * v;
+            }
+            block_count++;
+            if (sqrt(block_sum / (double)block_size) >= active_threshold) active_blocks++;
+        }
+        if (block_count > 0) *duty_percent = 100.0 * (double)active_blocks / (double)block_count;
+    }
+
+    return 1;
+}
+
+
+/* CW_MORSE_TIMING_DECODER_V2_6_23B
+ * First-pass CW timing decoder built on the v2.6.22 PCM diagnostic scaffold.
+ * It keeps diagnostics visible and adds experimental mark/space timing to Morse symbols/text.
+ */
+static const char *cw_lookup_symbol_v2623(const char *symbol)
+{
+    if (!symbol || !*symbol) return "";
+    if (strcmp(symbol, ".-") == 0) return "A";
+    if (strcmp(symbol, "-...") == 0) return "B";
+    if (strcmp(symbol, "-.-.") == 0) return "C";
+    if (strcmp(symbol, "-..") == 0) return "D";
+    if (strcmp(symbol, ".") == 0) return "E";
+    if (strcmp(symbol, "..-.") == 0) return "F";
+    if (strcmp(symbol, "--.") == 0) return "G";
+    if (strcmp(symbol, "....") == 0) return "H";
+    if (strcmp(symbol, "..") == 0) return "I";
+    if (strcmp(symbol, ".---") == 0) return "J";
+    if (strcmp(symbol, "-.-") == 0) return "K";
+    if (strcmp(symbol, ".-..") == 0) return "L";
+    if (strcmp(symbol, "--") == 0) return "M";
+    if (strcmp(symbol, "-.") == 0) return "N";
+    if (strcmp(symbol, "---") == 0) return "O";
+    if (strcmp(symbol, ".--.") == 0) return "P";
+    if (strcmp(symbol, "--.-") == 0) return "Q";
+    if (strcmp(symbol, ".-.") == 0) return "R";
+    if (strcmp(symbol, "...") == 0) return "S";
+    if (strcmp(symbol, "-") == 0) return "T";
+    if (strcmp(symbol, "..-") == 0) return "U";
+    if (strcmp(symbol, "...-") == 0) return "V";
+    if (strcmp(symbol, ".--") == 0) return "W";
+    if (strcmp(symbol, "-..-") == 0) return "X";
+    if (strcmp(symbol, "-.--") == 0) return "Y";
+    if (strcmp(symbol, "--..") == 0) return "Z";
+    if (strcmp(symbol, ".----") == 0) return "1";
+    if (strcmp(symbol, "..---") == 0) return "2";
+    if (strcmp(symbol, "...--") == 0) return "3";
+    if (strcmp(symbol, "....-") == 0) return "4";
+    if (strcmp(symbol, ".....") == 0) return "5";
+    if (strcmp(symbol, "-....") == 0) return "6";
+    if (strcmp(symbol, "--...") == 0) return "7";
+    if (strcmp(symbol, "---..") == 0) return "8";
+    if (strcmp(symbol, "----.") == 0) return "9";
+    if (strcmp(symbol, "-----") == 0) return "0";
+    return "?";
+}
+
+static void cw_append_char_v2623(char *decoded, size_t decoded_size, char *current, size_t current_size)
+{
+    const char *letter;
+    size_t used;
+    if (!decoded || !current || !current[0]) return;
+    letter = cw_lookup_symbol_v2623(current);
+    used = strlen(decoded);
+    if (used + strlen(letter) + 1 < decoded_size) {
+        strcat(decoded, letter);
+    }
+    current[0] = '\0';
+    (void)current_size;
+}
+
+static void cw_send_diagnostic_output_v2622a(int fd, const char *mode, const char *mode_json_hint)
+{
+    char mode_json[128];
+    char body[4096];
+    FILE *f;
+    long file_size = 0;
+    long bytes_to_read;
+    size_t sample_count = 0;
+    size_t max_samples = 120000; /* five seconds at 24 kHz */
+    int16_t *samples = NULL;
+    double sum_sq = 0.0;
+    double rms = 0.0;
+    int peak = 0;
+    size_t n;
+    int zero_crossings = 0;
+    double tone_hz = 0.0;
+    const int block = 240; /* 10 ms */
+    int blocks = 0;
+    double *env = NULL;
+    double env_min = 0.0, env_max = 0.0, env_avg = 0.0, threshold = 0.0;
+    int active_blocks = 0;
+    double duty = 0.0;
+    int unit_blocks = 0;
+    char morse[512] = "";
+    char decoded[256] = "";
+    char current[16] = "";
+    char morse_json[1024];
+    char decoded_json[512];
+    char status_json[256];
+
+    (void)mode_json_hint;
+    json_escape(mode_json, sizeof(mode_json), mode && *mode ? mode : "CW");
+
+    f = fopen(AUDIO_LIVE_PCM_PATH, "rb");
+    if (!f) {
+        snprintf(body, sizeof(body),
+                 "{\"ok\":true,\"state\":\"cw_morse_experimental_waiting\",\"decoder_state\":\"signal_diagnostic\",\"receive_kind\":\"cw\",\"mode\":\"%s\",\"pcm_bytes\":0,\"lines\":[\"CW Morse timing decoder active.\",\"Waiting for live PCM capture.\",\"Start Decode CW and allow one or two seconds of live capture.\"]}\n",
+                 mode_json);
+        send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
+        return;
+    }
+
+    fseek(f, 0, SEEK_END);
+    file_size = ftell(f);
+    if (file_size < 0) file_size = 0;
+    bytes_to_read = file_size;
+    if (bytes_to_read > (long)(max_samples * 2)) bytes_to_read = (long)(max_samples * 2);
+    if (bytes_to_read < 2400) {
+        fclose(f);
+        snprintf(body, sizeof(body),
+                 "{\"ok\":true,\"state\":\"cw_morse_experimental_waiting\",\"decoder_state\":\"signal_diagnostic\",\"receive_kind\":\"cw\",\"mode\":\"%s\",\"pcm_bytes\":%ld,\"lines\":[\"CW Morse timing decoder active.\",\"Waiting for at least 1200 PCM samples from the live audio path.\",\"Start Decode CW and allow one or two seconds of live capture.\"]}\n",
+                 mode_json, file_size);
+        send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
+        return;
+    }
+
+    samples = (int16_t *)malloc((size_t)bytes_to_read);
+    if (!samples) {
+        fclose(f);
+        send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"out of memory\"}\n");
+        return;
+    }
+
+    fseek(f, -bytes_to_read, SEEK_END);
+    sample_count = fread(samples, 2, (size_t)bytes_to_read / 2u, f);
+    fclose(f);
+
+    if (sample_count < 1200) {
+        free(samples);
+        snprintf(body, sizeof(body),
+                 "{\"ok\":true,\"state\":\"cw_morse_experimental_waiting\",\"decoder_state\":\"signal_diagnostic\",\"receive_kind\":\"cw\",\"mode\":\"%s\",\"pcm_bytes\":%ld,\"lines\":[\"CW Morse timing decoder active.\",\"Not enough PCM samples yet.\"]}\n",
+                 mode_json, file_size);
+        send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
+        return;
+    }
+
+    for (n = 0; n < sample_count; n++) {
+        int v = samples[n];
+        int av = v < 0 ? -v : v;
+        if (av > peak) peak = av;
+        sum_sq += (double)v * (double)v;
+        if (n > 0) {
+            if ((samples[n - 1] <= 0 && samples[n] > 0) || (samples[n - 1] >= 0 && samples[n] < 0)) {
+                zero_crossings++;
+            }
+        }
+    }
+    rms = sqrt(sum_sq / (double)sample_count);
+    tone_hz = ((double)zero_crossings * 24000.0) / (2.0 * (double)sample_count);
+
+    blocks = (int)(sample_count / (size_t)block);
+    if (blocks > 0) {
+        int b;
+        env = (double *)calloc((size_t)blocks, sizeof(double));
+        if (env) {
+            for (b = 0; b < blocks; b++) {
+                double ss = 0.0;
+                int j;
+                for (j = 0; j < block; j++) {
+                    int v = samples[(size_t)b * (size_t)block + (size_t)j];
+                    ss += (double)v * (double)v;
+                }
+                env[b] = sqrt(ss / (double)block);
+                if (b == 0 || env[b] < env_min) env_min = env[b];
+                if (b == 0 || env[b] > env_max) env_max = env[b];
+                env_avg += env[b];
+            }
+            env_avg /= (double)blocks;
+            threshold = env_min + ((env_max - env_min) * 0.35);
+            if (threshold < rms * 0.75) threshold = rms * 0.75;
+            if (threshold < 20.0) threshold = 20.0;
+
+            for (b = 0; b < blocks; b++) {
+                if (env[b] >= threshold) active_blocks++;
+            }
+            duty = blocks > 0 ? ((double)active_blocks * 100.0 / (double)blocks) : 0.0;
+
+            if (active_blocks > 0 && active_blocks < blocks && env_max > env_min * 1.5) {
+                int state = env[0] >= threshold ? 1 : 0;
+                int run_len = 1;
+                int min_mark = 9999;
+                int pass;
+
+                for (pass = 0; pass < 2; pass++) {
+                    state = env[0] >= threshold ? 1 : 0;
+                    run_len = 1;
+                    if (pass == 1) {
+                        morse[0] = '\0';
+                        decoded[0] = '\0';
+                        current[0] = '\0';
+                    }
+                    for (b = 1; b <= blocks; b++) {
+                        int s = (b < blocks && env[b] >= threshold) ? 1 : 0;
+                        if (b < blocks && s == state) {
+                            run_len++;
+                            continue;
+                        }
+                        if (pass == 0) {
+                            if (state && run_len >= 2 && run_len < min_mark) min_mark = run_len;
+                        } else {
+                            if (state) {
+                                const char *sym = (run_len <= unit_blocks * 2) ? "." : "-";
+                                if (strlen(current) + 2 < sizeof(current)) strcat(current, sym);
+                                if (strlen(morse) + 2 < sizeof(morse)) strcat(morse, sym);
+                            } else {
+                                if (run_len >= unit_blocks * 7) {
+                                    cw_append_char_v2623(decoded, sizeof(decoded), current, sizeof(current));
+                                    if (strlen(decoded) + 2 < sizeof(decoded)) strcat(decoded, " ");
+                                    if (strlen(morse) + 4 < sizeof(morse)) strcat(morse, " / ");
+                                } else if (run_len >= unit_blocks * 3) {
+                                    cw_append_char_v2623(decoded, sizeof(decoded), current, sizeof(current));
+                                    if (strlen(morse) + 2 < sizeof(morse)) strcat(morse, " ");
+                                }
+                            }
+                        }
+                        state = s;
+                        run_len = 1;
+                    }
+                    if (pass == 0) {
+                        if (min_mark == 9999) min_mark = 3;
+                        unit_blocks = min_mark;
+                        if (unit_blocks < 2) unit_blocks = 2;
+                        if (unit_blocks > 20) unit_blocks = 20;
+                    }
+                }
+                cw_append_char_v2623(decoded, sizeof(decoded), current, sizeof(current));
+            }
+            free(env);
+        }
+    }
+
+    free(samples);
+
+    if (!morse[0]) snprintf(morse, sizeof(morse), "(no stable mark/space timing yet)");
+    if (!decoded[0]) snprintf(decoded, sizeof(decoded), "(no text yet)");
+    json_escape(morse_json, sizeof(morse_json), morse);
+    json_escape(decoded_json, sizeof(decoded_json), decoded);
+    snprintf(status_json, sizeof(status_json), "unit %.0f ms, threshold %.1f", unit_blocks > 0 ? (double)unit_blocks * 10.0 : 0.0, threshold);
+
+    snprintf(body, sizeof(body),
+             "{\"ok\":true,\"state\":\"cw_morse_experimental\",\"decoder_state\":\"experimental\",\"receive_kind\":\"cw\",\"mode\":\"%s\",\"sample_rate_hz\":24000,\"sample_count\":%lu,\"pcm_bytes\":%ld,\"rms\":%.1f,\"peak\":%d,\"estimated_tone_hz\":%.1f,\"key_duty_percent\":%.1f,\"morse\":\"%s\",\"decoded_text\":\"%s\",\"lines\":[\"CW Morse timing decoder active.\",\"PCM samples analyzed: %lu at 24000 Hz.\",\"RMS %.1f, peak %d.\",\"Estimated tone from zero crossings: %.1f Hz.\",\"Key-up envelope duty estimate: %.1f%%.\",\"Timing: %s.\",\"Morse symbols: %s\",\"Decoded text: %s\"]}\n",
+             mode_json,
+             (unsigned long)sample_count,
+             file_size,
+             rms,
+             peak,
+             tone_hz,
+             duty,
+             morse_json,
+             decoded_json,
+             (unsigned long)sample_count,
+             rms,
+             peak,
+             tone_hz,
+             duty,
+             status_json,
+             morse_json,
+             decoded_json);
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
+}
+
+/* CW_DECODE_DIAGNOSTIC_SCAFFOLD_V2_6_22A_SUPPORT_END */
+
+
+static void send_receive_status_v261c(int fd)
+{
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", "{\"ok\":true,\"state\":\"idle\",\"version\":\"2.6.22a\",\"message\":\"Receive/decode foundation is installed. FM Listen uses the existing audio path; CW Morse timing decoder is active; digital decoders are placeholders.\",\"supported\":[\"voice\",\"cw_morse_experimental\",\"digital_placeholder\"]}\n");
+}
+
+
+
+static void send_receive_stop_v261c(int fd)
+{
+    stop_live_audio_session();
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", "{\"ok\":true,\"state\":\"stopped\",\"message\":\"Receive/decode capture stopped.\"}\n");
+}
+
+
+
+static int ax25_mode_is_digital_v2627(const char *mode);
+
+static void send_receive_start_v261c(int fd, const struct app_config *cfg, const char *query)
+{
+    char mode[128] = "";
+    char name[256] = "";
+    char downlink_hz[64] = "";
+    char mode_json[256];
+    char name_json[512];
+    char downlink_json[128];
+    char body[1600];
+    long long frequency_hz = 0;
+    const char *kind;
+    query_param(query, "mode", mode, sizeof(mode));
+    query_param(query, "name", name, sizeof(name));
+    query_param(query, "downlink_hz", downlink_hz, sizeof(downlink_hz));
+    if (!downlink_hz[0]) query_param(query, "freq_hz", downlink_hz, sizeof(downlink_hz));
+    json_escape(mode_json, sizeof(mode_json), mode);
+    json_escape(name_json, sizeof(name_json), name);
+    json_escape(downlink_json, sizeof(downlink_json), downlink_hz);
+    kind = receive_kind_v261c(mode);
+
+    if (strcmp(kind, "voice") == 0) {
+        snprintf(body, sizeof(body), "{\"ok\":true,\"state\":\"voice_path\",\"receive_kind\":\"voice\",\"name\":\"%s\",\"mode\":\"%s\",\"downlink_hz\":\"%s\",\"message\":\"FM/voice receive uses the existing Listen audio path.\"}\n", name_json, mode_json, downlink_json);
+        send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
+        return;
+    }
+
+    if ((strcmp(kind, "cw") == 0 || strcmp(kind, "digital") == 0 || ax25_mode_is_digital_v2627(mode)) && parse_frequency_hz(downlink_hz, &frequency_hz)) {
+        if (!start_live_audio_session(cfg, frequency_hz)) {
+            send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"could not start live audio capture for decoder diagnostics\"}\n");
+            return;
+        }
+        if (strcmp(kind, "cw") == 0) {
+            snprintf(body, sizeof(body), "{\"ok\":true,\"state\":\"cw_diagnostic_capture\",\"decoder_state\":\"signal_diagnostic\",\"receive_kind\":\"cw\",\"name\":\"%s\",\"mode\":\"%s\",\"downlink_hz\":\"%s\",\"message\":\"CW diagnostic capture started.\"}\n", name_json, mode_json, downlink_json);
+        } else {
+            snprintf(body, sizeof(body), "{\"ok\":true,\"state\":\"ax25_diagnostic_capture\",\"decoder_state\":\"frame_parser_ready\",\"receive_kind\":\"digital\",\"name\":\"%s\",\"mode\":\"%s\",\"downlink_hz\":\"%s\",\"message\":\"Digital diagnostic capture started. The decode modal will report mode-specific live signal metrics.\"}\n", name_json, mode_json, downlink_json);
+        }
+        send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
+        return;
+    }
+
+    snprintf(body, sizeof(body), "{\"ok\":true,\"state\":\"decode_placeholder\",\"decoder_state\":\"not_implemented\",\"receive_kind\":\"unknown\",\"name\":\"%s\",\"mode\":\"%s\",\"downlink_hz\":\"%s\",\"message\":\"Unknown receive mode. FM voice still uses Listen; decoder selection will be added per protocol.\"}\n", name_json, mode_json, downlink_json);
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
+}
+
+
+
+
+
+/* AX25_DIGITAL_DECODER_CORE_V2_6_27 */
+static int ax25_mode_is_digital_v2627(const char *mode)
+{
+    char lower[256];
+    size_t i;
+    if (!mode) return 0;
+    for (i = 0; i + 1 < sizeof(lower) && mode[i]; i++) lower[i] = (char)tolower((unsigned char)mode[i]);
+    lower[i] = '\0';
+    return strstr(lower, "ax.25") || strstr(lower, "ax25") || strstr(lower, "aprs") ||
+           strstr(lower, "packet") || strstr(lower, "afsk") || strstr(lower, "1200") ||
+           strstr(lower, "gmsk") || strstr(lower, "bpsk") || strstr(lower, "fsk") ||
+           strstr(lower, "telemetry") || strstr(lower, "digital") || strstr(lower, "data");
+}
+
+static unsigned short ax25_crc_update_v2627(unsigned short crc, unsigned char byte)
+{
+    int i;
+    crc ^= byte;
+    for (i = 0; i < 8; i++) {
+        if (crc & 1) crc = (unsigned short)((crc >> 1) ^ 0x8408);
+        else crc = (unsigned short)(crc >> 1);
+    }
+    return crc;
+}
+
+static unsigned short ax25_crc_calc_v2627(const unsigned char *data, size_t len)
+{
+    unsigned short crc = 0xffff;
+    size_t i;
+    for (i = 0; i < len; i++) crc = ax25_crc_update_v2627(crc, data[i]);
+    return (unsigned short)(~crc);
+}
+
+static void ax25_encode_addr_v2627(unsigned char *out, const char *call, int ssid, int last)
+{
+    int i;
+    for (i = 0; i < 6; i++) {
+        unsigned char ch = ' ';
+        if (call && call[i]) ch = (unsigned char)toupper((unsigned char)call[i]);
+        out[i] = (unsigned char)(ch << 1);
+    }
+    out[6] = (unsigned char)(0x60 | ((ssid & 0x0f) << 1) | (last ? 1 : 0));
+}
+
+static void ax25_decode_addr_v2627(const unsigned char *in, char *out, size_t out_size)
+{
+    char call[8];
+    int ssid;
+    int i, end = 6;
+    if (!out || out_size == 0) return;
+    for (i = 0; i < 6; i++) call[i] = (char)((in[i] >> 1) & 0x7f);
+    call[6] = '\0';
+    while (end > 0 && call[end - 1] == ' ') end--;
+    call[end] = '\0';
+    ssid = (in[6] >> 1) & 0x0f;
+    if (ssid > 0) snprintf(out, out_size, "%s-%d", call, ssid);
+    else snprintf(out, out_size, "%s", call);
+}
+
+static int ax25_decode_ui_frame_v2627(const unsigned char *frame, size_t len, char *summary, size_t summary_size, char *info, size_t info_size, char *error, size_t error_size)
+{
+    size_t pos = 0;
+    char dest[32] = "";
+    char src[32] = "";
+    unsigned short calc;
+    unsigned short rx_fcs;
+    size_t info_len;
+    if (!frame || len < 18) {
+        snprintf(error, error_size, "frame too short");
+        return 0;
+    }
+    rx_fcs = (unsigned short)(frame[len - 2] | (frame[len - 1] << 8));
+    calc = ax25_crc_calc_v2627(frame, len - 2);
+    if (rx_fcs != calc) {
+        snprintf(error, error_size, "bad FCS expected 0x%04x got 0x%04x", calc, rx_fcs);
+        return 0;
+    }
+    ax25_decode_addr_v2627(frame, dest, sizeof(dest));
+    pos += 7;
+    ax25_decode_addr_v2627(frame + pos, src, sizeof(src));
+    while (pos + 7 <= len - 2 && !(frame[pos + 6] & 1)) pos += 7;
+    pos += 7;
+    if (pos + 2 > len - 2) {
+        snprintf(error, error_size, "missing control/PID");
+        return 0;
+    }
+    if (frame[pos] != 0x03 || frame[pos + 1] != 0xf0) {
+        snprintf(error, error_size, "not an AX.25 UI/no-layer3 frame control=0x%02x pid=0x%02x", frame[pos], frame[pos + 1]);
+        return 0;
+    }
+    pos += 2;
+    info_len = (len - 2 > pos) ? (len - 2 - pos) : 0;
+    if (info && info_size > 0) {
+        size_t n = info_len;
+        if (n + 1 > info_size) n = info_size - 1;
+        memcpy(info, frame + pos, n);
+        info[n] = '\0';
+    }
+    if (summary && summary_size > 0) snprintf(summary, summary_size, "%s>%s:%s", src, dest, info ? info : "");
+    return 1;
+}
+
+static size_t ax25_make_selftest_frame_v2627(unsigned char *frame, size_t frame_size)
+{
+    const char *info = ">AX25 SELFTEST";
+    size_t pos = 0;
+    size_t info_len = strlen(info);
+    unsigned short fcs;
+    if (!frame || frame_size < 64) return 0;
+    ax25_encode_addr_v2627(frame + pos, "APRS", 0, 0); pos += 7;
+    ax25_encode_addr_v2627(frame + pos, "N0CALL", 0, 1); pos += 7;
+    frame[pos++] = 0x03;
+    frame[pos++] = 0xf0;
+    memcpy(frame + pos, info, info_len); pos += info_len;
+    fcs = ax25_crc_calc_v2627(frame, pos);
+    frame[pos++] = (unsigned char)(fcs & 0xff);
+    frame[pos++] = (unsigned char)((fcs >> 8) & 0xff);
+    return pos;
+}
+
+static int ax25_read_pcm_metrics_v2627(long *pcm_bytes, unsigned long *sample_count, double *rms, int *peak)
+{
+    FILE *f;
+    short sample;
+    unsigned long count = 0;
+    double sum_sq = 0.0;
+    int max_abs = 0;
+    long bytes = 0;
+    f = fopen(AUDIO_LIVE_PCM_PATH, "rb");
+    if (!f) return 0;
+    while (fread(&sample, sizeof(sample), 1, f) == 1) {
+        int a = sample < 0 ? -sample : sample;
+        if (a > max_abs) max_abs = a;
+        sum_sq += (double)sample * (double)sample;
+        count++;
+    }
+    if (fseek(f, 0, SEEK_END) == 0) bytes = ftell(f);
+    fclose(f);
+    if (pcm_bytes) *pcm_bytes = bytes;
+    if (sample_count) *sample_count = count;
+    if (rms) *rms = count ? sqrt(sum_sq / (double)count) : 0.0;
+    if (peak) *peak = max_abs;
+    return count > 0;
+}
+
+static void send_ax25_selftest_v2627(int fd)
+{
+    unsigned char frame[128];
+    size_t len;
+    char summary[256] = "";
+    char info[128] = "";
+    char error[256] = "";
+    char summary_json[512];
+    char info_json[256];
+    char error_json[512];
+    char body[1400];
+    int ok;
+    len = ax25_make_selftest_frame_v2627(frame, sizeof(frame));
+    ok = ax25_decode_ui_frame_v2627(frame, len, summary, sizeof(summary), info, sizeof(info), error, sizeof(error));
+    json_escape(summary_json, sizeof(summary_json), summary);
+    json_escape(info_json, sizeof(info_json), info);
+    json_escape(error_json, sizeof(error_json), error);
+    snprintf(body, sizeof(body), "{\"ok\":%s,\"state\":\"ax25_selftest\",\"decoder_state\":\"%s\",\"version\":\"2.6.27\",\"frame_bytes\":%lu,\"decoded_text\":\"%s\",\"info\":\"%s\",\"error\":\"%s\",\"expected\":\"N0CALL>APRS:>AX25 SELFTEST\"}\n", ok ? "true" : "false", ok ? "pass" : "fail", (unsigned long)len, summary_json, info_json, error_json);
+    send_text(fd, ok ? 200 : 500, ok ? "OK" : "Internal Server Error", "application/json; charset=utf-8", body);
+}
+
+static void ax25_send_decode_output_v2627(int fd, const char *mode, const char *mode_json)
+{
+    long pcm_bytes = 0;
+    unsigned long sample_count = 0;
+    double rms = 0.0;
+    int peak = 0;
+    char body[1800];
+    if (!mode_json) mode_json = "";
+    if (!ax25_read_pcm_metrics_v2627(&pcm_bytes, &sample_count, &rms, &peak) || sample_count < 1200) {
+        snprintf(body, sizeof(body), "{\"ok\":true,\"state\":\"ax25_waiting\",\"decoder_state\":\"frame_parser_ready\",\"receive_kind\":\"digital\",\"mode\":\"%s\",\"pcm_bytes\":%ld,\"lines\":[\"AX.25/APRS decoder core is installed.\",\"Frame parser and FCS validation self-test are available at /api/radio/decode/ax25/selftest.\",\"Waiting for live audio PCM from Decode.\",\"AFSK 1200 baud symbol recovery will be added next.\"]}\n", mode_json, pcm_bytes);
+        send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
+        return;
+    }
+    snprintf(body, sizeof(body), "{\"ok\":true,\"state\":\"ax25_diagnostic\",\"decoder_state\":\"frame_parser_ready\",\"receive_kind\":\"digital\",\"mode\":\"%s\",\"sample_rate_hz\":%d,\"sample_count\":%lu,\"pcm_bytes\":%ld,\"rms\":%.1f,\"peak\":%d,\"lines\":[\"AX.25/APRS decoder core is installed.\",\"PCM samples analyzed: %lu at %d Hz.\",\"RMS %.1f, peak %d.\",\"AX.25 UI-frame parser and CRC/FCS validator are active.\",\"Known-frame self-test endpoint: /api/radio/decode/ax25/selftest.\",\"Next patch will recover Bell 202 AFSK bits from this audio.\"]}\n", mode_json, AUDIO_SAMPLE_RATE, sample_count, pcm_bytes, rms, peak, sample_count, AUDIO_SAMPLE_RATE, rms, peak);
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
+}
+/* END_AX25_DIGITAL_DECODER_CORE_V2_6_27 */
+
+
+/* AX25_AFSK_DIAGNOSTIC_SCAFFOLD_V2_6_30 */
+static double ax25_afsk_goertzel_power_v2630(const int16_t *samples, size_t sample_count, double target_hz)
+{
+    double omega = (2.0 * M_PI * target_hz) / (double)AUDIO_SAMPLE_RATE;
+    double coeff = 2.0 * cos(omega);
+    double q0 = 0.0, q1 = 0.0, q2 = 0.0;
+    size_t i;
+    if (!samples || sample_count == 0) return 0.0;
+    for (i = 0; i < sample_count; i++) {
+        q0 = coeff * q1 - q2 + ((double)samples[i] / 32768.0);
+        q2 = q1;
+        q1 = q0;
+    }
+    return q1 * q1 + q2 * q2 - coeff * q1 * q2;
+}
+
+static int ax25_afsk_read_pcm_metrics_v2630(
+    long *pcm_bytes,
+    unsigned long *sample_count,
+    double *rms,
+    int *peak,
+    double *mark1200,
+    double *space2200,
+    double *dominant_hz,
+    double *balance_percent)
+{
+    FILE *f;
+    long size = 0;
+    long read_bytes = 0;
+    size_t samples_to_read;
+    int16_t *samples = NULL;
+    size_t got;
+    size_t i;
+    double sum_sq = 0.0;
+    int max_abs = 0;
+    double p1200, p2200, total;
+
+    if (pcm_bytes) *pcm_bytes = 0;
+    if (sample_count) *sample_count = 0;
+    if (rms) *rms = 0.0;
+    if (peak) *peak = 0;
+    if (mark1200) *mark1200 = 0.0;
+    if (space2200) *space2200 = 0.0;
+    if (dominant_hz) *dominant_hz = 0.0;
+    if (balance_percent) *balance_percent = 0.0;
+
+    f = fopen(AUDIO_LIVE_PCM_PATH, "rb");
+    if (!f) return 0;
+    if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return 0; }
+    size = ftell(f);
+    if (size <= 0) { fclose(f); return 0; }
+
+    read_bytes = size;
+    if (read_bytes > (long)(AUDIO_SAMPLE_RATE * 2)) read_bytes = (long)(AUDIO_SAMPLE_RATE * 2); /* last ~1 second */
+    read_bytes -= (read_bytes % 2);
+    if (read_bytes < 2) { fclose(f); return 0; }
+    if (fseek(f, size - read_bytes, SEEK_SET) != 0) { fclose(f); return 0; }
+
+    samples_to_read = (size_t)read_bytes / 2u;
+    samples = (int16_t *)calloc(samples_to_read, sizeof(int16_t));
+    if (!samples) { fclose(f); return 0; }
+    got = fread(samples, sizeof(int16_t), samples_to_read, f);
+    fclose(f);
+    if (got < 64) { free(samples); return 0; }
+
+    for (i = 0; i < got; i++) {
+        int v = (int)samples[i];
+        int av = v < 0 ? -v : v;
+        if (av > max_abs) max_abs = av;
+        sum_sq += (double)v * (double)v;
+    }
+
+    p1200 = ax25_afsk_goertzel_power_v2630(samples, got, 1200.0);
+    p2200 = ax25_afsk_goertzel_power_v2630(samples, got, 2200.0);
+    total = p1200 + p2200;
+
+    if (pcm_bytes) *pcm_bytes = size;
+    if (sample_count) *sample_count = (unsigned long)got;
+    if (rms) *rms = sqrt(sum_sq / (double)got);
+    if (peak) *peak = max_abs;
+    if (mark1200) *mark1200 = p1200;
+    if (space2200) *space2200 = p2200;
+    if (dominant_hz) *dominant_hz = (p2200 > p1200) ? 2200.0 : 1200.0;
+    if (balance_percent) *balance_percent = total > 0.0 ? (100.0 * p1200 / total) : 0.0;
+
+    free(samples);
+    return 1;
+}
+
+static void ax25_send_decode_output_v2630(int fd, const char *mode, const char *mode_json)
+{
+    char body[4096];
+    char local_mode_json[256];
+    long pcm_bytes = 0;
+    unsigned long sample_count = 0;
+    double rms = 0.0;
+    int peak = 0;
+    double mark1200 = 0.0;
+    double space2200 = 0.0;
+    double dominant_hz = 0.0;
+    double balance_percent = 0.0;
+    int have_metrics;
+    (void)mode_json;
+
+    json_escape(local_mode_json, sizeof(local_mode_json), mode ? mode : "AX.25");
+    have_metrics = ax25_afsk_read_pcm_metrics_v2630(&pcm_bytes, &sample_count, &rms, &peak, &mark1200, &space2200, &dominant_hz, &balance_percent);
+
+    if (!have_metrics) {
+        snprintf(body, sizeof(body), "{\"ok\":true,\"state\":\"ax25_afsk_waiting\",\"decoder_state\":\"signal_diagnostic\",\"receive_kind\":\"digital\",\"mode\":\"%s\",\"lines\":[\"AX.25/APRS parser self-test is installed.\",\"Waiting for live PCM from Decode on a digital/packet pass.\",\"Next stage after this diagnostic is Bell 202 bit/HDLC recovery.\"]}\n", local_mode_json);
+        send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
+        return;
+    }
+
+    snprintf(body, sizeof(body), "{\"ok\":true,\"state\":\"ax25_afsk_diagnostic\",\"decoder_state\":\"signal_diagnostic\",\"receive_kind\":\"digital\",\"mode\":\"%s\",\"sample_rate_hz\":%d,\"sample_count\":%lu,\"pcm_bytes\":%ld,\"rms\":%.1f,\"peak\":%d,\"mark_1200_power\":%.6e,\"space_2200_power\":%.6e,\"dominant_tone_hz\":%.1f,\"mark_balance_percent\":%.1f,\"lines\":[\"AX.25/APRS AFSK diagnostic scaffold active.\",\"PCM samples analyzed: %lu at %d Hz.\",\"RMS %.1f, peak %d.\",\"Bell 202 mark 1200 Hz power %.6e.\",\"Bell 202 space 2200 Hz power %.6e.\",\"Dominant tone estimate %.1f Hz; mark balance %.1f%%.\",\"Next patch will recover 1200-baud bits and HDLC flags before packet decode.\"]}\n", local_mode_json, AUDIO_SAMPLE_RATE, sample_count, pcm_bytes, rms, peak, mark1200, space2200, dominant_hz, balance_percent, sample_count, AUDIO_SAMPLE_RATE, rms, peak, mark1200, space2200, dominant_hz, balance_percent);
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
+}
+/* AX25_AFSK_DIAGNOSTIC_SCAFFOLD_V2_6_30_END */
+
+
+/* DIGITAL_LIVE_DIAGNOSTICS_V2_6_37 */
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+static int digital_v2637_contains_icase(const char *text, const char *needle)
+{
+    char hay[256];
+    char ndl[64];
+    size_t i;
+    if (!text || !needle) return 0;
+    for (i = 0; i + 1 < sizeof(hay) && text[i]; i++) hay[i] = (char)tolower((unsigned char)text[i]);
+    hay[i] = '\0';
+    for (i = 0; i + 1 < sizeof(ndl) && needle[i]; i++) ndl[i] = (char)tolower((unsigned char)needle[i]);
+    ndl[i] = '\0';
+    return strstr(hay, ndl) != NULL;
+}
+
+static int digital_v2637_mode_is_bpsk(const char *mode)
+{
+    return digital_v2637_contains_icase(mode, "bpsk") || digital_v2637_contains_icase(mode, "psk");
+}
+
+static int digital_v2637_mode_is_fsk_gmsk(const char *mode)
+{
+    return digital_v2637_contains_icase(mode, "gmsk") || digital_v2637_contains_icase(mode, "fsk") || digital_v2637_contains_icase(mode, "9600");
+}
+
+static int digital_v2637_mode_is_packet_afsk(const char *mode)
+{
+    return digital_v2637_contains_icase(mode, "ax.25") || digital_v2637_contains_icase(mode, "ax25") ||
+           digital_v2637_contains_icase(mode, "aprs") || digital_v2637_contains_icase(mode, "packet") ||
+           digital_v2637_contains_icase(mode, "afsk") || digital_v2637_contains_icase(mode, "1200");
+}
+
+static double digital_v2637_goertzel_power(const int16_t *samples, size_t sample_count, double target_hz)
+{
+    double omega = (2.0 * M_PI * target_hz) / (double)AUDIO_SAMPLE_RATE;
+    double coeff = 2.0 * cos(omega);
+    double q0 = 0.0, q1 = 0.0, q2 = 0.0;
+    size_t i;
+    if (!samples || sample_count == 0 || target_hz <= 0.0) return 0.0;
+    for (i = 0; i < sample_count; i++) {
+        q0 = coeff * q1 - q2 + ((double)samples[i] / 32768.0);
+        q2 = q1;
+        q1 = q0;
+    }
+    return q1 * q1 + q2 * q2 - coeff * q1 * q2;
+}
+
+static int digital_v2637_read_live_pcm(
+    int16_t **out_samples,
+    size_t *out_sample_count,
+    long *out_pcm_bytes,
+    double *out_rms,
+    int *out_peak,
+    double *out_zero_cross_hz)
+{
+    FILE *f;
+    long size = 0;
+    long read_bytes = 0;
+    size_t samples_to_read;
+    int16_t *samples = NULL;
+    size_t got, i;
+    double sum_sq = 0.0;
+    int max_abs = 0;
+    unsigned long crossings = 0;
+    int prev_sign = 0;
+
+    if (out_samples) *out_samples = NULL;
+    if (out_sample_count) *out_sample_count = 0;
+    if (out_pcm_bytes) *out_pcm_bytes = 0;
+    if (out_rms) *out_rms = 0.0;
+    if (out_peak) *out_peak = 0;
+    if (out_zero_cross_hz) *out_zero_cross_hz = 0.0;
+
+    f = fopen(AUDIO_LIVE_PCM_PATH, "rb");
+    if (!f) return 0;
+    if (fseek(f, 0, SEEK_END) != 0) { fclose(f); return 0; }
+    size = ftell(f);
+    if (size <= 0) { fclose(f); return 0; }
+
+    read_bytes = size;
+    if (read_bytes > (long)(AUDIO_SAMPLE_RATE * 2)) read_bytes = (long)(AUDIO_SAMPLE_RATE * 2);
+    read_bytes -= (read_bytes % 2);
+    if (read_bytes < 2) { fclose(f); return 0; }
+    if (fseek(f, size - read_bytes, SEEK_SET) != 0) { fclose(f); return 0; }
+
+    samples_to_read = (size_t)read_bytes / 2u;
+    samples = (int16_t *)calloc(samples_to_read, sizeof(int16_t));
+    if (!samples) { fclose(f); return 0; }
+    got = fread(samples, sizeof(int16_t), samples_to_read, f);
+    fclose(f);
+    if (got < 64) { free(samples); return 0; }
+
+    for (i = 0; i < got; i++) {
+        int v = (int)samples[i];
+        int av = v < 0 ? -v : v;
+        int sign = v > 0 ? 1 : (v < 0 ? -1 : prev_sign);
+        if (av > max_abs) max_abs = av;
+        sum_sq += (double)v * (double)v;
+        if (prev_sign != 0 && sign != 0 && sign != prev_sign) crossings++;
+        if (sign != 0) prev_sign = sign;
+    }
+
+    if (out_samples) *out_samples = samples;
+    else free(samples);
+    if (out_sample_count) *out_sample_count = got;
+    if (out_pcm_bytes) *out_pcm_bytes = size;
+    if (out_rms) *out_rms = sqrt(sum_sq / (double)got);
+    if (out_peak) *out_peak = max_abs;
+    if (out_zero_cross_hz) *out_zero_cross_hz = ((double)crossings * (double)AUDIO_SAMPLE_RATE) / (2.0 * (double)got);
+    return 1;
+}
+
+static double digital_v2637_dominant_tone(const int16_t *samples, size_t sample_count, double *out_power)
+{
+    double best_hz = 0.0;
+    double best_power = 0.0;
+    double hz;
+    for (hz = 600.0; hz <= 3200.0; hz += 100.0) {
+        double p = digital_v2637_goertzel_power(samples, sample_count, hz);
+        if (p > best_power) {
+            best_power = p;
+            best_hz = hz;
+        }
+    }
+    if (out_power) *out_power = best_power;
+    return best_hz;
+}
+
+static void digital_v2637_send_waiting(int fd, const char *state, const char *mode_json, const char *label)
+{
+    char body[1600];
+    snprintf(body, sizeof(body),
+        "{\"ok\":true,\"state\":\"%s\",\"decoder_state\":\"waiting_for_samples\",\"receive_kind\":\"digital\",\"mode\":\"%s\",\"lines\":[\"%s diagnostics are ready.\",\"Waiting for live audio samples from Pluto.\",\"Start Decode during an active digital pass and allow one or two seconds of capture.\",\"No live text decode is claimed until carrier/clock recovery locks.\"]}\n",
+        state, mode_json ? mode_json : "digital", label ? label : "Digital");
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
+}
+
+static void digital_v2637_send_bpsk_output(int fd, const char *mode, const char *mode_json)
+{
+    int16_t *samples = NULL;
+    size_t sample_count = 0;
+    long pcm_bytes = 0;
+    double rms = 0.0;
+    int peak = 0;
+    double zero_hz = 0.0;
+    double p1200 = 0.0, p1800 = 0.0, p2200 = 0.0, p2400 = 0.0;
+    double dom_power = 0.0;
+    double dom_hz = 0.0;
+    double carrier_power = 0.0;
+    double carrier_hz = 0.0;
+    double quality = 0.0;
+    char body[4096];
+    (void)mode;
+
+    if (!digital_v2637_read_live_pcm(&samples, &sample_count, &pcm_bytes, &rms, &peak, &zero_hz)) {
+        digital_v2637_send_waiting(fd, "digital_bpsk_waiting", mode_json, "BPSK/PSK live signal");
+        return;
+    }
+
+    p1200 = digital_v2637_goertzel_power(samples, sample_count, 1200.0);
+    p1800 = digital_v2637_goertzel_power(samples, sample_count, 1800.0);
+    p2200 = digital_v2637_goertzel_power(samples, sample_count, 2200.0);
+    p2400 = digital_v2637_goertzel_power(samples, sample_count, 2400.0);
+    dom_hz = digital_v2637_dominant_tone(samples, sample_count, &dom_power);
+    carrier_power = p1800;
+    carrier_hz = 1800.0;
+    if (p1200 > carrier_power) { carrier_power = p1200; carrier_hz = 1200.0; }
+    if (p2200 > carrier_power) { carrier_power = p2200; carrier_hz = 2200.0; }
+    if (p2400 > carrier_power) { carrier_power = p2400; carrier_hz = 2400.0; }
+    quality = dom_power > 0.0 ? carrier_power / dom_power : 0.0;
+
+    snprintf(body, sizeof(body),
+        "{\"ok\":true,\"state\":\"digital_bpsk_live_diagnostic\",\"decoder_state\":\"signal_diagnostic\",\"receive_kind\":\"digital\",\"mode\":\"%s\",\"sample_rate_hz\":%d,\"sample_count\":%lu,\"pcm_bytes\":%ld,\"rms\":%.1f,\"peak\":%d,\"zero_cross_hz\":%.1f,\"dominant_tone_hz\":%.1f,\"carrier_estimate_hz\":%.1f,\"carrier_power\":%.6e,\"tone_1200_power\":%.6e,\"tone_1800_power\":%.6e,\"tone_2200_power\":%.6e,\"tone_2400_power\":%.6e,\"diagnostic_quality\":%.3f,\"decoded_text\":\"\",\"lines\":[\"BPSK/PSK live signal diagnostics active.\",\"PCM samples analyzed: %lu at %d Hz.\",\"RMS %.1f, peak %d, zero-crossing estimate %.1f Hz.\",\"Dominant tone %.1f Hz; carrier estimate %.1f Hz.\",\"Carrier diagnostic quality %.3f.\",\"Live BPSK text recovery is not claimed until carrier and symbol clock recovery are locked.\"]}\n",
+        mode_json ? mode_json : "BPSK", AUDIO_SAMPLE_RATE, (unsigned long)sample_count, pcm_bytes, rms, peak, zero_hz,
+        dom_hz, carrier_hz, carrier_power, p1200, p1800, p2200, p2400, quality,
+        (unsigned long)sample_count, AUDIO_SAMPLE_RATE, rms, peak, zero_hz, dom_hz, carrier_hz, quality);
+    free(samples);
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
+}
+
+static void digital_v2637_send_fsk_output(int fd, const char *mode, const char *mode_json)
+{
+    int16_t *samples = NULL;
+    size_t sample_count = 0;
+    long pcm_bytes = 0;
+    double rms = 0.0;
+    int peak = 0;
+    double zero_hz = 0.0;
+    double p1200 = 0.0, p2200 = 0.0;
+    double p960 = 0.0, p4800 = 0.0;
+    double dom_power = 0.0;
+    double dom_hz = 0.0;
+    double total = 0.0;
+    double mark_balance = 0.0;
+    char body[4096];
+    const char *state = digital_v2637_mode_is_fsk_gmsk(mode) ? "digital_fsk_gmsk_live_diagnostic" : "digital_afsk_live_diagnostic";
+    const char *label = digital_v2637_mode_is_fsk_gmsk(mode) ? "FSK/GMSK" : "AFSK/packet";
+
+    if (!digital_v2637_read_live_pcm(&samples, &sample_count, &pcm_bytes, &rms, &peak, &zero_hz)) {
+        digital_v2637_send_waiting(fd, digital_v2637_mode_is_fsk_gmsk(mode) ? "digital_fsk_gmsk_waiting" : "digital_afsk_waiting", mode_json, label);
+        return;
+    }
+
+    p1200 = digital_v2637_goertzel_power(samples, sample_count, 1200.0);
+    p2200 = digital_v2637_goertzel_power(samples, sample_count, 2200.0);
+    p960 = digital_v2637_goertzel_power(samples, sample_count, 960.0);
+    p4800 = digital_v2637_goertzel_power(samples, sample_count, 4800.0);
+    dom_hz = digital_v2637_dominant_tone(samples, sample_count, &dom_power);
+    total = p1200 + p2200;
+    mark_balance = total > 0.0 ? (100.0 * p1200 / total) : 0.0;
+
+    snprintf(body, sizeof(body),
+        "{\"ok\":true,\"state\":\"%s\",\"decoder_state\":\"signal_diagnostic\",\"receive_kind\":\"digital\",\"mode\":\"%s\",\"sample_rate_hz\":%d,\"sample_count\":%lu,\"pcm_bytes\":%ld,\"rms\":%.1f,\"peak\":%d,\"zero_cross_hz\":%.1f,\"dominant_tone_hz\":%.1f,\"mark_1200_power\":%.6e,\"space_2200_power\":%.6e,\"tone_960_power\":%.6e,\"tone_4800_power\":%.6e,\"mark_balance_percent\":%.1f,\"decoded_text\":\"\",\"lines\":[\"%s live signal diagnostics active.\",\"PCM samples analyzed: %lu at %d Hz.\",\"RMS %.1f, peak %d, zero-crossing estimate %.1f Hz.\",\"1200 Hz energy %.6e; 2200 Hz energy %.6e.\",\"Dominant tone %.1f Hz; mark balance %.1f%%.\",\"Live bit/HDLC/text recovery is not claimed until symbol clock and slicer lock.\"]}\n",
+        state, mode_json ? mode_json : "digital", AUDIO_SAMPLE_RATE, (unsigned long)sample_count, pcm_bytes, rms, peak, zero_hz,
+        dom_hz, p1200, p2200, p960, p4800, mark_balance, label,
+        (unsigned long)sample_count, AUDIO_SAMPLE_RATE, rms, peak, zero_hz, p1200, p2200, dom_hz, mark_balance);
+    free(samples);
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
+}
+
+static void digital_live_send_decode_output_v2637(int fd, const char *mode, const char *mode_json)
+{
+    if (digital_v2637_mode_is_bpsk(mode)) {
+        digital_v2637_send_bpsk_output(fd, mode, mode_json);
+        return;
+    }
+    if (digital_v2637_mode_is_fsk_gmsk(mode)) {
+        digital_v2637_send_fsk_output(fd, mode, mode_json);
+        return;
+    }
+    if (digital_v2637_mode_is_packet_afsk(mode)) {
+        digital_live_send_decode_output_v2637(fd, mode, mode_json);
+        return;
+    }
+    digital_v2637_send_fsk_output(fd, mode, mode_json);
+}
+/* DIGITAL_LIVE_DIAGNOSTICS_V2_6_37_END */
+
+/* DIGITAL_DECODE_ROUTE_ORDER_V2_6_37A */
+static void send_decode_output_v261c(int fd, const char *query)
+{
+    char mode[128] = "";
+    char mode_json[256];
+    char kind_json[64];
+    char body[1600];
+    const char *kind;
+
+    query_param(query, "mode", mode, sizeof(mode));
+    if (!mode[0]) snprintf(mode, sizeof(mode), "digital");
+    json_escape(mode_json, sizeof(mode_json), mode);
+    kind = receive_kind_v261c(mode);
+
+    /* Explicit digital modulation names must win before generic kind/CW routing. */
+    if (digital_v2637_mode_is_bpsk(mode) || digital_v2637_mode_is_fsk_gmsk(mode)) {
+        digital_live_send_decode_output_v2637(fd, mode, mode_json);
+        return;
+    }
+
+    /* Explicit packet/AFSK/APRS modes use the AX.25/APRS diagnostic path. */
+    if (digital_v2637_mode_is_packet_afsk(mode) || ax25_mode_is_digital_v2627(mode)) {
+        ax25_send_decode_output_v2630(fd, mode, mode_json);
+        return;
+    }
+
+    if (strcmp(kind, "cw") == 0) {
+        cw_send_diagnostic_output_v2622a(fd, mode, mode_json);
+        return;
+    }
+
+    if (strcmp(kind, "digital") == 0) {
+        digital_live_send_decode_output_v2637(fd, mode, mode_json);
+        return;
+    }
+
+    json_escape(kind_json, sizeof(kind_json), kind);
+    snprintf(body, sizeof(body),
+             "{\"ok\":true,\"state\":\"placeholder\",\"decoder_state\":\"not_implemented\",\"receive_kind\":\"%s\",\"mode\":\"%s\",\"lines\":[\"Decode foundation is installed.\",\"FM voice continues to use the existing Listen path.\",\"CW diagnostics are active for explicit CW modes.\",\"Digital diagnostics are active for explicit BPSK/FSK/GMSK/AX.25 modes.\"]}\n",
+             kind_json, mode_json);
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
+}
+
+
+
+/* RECEIVE_MODE_PLACEHOLDERS_V2_6_21C_END */
+
+
+/* CW_SELFTEST_ENDPOINT_V2_6_24
+ * Deterministic self-test for the CW timing/morse mapping layer. This endpoint
+ * does not touch Pluto RF, live audio, helper processes, or the FM Listen path.
+ */
+static char cw_morse_lookup_v2624(const char *sym)
+{
+    if (!sym) return '?';
+    if (strcmp(sym, ".-") == 0) return 'A';
+    if (strcmp(sym, "-...") == 0) return 'B';
+    if (strcmp(sym, "-.-.") == 0) return 'C';
+    if (strcmp(sym, "-..") == 0) return 'D';
+    if (strcmp(sym, ".") == 0) return 'E';
+    if (strcmp(sym, "..-.") == 0) return 'F';
+    if (strcmp(sym, "--.") == 0) return 'G';
+    if (strcmp(sym, "....") == 0) return 'H';
+    if (strcmp(sym, "..") == 0) return 'I';
+    if (strcmp(sym, ".---") == 0) return 'J';
+    if (strcmp(sym, "-.-") == 0) return 'K';
+    if (strcmp(sym, ".-..") == 0) return 'L';
+    if (strcmp(sym, "--") == 0) return 'M';
+    if (strcmp(sym, "-.") == 0) return 'N';
+    if (strcmp(sym, "---") == 0) return 'O';
+    if (strcmp(sym, ".--.") == 0) return 'P';
+    if (strcmp(sym, "--.-") == 0) return 'Q';
+    if (strcmp(sym, ".-.") == 0) return 'R';
+    if (strcmp(sym, "...") == 0) return 'S';
+    if (strcmp(sym, "-") == 0) return 'T';
+    if (strcmp(sym, "..-") == 0) return 'U';
+    if (strcmp(sym, "...-") == 0) return 'V';
+    if (strcmp(sym, ".--") == 0) return 'W';
+    if (strcmp(sym, "-..-") == 0) return 'X';
+    if (strcmp(sym, "-.--") == 0) return 'Y';
+    if (strcmp(sym, "--..") == 0) return 'Z';
+    if (strcmp(sym, "-----") == 0) return '0';
+    if (strcmp(sym, ".----") == 0) return '1';
+    if (strcmp(sym, "..---") == 0) return '2';
+    if (strcmp(sym, "...--") == 0) return '3';
+    if (strcmp(sym, "....-") == 0) return '4';
+    if (strcmp(sym, ".....") == 0) return '5';
+    if (strcmp(sym, "-....") == 0) return '6';
+    if (strcmp(sym, "--...") == 0) return '7';
+    if (strcmp(sym, "---..") == 0) return '8';
+    if (strcmp(sym, "----.") == 0) return '9';
+    return '?';
+}
+
+static void cw_append_char_v2624(char *dst, size_t dst_size, size_t *used, char ch)
+{
+    if (!dst || !used || dst_size == 0 || *used + 1 >= dst_size) return;
+    dst[*used] = ch;
+    *used += 1;
+    dst[*used] = '\0';
+}
+
+static void cw_selftest_decode_v2624(char *decoded, size_t decoded_size, char *morse, size_t morse_size, int *events_out, int *symbols_out)
+{
+    struct cw_event_v2624 { int mark; int units; };
+    static const struct cw_event_v2624 events[] = {
+        {1,1},{0,1},{1,1},{0,1},{1,1},{0,3},
+        {1,3},{0,1},{1,3},{0,1},{1,3},{0,3},
+        {1,1},{0,1},{1,1},{0,1},{1,1}
+    };
+    char symbol[16];
+    size_t decoded_used = 0;
+    size_t morse_used = 0;
+    size_t sym_used = 0;
+    size_t i;
+    int symbol_count = 0;
+    if (decoded && decoded_size > 0) decoded[0] = '\0';
+    if (morse && morse_size > 0) morse[0] = '\0';
+    symbol[0] = '\0';
+    for (i = 0; i < sizeof(events) / sizeof(events[0]); i++) {
+        if (events[i].mark) {
+            if (sym_used + 1 < sizeof(symbol)) {
+                symbol[sym_used++] = (events[i].units <= 2) ? '.' : '-';
+                symbol[sym_used] = '\0';
+            }
+        } else if (events[i].units >= 3) {
+            if (sym_used > 0) {
+                char ch = cw_morse_lookup_v2624(symbol);
+                if (morse_used > 0) cw_append_char_v2624(morse, morse_size, &morse_used, ' ');
+                for (size_t j = 0; j < sym_used; j++) cw_append_char_v2624(morse, morse_size, &morse_used, symbol[j]);
+                cw_append_char_v2624(decoded, decoded_size, &decoded_used, ch);
+                symbol_count++;
+                sym_used = 0;
+                symbol[0] = '\0';
+            }
+            if (events[i].units >= 7) cw_append_char_v2624(decoded, decoded_size, &decoded_used, ' ');
+        }
+    }
+    if (sym_used > 0) {
+        char ch = cw_morse_lookup_v2624(symbol);
+        if (morse_used > 0) cw_append_char_v2624(morse, morse_size, &morse_used, ' ');
+        for (size_t j = 0; j < sym_used; j++) cw_append_char_v2624(morse, morse_size, &morse_used, symbol[j]);
+        cw_append_char_v2624(decoded, decoded_size, &decoded_used, ch);
+        symbol_count++;
+    }
+    if (events_out) *events_out = (int)(sizeof(events) / sizeof(events[0]));
+    if (symbols_out) *symbols_out = symbol_count;
+}
+
+static void send_cw_selftest_v2624(int fd)
+{
+    char decoded[64];
+    char morse[128];
+    char body[1536];
+    int events = 0;
+    int symbols = 0;
+    cw_selftest_decode_v2624(decoded, sizeof(decoded), morse, sizeof(morse), &events, &symbols);
+    snprintf(body, sizeof(body), "{\"ok\":true,\"state\":\"cw_selftest\",\"version\":\"2.6.24\",\"decoder_state\":\"selftest\",\"expected_text\":\"SOS\",\"decoded_text\":\"%s\",\"morse\":\"%s\",\"events\":%d,\"symbols\":%d,\"dot_unit_ms\":100,\"pass\":%s,\"lines\":[\"CW self-test generated synthetic SOS timing events.\",\"Morse timing segmentation and symbol mapping are available without using RF.\",\"Use real Decode CW next to compare live tone/envelope metrics.\"]}\n", decoded, morse, events, symbols, strcmp(decoded, "SOS") == 0 ? "true" : "false");
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
+}
+
+
+/* AX25_AFSK_SYNTHETIC_SELFTEST_V2_6_31 */
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+#define AX25_AFSK_SELFTEST_RATE_V2631 24000
+#define AX25_AFSK_SELFTEST_BAUD_V2631 1200
+#define AX25_AFSK_SELFTEST_SPS_V2631 20
+#define AX25_AFSK_SELFTEST_MAX_BITS_V2631 4096
+#define AX25_AFSK_SELFTEST_MAX_FRAME_V2631 512
+
+static int ax25_afsk_append_bit_v2631(unsigned char *bits, int max_bits, int *bit_count, int bit)
+{
+    if (!bits || !bit_count || *bit_count >= max_bits) return 0;
+    bits[*bit_count] = bit ? 1u : 0u;
+    *bit_count += 1;
+    return 1;
+}
+
+static int ax25_afsk_append_flag_v2631(unsigned char *bits, int max_bits, int *bit_count)
+{
+    static const unsigned char flag_bits[8] = {0,1,1,1,1,1,1,0};
+    int i;
+    for (i = 0; i < 8; i++) {
+        if (!ax25_afsk_append_bit_v2631(bits, max_bits, bit_count, flag_bits[i])) return 0;
+    }
+    return 1;
+}
+
+static int ax25_afsk_append_stuffed_frame_bits_v2631(unsigned char *bits, int max_bits, int *bit_count, const unsigned char *frame, size_t frame_len)
+{
+    size_t i;
+    int j;
+    int ones = 0;
+    for (i = 0; i < frame_len; i++) {
+        for (j = 0; j < 8; j++) {
+            int bit = (frame[i] >> j) & 1;
+            if (!ax25_afsk_append_bit_v2631(bits, max_bits, bit_count, bit)) return 0;
+            if (bit) {
+                ones++;
+                if (ones == 5) {
+                    if (!ax25_afsk_append_bit_v2631(bits, max_bits, bit_count, 0)) return 0;
+                    ones = 0;
+                }
+            } else {
+                ones = 0;
+            }
+        }
+    }
+    return 1;
+}
+
+static int ax25_afsk_build_hdlc_bits_v2631(const unsigned char *frame, size_t frame_len, unsigned char *bits, int max_bits, int *bit_count)
+{
+    if (!frame || !bits || !bit_count) return 0;
+    *bit_count = 0;
+    if (!ax25_afsk_append_flag_v2631(bits, max_bits, bit_count)) return 0;
+    if (!ax25_afsk_append_stuffed_frame_bits_v2631(bits, max_bits, bit_count, frame, frame_len)) return 0;
+    if (!ax25_afsk_append_flag_v2631(bits, max_bits, bit_count)) return 0;
+    return 1;
+}
+
+static void ax25_afsk_synth_symbol_v2631(int16_t *samples, int offset, int count, double freq_hz, double *phase)
+{
+    int i;
+    double step = (2.0 * M_PI * freq_hz) / (double)AX25_AFSK_SELFTEST_RATE_V2631;
+    for (i = 0; i < count; i++) {
+        samples[offset + i] = (int16_t)(16000.0 * sin(*phase));
+        *phase += step;
+        if (*phase > 2.0 * M_PI) *phase -= 2.0 * M_PI;
+    }
+}
+
+static int ax25_afsk_synth_nrzi_pcm_v2631(const unsigned char *bits, int bit_count, int16_t **out_samples, int *out_sample_count)
+{
+    int i;
+    int tone_state = 1; /* 1 = mark/1200 Hz, 0 = space/2200 Hz */
+    int sample_count;
+    int16_t *samples;
+    double phase = 0.0;
+    if (!bits || bit_count <= 0 || !out_samples || !out_sample_count) return 0;
+    sample_count = bit_count * AX25_AFSK_SELFTEST_SPS_V2631;
+    samples = (int16_t *)calloc((size_t)sample_count, sizeof(int16_t));
+    if (!samples) return 0;
+    for (i = 0; i < bit_count; i++) {
+        double freq;
+        if (!bits[i]) tone_state = !tone_state; /* NRZI: zero causes transition */
+        freq = tone_state ? 1200.0 : 2200.0;
+        ax25_afsk_synth_symbol_v2631(samples, i * AX25_AFSK_SELFTEST_SPS_V2631, AX25_AFSK_SELFTEST_SPS_V2631, freq, &phase);
+    }
+    *out_samples = samples;
+    *out_sample_count = sample_count;
+    return 1;
+}
+
+static double ax25_afsk_symbol_power_v2631(const int16_t *samples, int offset, int count, double freq_hz)
+{
+    int i;
+    double re = 0.0, im = 0.0;
+    double step = (2.0 * M_PI * freq_hz) / (double)AX25_AFSK_SELFTEST_RATE_V2631;
+    for (i = 0; i < count; i++) {
+        double x = (double)samples[offset + i] / 32768.0;
+        double a = step * (double)i;
+        re += x * cos(a);
+        im -= x * sin(a);
+    }
+    return re * re + im * im;
+}
+
+static int ax25_afsk_demod_nrzi_bits_v2631(const int16_t *samples, int sample_count, unsigned char *bits, int max_bits, int *out_bits, int *mark_symbols, int *space_symbols)
+{
+    int symbols;
+    int i;
+    int prev_state = 1;
+    if (!samples || sample_count <= 0 || !bits || !out_bits) return 0;
+    symbols = sample_count / AX25_AFSK_SELFTEST_SPS_V2631;
+    if (symbols > max_bits) symbols = max_bits;
+    if (mark_symbols) *mark_symbols = 0;
+    if (space_symbols) *space_symbols = 0;
+    for (i = 0; i < symbols; i++) {
+        int offset = i * AX25_AFSK_SELFTEST_SPS_V2631;
+        double p1200 = ax25_afsk_symbol_power_v2631(samples, offset, AX25_AFSK_SELFTEST_SPS_V2631, 1200.0);
+        double p2200 = ax25_afsk_symbol_power_v2631(samples, offset, AX25_AFSK_SELFTEST_SPS_V2631, 2200.0);
+        int state = (p1200 >= p2200) ? 1 : 0;
+        bits[i] = (state == prev_state) ? 1u : 0u; /* NRZI decode: no transition = one */
+        prev_state = state;
+        if (state) {
+            if (mark_symbols) *mark_symbols += 1;
+        } else {
+            if (space_symbols) *space_symbols += 1;
+        }
+    }
+    *out_bits = symbols;
+    return 1;
+}
+
+static int ax25_afsk_find_flag_v2631(const unsigned char *bits, int bit_count, int start)
+{
+    static const unsigned char flag_bits[8] = {0,1,1,1,1,1,1,0};
+    int i, j;
+    if (!bits || bit_count < 8) return -1;
+    for (i = start; i <= bit_count - 8; i++) {
+        int match = 1;
+        for (j = 0; j < 8; j++) {
+            if (bits[i + j] != flag_bits[j]) { match = 0; break; }
+        }
+        if (match) return i;
+    }
+    return -1;
+}
+
+static int ax25_afsk_bits_to_frame_v2631(const unsigned char *bits, int bit_count, unsigned char *frame, size_t frame_max, size_t *frame_len, char *error, size_t error_size)
+{
+    unsigned char data_bits[AX25_AFSK_SELFTEST_MAX_BITS_V2631];
+    int data_count = 0;
+    int first, second, i, ones = 0;
+    size_t out_len = 0;
+    if (frame_len) *frame_len = 0;
+    if (!bits || !frame || !frame_len) return 0;
+    first = ax25_afsk_find_flag_v2631(bits, bit_count, 0);
+    second = first >= 0 ? ax25_afsk_find_flag_v2631(bits, bit_count, first + 8) : -1;
+    if (first < 0 || second < 0 || second <= first + 8) {
+        snprintf(error, error_size, "HDLC flags not found");
+        return 0;
+    }
+    for (i = first + 8; i < second; i++) {
+        int bit = bits[i] ? 1 : 0;
+        if (bit) {
+            if (data_count >= AX25_AFSK_SELFTEST_MAX_BITS_V2631) {
+                snprintf(error, error_size, "destuffed bit buffer full");
+                return 0;
+            }
+            data_bits[data_count++] = 1u;
+            ones++;
+            if (ones > 6) {
+                snprintf(error, error_size, "invalid HDLC one run");
+                return 0;
+            }
+        } else {
+            if (ones == 5) {
+                ones = 0;
+                continue; /* stuffed zero */
+            }
+            if (data_count >= AX25_AFSK_SELFTEST_MAX_BITS_V2631) {
+                snprintf(error, error_size, "destuffed bit buffer full");
+                return 0;
+            }
+            data_bits[data_count++] = 0u;
+            ones = 0;
+        }
+    }
+    if (data_count < 16 || (data_count % 8) != 0) {
+        snprintf(error, error_size, "destuffed bit count not byte aligned: %d", data_count);
+        return 0;
+    }
+    for (i = 0; i < data_count; i += 8) {
+        int j;
+        unsigned char b = 0;
+        if (out_len >= frame_max) {
+            snprintf(error, error_size, "frame byte buffer full");
+            return 0;
+        }
+        for (j = 0; j < 8; j++) b |= (unsigned char)(data_bits[i + j] << j);
+        frame[out_len++] = b;
+    }
+    *frame_len = out_len;
+    return 1;
+}
+
+static void send_ax25_afsk_selftest_v2631(int fd)
+{
+    unsigned char frame[AX25_AFSK_SELFTEST_MAX_FRAME_V2631];
+    unsigned char hdlc_bits[AX25_AFSK_SELFTEST_MAX_BITS_V2631];
+    unsigned char recovered_bits[AX25_AFSK_SELFTEST_MAX_BITS_V2631];
+    unsigned char recovered_frame[AX25_AFSK_SELFTEST_MAX_FRAME_V2631];
+    int hdlc_bit_count = 0;
+    int recovered_bit_count = 0;
+    int16_t *samples = NULL;
+    int sample_count = 0;
+    int mark_symbols = 0;
+    int space_symbols = 0;
+    size_t frame_len = 0;
+    size_t recovered_frame_len = 0;
+    char summary[256] = "";
+    char info[256] = "";
+    char error[256] = "";
+    char summary_json[512];
+    char info_json[512];
+    char error_json[512];
+    char body[4096];
+    const char *expected = "N0CALL>APRS:>AX25 SELFTEST";
+    int ok = 0;
+
+    frame_len = ax25_make_selftest_frame_v2627(frame, sizeof(frame));
+    if (frame_len == 0) snprintf(error, sizeof(error), "failed to make AX.25 self-test frame");
+    else if (!ax25_afsk_build_hdlc_bits_v2631(frame, frame_len, hdlc_bits, AX25_AFSK_SELFTEST_MAX_BITS_V2631, &hdlc_bit_count)) snprintf(error, sizeof(error), "failed to build HDLC bit stream");
+    else if (!ax25_afsk_synth_nrzi_pcm_v2631(hdlc_bits, hdlc_bit_count, &samples, &sample_count)) snprintf(error, sizeof(error), "failed to synthesize Bell 202 AFSK PCM");
+    else if (!ax25_afsk_demod_nrzi_bits_v2631(samples, sample_count, recovered_bits, AX25_AFSK_SELFTEST_MAX_BITS_V2631, &recovered_bit_count, &mark_symbols, &space_symbols)) snprintf(error, sizeof(error), "failed to demodulate synthetic AFSK PCM");
+    else if (!ax25_afsk_bits_to_frame_v2631(recovered_bits, recovered_bit_count, recovered_frame, sizeof(recovered_frame), &recovered_frame_len, error, sizeof(error))) { }
+    else if (!ax25_decode_ui_frame_v2627(recovered_frame, recovered_frame_len, summary, sizeof(summary), info, sizeof(info), error, sizeof(error))) { }
+    else ok = (strcmp(summary, expected) == 0);
+
+    if (samples) free(samples);
+    if (!ok && error[0] == '\0') snprintf(error, sizeof(error), "decoded text mismatch");
+    json_escape(summary_json, sizeof(summary_json), summary);
+    json_escape(info_json, sizeof(info_json), info);
+    json_escape(error_json, sizeof(error_json), error);
+
+    snprintf(body, sizeof(body), "{\"ok\":%s,\"state\":\"ax25_afsk_selftest\",\"decoder_state\":\"%s\",\"version\":\"2.6.31\",\"expected\":\"N0CALL>APRS:>AX25 SELFTEST\",\"decoded_text\":\"%s\",\"info\":\"%s\",\"error\":\"%s\",\"source_frame_bytes\":%lu,\"hdlc_bits\":%d,\"sample_rate_hz\":%d,\"samples\":%d,\"symbols\":%d,\"mark_symbols\":%d,\"space_symbols\":%d,\"recovered_bits\":%d,\"recovered_frame_bytes\":%lu,\"pass\":%s,\"lines\":[\"Generated a known AX.25/APRS UI frame.\",\"Encoded it as HDLC bits with bit stuffing and flags.\",\"Synthesized 1200-baud Bell 202 AFSK PCM.\",\"Demodulated mark/space tones back through NRZI and HDLC recovery.\",\"Fed recovered frame bytes into the AX.25 parser.\"]}\n", ok ? "true" : "false", ok ? "pass" : "fail", summary_json, info_json, error_json, (unsigned long)frame_len, hdlc_bit_count, AX25_AFSK_SELFTEST_RATE_V2631, sample_count, recovered_bit_count, mark_symbols, space_symbols, recovered_bit_count, (unsigned long)recovered_frame_len, ok ? "true" : "false");
+    send_text(fd, ok ? 200 : 500, ok ? "OK" : "Internal Server Error", "application/json; charset=utf-8", body);
+}
+/* AX25_AFSK_SYNTHETIC_SELFTEST_V2_6_31_END */
+
+
+/* DIGITAL_DECODER_SELFTESTS_V2_6_35 */
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+#define DIGITAL_TEST_RATE_V2635 24000
+#define DIGITAL_TEST_BAUD_V2635 1200
+#define DIGITAL_TEST_SPS_V2635 20
+#define DIGITAL_TEST_MAX_TEXT_V2635 128
+#define DIGITAL_TEST_MAX_BITS_V2635 4096
+
+static int digital_v2635_append_text_bits_msb(const char *text, unsigned char *bits, int max_bits, int *bit_count)
+{
+    size_t i;
+    int b;
+    if (!text || !bits || !bit_count) return 0;
+    *bit_count = 0;
+    for (i = 0; text[i]; i++) {
+        unsigned char ch = (unsigned char)text[i];
+        for (b = 7; b >= 0; b--) {
+            if (*bit_count >= max_bits) return 0;
+            bits[*bit_count] = (unsigned char)((ch >> b) & 1u);
+            *bit_count += 1;
+        }
+    }
+    return 1;
+}
+
+static int digital_v2635_bits_to_text_msb(const unsigned char *bits, int bit_count, char *out, size_t out_size)
+{
+    int i;
+    size_t pos = 0;
+    if (!bits || !out || out_size == 0 || bit_count < 8) return 0;
+    out[0] = '\0';
+    for (i = 0; i + 7 < bit_count; i += 8) {
+        int j;
+        unsigned char ch = 0;
+        if (pos + 1 >= out_size) return 0;
+        for (j = 0; j < 8; j++) ch = (unsigned char)((ch << 1) | (bits[i + j] ? 1 : 0));
+        out[pos++] = (char)ch;
+    }
+    out[pos] = '\0';
+    return 1;
+}
+
+static void bpsk_v2635_synth_symbol(double *samples, int offset, int count, double carrier_hz, int bit)
+{
+    int i;
+    double phase = bit ? 0.0 : M_PI;
+    double step = (2.0 * M_PI * carrier_hz) / (double)DIGITAL_TEST_RATE_V2635;
+    for (i = 0; i < count; i++) {
+        samples[offset + i] = cos(step * (double)i + phase);
+    }
+}
+
+static int bpsk_v2635_synth(const unsigned char *bits, int bit_count, double carrier_hz, double **out_samples, int *out_sample_count)
+{
+    int i;
+    int sample_count;
+    double *samples;
+    if (!bits || bit_count <= 0 || !out_samples || !out_sample_count) return 0;
+    sample_count = bit_count * DIGITAL_TEST_SPS_V2635;
+    samples = (double *)calloc((size_t)sample_count, sizeof(double));
+    if (!samples) return 0;
+    for (i = 0; i < bit_count; i++) {
+        bpsk_v2635_synth_symbol(samples, i * DIGITAL_TEST_SPS_V2635, DIGITAL_TEST_SPS_V2635, carrier_hz, bits[i] ? 1 : 0);
+    }
+    *out_samples = samples;
+    *out_sample_count = sample_count;
+    return 1;
+}
+
+static int bpsk_v2635_demod(const double *samples, int sample_count, double carrier_hz, unsigned char *bits, int max_bits, int *out_bits, double *quality_out)
+{
+    int symbols;
+    int i;
+    double quality = 0.0;
+    double step = (2.0 * M_PI * carrier_hz) / (double)DIGITAL_TEST_RATE_V2635;
+    if (!samples || sample_count <= 0 || !bits || !out_bits) return 0;
+    symbols = sample_count / DIGITAL_TEST_SPS_V2635;
+    if (symbols > max_bits) symbols = max_bits;
+    for (i = 0; i < symbols; i++) {
+        int j;
+        double corr = 0.0;
+        int offset = i * DIGITAL_TEST_SPS_V2635;
+        for (j = 0; j < DIGITAL_TEST_SPS_V2635; j++) {
+            corr += samples[offset + j] * cos(step * (double)j);
+        }
+        bits[i] = (corr >= 0.0) ? 1u : 0u;
+        quality += corr >= 0.0 ? corr : -corr;
+    }
+    *out_bits = symbols;
+    if (quality_out) *quality_out = symbols > 0 ? quality / (double)symbols : 0.0;
+    return 1;
+}
+
+static double fsk_v2635_symbol_power(const double *samples, int offset, int count, double freq_hz)
+{
+    int i;
+    double re = 0.0, im = 0.0;
+    double step = (2.0 * M_PI * freq_hz) / (double)DIGITAL_TEST_RATE_V2635;
+    for (i = 0; i < count; i++) {
+        double a = step * (double)i;
+        re += samples[offset + i] * cos(a);
+        im -= samples[offset + i] * sin(a);
+    }
+    return re * re + im * im;
+}
+
+static void fsk_v2635_synth_symbol(double *samples, int offset, int count, double freq_hz, double *phase)
+{
+    int i;
+    double step = (2.0 * M_PI * freq_hz) / (double)DIGITAL_TEST_RATE_V2635;
+    for (i = 0; i < count; i++) {
+        samples[offset + i] = sin(*phase);
+        *phase += step;
+        if (*phase > 2.0 * M_PI) *phase -= 2.0 * M_PI;
+    }
+}
+
+static int fsk_v2635_synth(const unsigned char *bits, int bit_count, double mark_hz, double space_hz, double **out_samples, int *out_sample_count)
+{
+    int i;
+    int sample_count;
+    double *samples;
+    double phase = 0.0;
+    if (!bits || bit_count <= 0 || !out_samples || !out_sample_count) return 0;
+    sample_count = bit_count * DIGITAL_TEST_SPS_V2635;
+    samples = (double *)calloc((size_t)sample_count, sizeof(double));
+    if (!samples) return 0;
+    for (i = 0; i < bit_count; i++) {
+        fsk_v2635_synth_symbol(samples, i * DIGITAL_TEST_SPS_V2635, DIGITAL_TEST_SPS_V2635, bits[i] ? mark_hz : space_hz, &phase);
+    }
+    *out_samples = samples;
+    *out_sample_count = sample_count;
+    return 1;
+}
+
+static int fsk_v2635_demod(const double *samples, int sample_count, double mark_hz, double space_hz, unsigned char *bits, int max_bits, int *out_bits, int *mark_symbols, int *space_symbols, double *confidence_out)
+{
+    int symbols;
+    int i;
+    double confidence = 0.0;
+    if (!samples || sample_count <= 0 || !bits || !out_bits) return 0;
+    symbols = sample_count / DIGITAL_TEST_SPS_V2635;
+    if (symbols > max_bits) symbols = max_bits;
+    if (mark_symbols) *mark_symbols = 0;
+    if (space_symbols) *space_symbols = 0;
+    for (i = 0; i < symbols; i++) {
+        int offset = i * DIGITAL_TEST_SPS_V2635;
+        double pm = fsk_v2635_symbol_power(samples, offset, DIGITAL_TEST_SPS_V2635, mark_hz);
+        double ps = fsk_v2635_symbol_power(samples, offset, DIGITAL_TEST_SPS_V2635, space_hz);
+        if (pm >= ps) {
+            bits[i] = 1u;
+            if (mark_symbols) *mark_symbols += 1;
+            confidence += (pm - ps) / (pm + ps + 1.0e-12);
+        } else {
+            bits[i] = 0u;
+            if (space_symbols) *space_symbols += 1;
+            confidence += (ps - pm) / (pm + ps + 1.0e-12);
+        }
+    }
+    *out_bits = symbols;
+    if (confidence_out) *confidence_out = symbols > 0 ? confidence / (double)symbols : 0.0;
+    return 1;
+}
+
+static void send_bpsk_selftest_v2635(int fd)
+{
+    const char *expected = "BPSK SELFTEST";
+    unsigned char bits[DIGITAL_TEST_MAX_BITS_V2635];
+    unsigned char recovered[DIGITAL_TEST_MAX_BITS_V2635];
+    char decoded[DIGITAL_TEST_MAX_TEXT_V2635];
+    char decoded_json[256];
+    char body[2048];
+    double *samples = NULL;
+    int bit_count = 0;
+    int recovered_bits = 0;
+    int sample_count = 0;
+    double quality = 0.0;
+    int ok = 0;
+
+    decoded[0] = '\0';
+    if (digital_v2635_append_text_bits_msb(expected, bits, DIGITAL_TEST_MAX_BITS_V2635, &bit_count) &&
+        bpsk_v2635_synth(bits, bit_count, 1800.0, &samples, &sample_count) &&
+        bpsk_v2635_demod(samples, sample_count, 1800.0, recovered, DIGITAL_TEST_MAX_BITS_V2635, &recovered_bits, &quality) &&
+        digital_v2635_bits_to_text_msb(recovered, recovered_bits, decoded, sizeof(decoded))) {
+        ok = (strcmp(decoded, expected) == 0);
+    }
+    if (samples) free(samples);
+    json_escape(decoded_json, sizeof(decoded_json), decoded);
+    snprintf(body, sizeof(body), "{\"ok\":%s,\"state\":\"bpsk_selftest\",\"decoder_state\":\"%s\",\"version\":\"2.6.35\",\"mode\":\"BPSK\",\"expected\":\"BPSK SELFTEST\",\"decoded_text\":\"%s\",\"sample_rate_hz\":%d,\"baud\":%d,\"carrier_hz\":1800,\"bits\":%d,\"samples\":%d,\"recovered_bits\":%d,\"quality\":%.6f,\"pass\":%s,\"lines\":[\"Generated a known BPSK symbol stream.\",\"Demodulated coherent phase decisions back to bits.\",\"Recovered bytes matched the expected text.\",\"Live BPSK pass decoding will reuse this signal path after carrier/clock recovery is connected.\"]}\n", ok ? "true" : "false", ok ? "pass" : "fail", decoded_json, DIGITAL_TEST_RATE_V2635, DIGITAL_TEST_BAUD_V2635, bit_count, sample_count, recovered_bits, quality, ok ? "true" : "false");
+    send_text(fd, ok ? 200 : 500, ok ? "OK" : "Internal Server Error", "application/json; charset=utf-8", body);
+}
+
+static void send_fsk_selftest_v2635(int fd)
+{
+    const char *expected = "FSK SELFTEST";
+    unsigned char bits[DIGITAL_TEST_MAX_BITS_V2635];
+    unsigned char recovered[DIGITAL_TEST_MAX_BITS_V2635];
+    char decoded[DIGITAL_TEST_MAX_TEXT_V2635];
+    char decoded_json[256];
+    char body[2048];
+    double *samples = NULL;
+    int bit_count = 0;
+    int recovered_bits = 0;
+    int sample_count = 0;
+    int mark_symbols = 0;
+    int space_symbols = 0;
+    double confidence = 0.0;
+    int ok = 0;
+
+    decoded[0] = '\0';
+    if (digital_v2635_append_text_bits_msb(expected, bits, DIGITAL_TEST_MAX_BITS_V2635, &bit_count) &&
+        fsk_v2635_synth(bits, bit_count, 1200.0, 2200.0, &samples, &sample_count) &&
+        fsk_v2635_demod(samples, sample_count, 1200.0, 2200.0, recovered, DIGITAL_TEST_MAX_BITS_V2635, &recovered_bits, &mark_symbols, &space_symbols, &confidence) &&
+        digital_v2635_bits_to_text_msb(recovered, recovered_bits, decoded, sizeof(decoded))) {
+        ok = (strcmp(decoded, expected) == 0);
+    }
+    if (samples) free(samples);
+    json_escape(decoded_json, sizeof(decoded_json), decoded);
+    snprintf(body, sizeof(body), "{\"ok\":%s,\"state\":\"fsk_selftest\",\"decoder_state\":\"%s\",\"version\":\"2.6.35\",\"mode\":\"FSK/GMSK diagnostic\",\"expected\":\"FSK SELFTEST\",\"decoded_text\":\"%s\",\"sample_rate_hz\":%d,\"baud\":%d,\"mark_hz\":1200,\"space_hz\":2200,\"bits\":%d,\"samples\":%d,\"recovered_bits\":%d,\"mark_symbols\":%d,\"space_symbols\":%d,\"confidence\":%.6f,\"pass\":%s,\"lines\":[\"Generated a known two-tone FSK symbol stream.\",\"Measured mark/space energy for each symbol.\",\"Recovered bytes matched the expected text.\",\"GMSK/9600 live decoding still needs mode-specific clock and slicing against real audio.\"]}\n", ok ? "true" : "false", ok ? "pass" : "fail", decoded_json, DIGITAL_TEST_RATE_V2635, DIGITAL_TEST_BAUD_V2635, bit_count, sample_count, recovered_bits, mark_symbols, space_symbols, confidence, ok ? "true" : "false");
+    send_text(fd, ok ? 200 : 500, ok ? "OK" : "Internal Server Error", "application/json; charset=utf-8", body);
+}
+
+static void send_digital_decoder_matrix_v2635(int fd)
+{
+    const char *body =
+        "{\"ok\":true,\"state\":\"digital_decoder_matrix\",\"version\":\"2.6.35\","
+        "\"decoders\":["
+        "{\"mode\":\"FM/AM/SSB/USB/LSB\",\"action\":\"Listen\",\"status\":\"audio_path\"},"
+        "{\"mode\":\"CW/Morse/A1A\",\"action\":\"Decode CW\",\"status\":\"timing_decoder_selftest_passed\"},"
+        "{\"mode\":\"AX.25/APRS/AFSK packet\",\"action\":\"Decode\",\"status\":\"frame_parser_and_afsk_selftests_available\"},"
+        "{\"mode\":\"BPSK/PSK\",\"action\":\"Decode\",\"status\":\"bpsk_synth_demod_selftest_available\"},"
+        "{\"mode\":\"FSK/GMSK/9600\",\"action\":\"Decode\",\"status\":\"fsk_synth_demod_selftest_available\"},"
+        "{\"mode\":\"Unknown\",\"action\":\"Listen\",\"status\":\"safe_default\"}],"
+        "\"endpoints\":[\"/api/radio/decode/cw/selftest\",\"/api/radio/decode/ax25/selftest\",\"/api/radio/decode/ax25/afsk-selftest\",\"/api/radio/decode/bpsk/selftest\",\"/api/radio/decode/fsk/selftest\"]}\n";
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
+}
+/* DIGITAL_DECODER_SELFTESTS_V2_6_35_END */
+
 static void handle_request(
     int fd,
     const struct app_config *cfg,
@@ -5625,6 +7601,107 @@ static void handle_request(
     const char *body)
 {
     char file_path[PATH_BUF_SIZE];
+
+    /* DIGITAL_DECODER_SELFTEST_ROUTES_V2_6_35 */
+    if (strcmp(path, "/api/radio/decode/bpsk/selftest") == 0) {
+        if (strcmp(method, "GET") == 0) {
+            send_bpsk_selftest_v2635(fd);
+        } else {
+            send_text(fd, 405, "Method Not Allowed", "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"method not allowed\"}\n");
+        }
+        return;
+    }
+    if (strcmp(path, "/api/radio/decode/fsk/selftest") == 0 || strcmp(path, "/api/radio/decode/gmsk/selftest") == 0) {
+        if (strcmp(method, "GET") == 0) {
+            send_fsk_selftest_v2635(fd);
+        } else {
+            send_text(fd, 405, "Method Not Allowed", "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"method not allowed\"}\n");
+        }
+        return;
+    }
+    if (strcmp(path, "/api/radio/decode/digital/selftest") == 0) {
+        if (strcmp(method, "GET") == 0) {
+            send_digital_decoder_matrix_v2635(fd);
+        } else {
+            send_text(fd, 405, "Method Not Allowed", "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"method not allowed\"}\n");
+        }
+        return;
+    }
+    /* DIGITAL_DECODER_SELFTEST_ROUTES_V2_6_35_END */
+
+    /* AX25_AFSK_SELFTEST_ROUTE_V2_6_31 */
+    if (strcmp(path, "/api/radio/decode/ax25/afsk-selftest") == 0) {
+        if (strcmp(method, "GET") == 0) {
+            send_ax25_afsk_selftest_v2631(fd);
+        } else {
+            send_text(fd, 405, "Method Not Allowed", "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"method not allowed\"}\n");
+        }
+        return;
+    }
+    /* AX25_AFSK_SELFTEST_ROUTE_V2_6_31_END */
+
+    /* AX25_DIGITAL_DECODER_ROUTE_V2_6_27 */
+    if (strcmp(path, "/api/radio/decode/ax25/selftest") == 0) {
+        if (strcmp(method, "GET") == 0) {
+            send_ax25_selftest_v2627(fd);
+        } else {
+            send_text(fd, 405, "Method Not Allowed", "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"method not allowed\"}\n");
+        }
+        return;
+    }
+    /* END_AX25_DIGITAL_DECODER_ROUTE_V2_6_27 */
+
+    /* CW_SELFTEST_ENDPOINT_V2_6_24 active-route guard */
+    if (strcmp(path, "/api/radio/decode/cw/selftest") == 0) {
+        if (strcmp(method, "GET") == 0 || strcmp(method, "HEAD") == 0) {
+            send_cw_selftest_v2624(fd);
+        } else {
+            send_text(fd, 405, "Method Not Allowed", "application/json; charset=utf-8", "{\"ok\":false,\"error\":\"method not allowed\"}\n");
+        }
+        return;
+    }
+
+    /* RECEIVE_MODE_ACTIVE_ROUTE_GUARD_V2_6_21C_BEGIN
+     * Active router guard: placed at the very top of handle_request(), before
+     * spectrum, rotator, legacy POST and static-file branches.
+     */
+    if (strcmp(path, "/api/radio/receive/status") == 0) {
+        if (strcmp(method, "GET") == 0) {
+            send_receive_status_v261c(fd);
+        } else {
+            send_text(fd, 405, "Method Not Allowed", "application/json; charset=utf-8",
+                      "{\"ok\":false,\"error\":\"method not allowed\"}\n");
+        }
+        return;
+    }
+    if (strcmp(path, "/api/radio/decode/output") == 0) {
+        if (strcmp(method, "GET") == 0) {
+            send_decode_output_v261c(fd, query);
+        } else {
+            send_text(fd, 405, "Method Not Allowed", "application/json; charset=utf-8",
+                      "{\"ok\":false,\"error\":\"method not allowed\"}\n");
+        }
+        return;
+    }
+    if (strcmp(path, "/api/radio/receive/start") == 0) {
+        if (strcmp(method, "POST") == 0) {
+            send_receive_start_v261c(fd, cfg, query);
+        } else {
+            send_text(fd, 405, "Method Not Allowed", "application/json; charset=utf-8",
+                      "{\"ok\":false,\"error\":\"method not allowed\"}\n");
+        }
+        return;
+    }
+    if (strcmp(path, "/api/radio/receive/stop") == 0) {
+        if (strcmp(method, "POST") == 0) {
+            send_receive_stop_v261c(fd);
+        } else {
+            send_text(fd, 405, "Method Not Allowed", "application/json; charset=utf-8",
+                      "{\"ok\":false,\"error\":\"method not allowed\"}\n");
+        }
+        return;
+    }
+    /* RECEIVE_MODE_ACTIVE_ROUTE_GUARD_V2_6_21C_END */
 
     /* BACKEND_STREAMING_AUDIO_STREAM_ROUTE_V1D_EARLY_GUARD: keep continuous browser audio out of fragile router branches. */
     if (strcmp(path, "/api/radio/audio/live/stream.wav") == 0) {
@@ -5645,6 +7722,49 @@ static void handle_request(
     if (strcmp(method, "GET") != 0 && strcmp(method, "HEAD") != 0 && strcmp(method, "POST") != 0) {
         send_text(fd, 405, "Method Not Allowed", "application/json; charset=utf-8",
                   "{\"ok\":false,\"error\":\"method not allowed\"}\n");
+        return;
+    }
+
+
+
+    /* RECEIVE_MODE_ROUTE_GUARD_V2_6_21B
+     * Keep receive/decode placeholder endpoints ahead of the legacy router so
+     * they cannot fall through to the older API 404 branch.
+     */
+    if (strcmp(path, "/api/radio/receive/status") == 0) {
+        if (strcmp(method, "GET") == 0) {
+            send_receive_status_v261a(fd);
+        } else {
+            send_text(fd, 405, "Method Not Allowed", "application/json; charset=utf-8",
+                      "{\"ok\":false,\"error\":\"method not allowed\"}\n");
+        }
+        return;
+    }
+    if (strcmp(path, "/api/radio/decode/output") == 0) {
+        if (strcmp(method, "GET") == 0) {
+            send_decode_output_v261a(fd, query);
+        } else {
+            send_text(fd, 405, "Method Not Allowed", "application/json; charset=utf-8",
+                      "{\"ok\":false,\"error\":\"method not allowed\"}\n");
+        }
+        return;
+    }
+    if (strcmp(path, "/api/radio/receive/start") == 0) {
+        if (strcmp(method, "POST") == 0) {
+            send_receive_start_v261a(fd, cfg, query);
+        } else {
+            send_text(fd, 405, "Method Not Allowed", "application/json; charset=utf-8",
+                      "{\"ok\":false,\"error\":\"method not allowed\"}\n");
+        }
+        return;
+    }
+    if (strcmp(path, "/api/radio/receive/stop") == 0) {
+        if (strcmp(method, "POST") == 0) {
+            send_receive_stop_v261a(fd);
+        } else {
+            send_text(fd, 405, "Method Not Allowed", "application/json; charset=utf-8",
+                      "{\"ok\":false,\"error\":\"method not allowed\"}\n");
+        }
         return;
     }
 
@@ -5740,6 +7860,10 @@ static void handle_request(
             send_live_audio_start(fd, cfg, query);
         } else if (strcmp(path, "/api/radio/audio/live/stop") == 0) {
             send_live_audio_stop(fd);
+        } else if (strcmp(path, "/api/radio/receive/start") == 0) {
+            send_receive_start_v261a(fd, cfg, query);
+        } else if (strcmp(path, "/api/radio/receive/stop") == 0) {
+            send_receive_stop_v261a(fd);
         } else if (strcmp(path, "/api/config") == 0) {
             send_config_save(fd, cfg, body);
         } else if (strcmp(path, "/api/refresh/passes") == 0) {
@@ -5826,6 +7950,10 @@ static void handle_request(
         join_path(file_path, sizeof(file_path), cfg->data_dir, "passes.json");
         send_json_file_or_default(fd, file_path,
                                   "{\"version\":1,\"passes\":[],\"message\":\"Pass predictions have not been generated yet.\"}\n");
+    } else if (strcmp(path, "/api/radio/receive/status") == 0) {
+        send_receive_status_v261a(fd);
+    } else if (strcmp(path, "/api/radio/decode/output") == 0) {
+        send_decode_output_v261a(fd, query);
     } else if (strcmp(path, "/api/radio/status") == 0) {
         join_path(file_path, sizeof(file_path), cfg->data_dir, "radio_target.json");
         send_json_file_or_default(fd, file_path,

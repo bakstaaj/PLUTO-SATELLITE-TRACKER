@@ -984,6 +984,18 @@
     let spectrumWaterfallFrameV250 = 0;
     let spectrumWaterfallCenterHzV254 = 0; /* SPECTRUM_CENTER_FREQ_LABEL_V2_5_4 */
 
+    /* SPECTRUM_TUNING_CONTROLS_V2_6_5 */
+    const SPECTRUM_SAMPLE_RATE_HZ_V265 = 2400000;
+    let spectrumWaterfallLastBinsV265 = [];
+    let spectrumSquelchUserAdjustedV265 = false;
+    /* SPECTRUM_DECODER_BW_CORRECTION_V2_6_6 */
+    let spectrumWaterfallSettingsV265 = {
+      bandwidthHz: 200000,       // AD9361 / RF front-end filter bandwidth.
+      decoderBandwidthHz: 8000,  // Narrow FM decoder/channel bandwidth.
+      gainDb: 40,
+      squelchDb: -96
+    };
+
     function spectrumWaterfallIsActivePassV250(pass) {
       return !!(pass && passTimingState(pass) === "active");
     }
@@ -993,6 +1005,117 @@
       if (status && message) {
         status.textContent = message;
       }
+    }
+
+    function spectrumClampV265(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function spectrumFormatBandwidthV265(hz) {
+      const value = Number(hz || 0);
+      if (!Number.isFinite(value) || value <= 0) return "--";
+      if (value >= 1000000) return `${(value / 1000000).toFixed(value >= 2000000 ? 1 : 2)} MHz`;
+      return `${Math.round(value / 1000)} kHz`;
+    }
+
+    function spectrumFormatGainV265(db) {
+      const value = Number(db);
+      if (!Number.isFinite(value)) return "--";
+      return `${value.toFixed(0)} dB`;
+    }
+
+    function spectrumFormatDbV265(db) {
+      const value = Number(db);
+      if (!Number.isFinite(value)) return "--";
+      return `${value.toFixed(0)} dB`;
+    }
+
+    function spectrumNoiseFloorDbV265(bins) {
+      const values = (bins || []).map((v) => Number(v)).filter((v) => Number.isFinite(v)).sort((a, b) => a - b);
+      if (!values.length) return -102;
+      const index = Math.max(0, Math.min(values.length - 1, Math.floor(values.length * 0.25)));
+      return values[index];
+    }
+
+    function spectrumMaybeAutoSetSquelchV265(bins) {
+      if (spectrumSquelchUserAdjustedV265) return;
+      const noiseFloor = spectrumNoiseFloorDbV265(bins);
+      spectrumWaterfallSettingsV265.squelchDb = Math.round(spectrumClampV265(noiseFloor + 6, -118, -45));
+      updateSpectrumTuningControlLabelsV265();
+    }
+
+    function updateSpectrumTuningControlLabelsV265() {
+      const bandwidthValue = document.getElementById("spectrumBandwidthValueV265");
+      const decoderBandwidthValue = document.getElementById("spectrumDecoderBandwidthValueV266");
+      const gainValue = document.getElementById("spectrumGainValueV265");
+      const squelchValue = document.getElementById("spectrumSquelchValueV265");
+      const bandwidthInput = document.getElementById("spectrumBandwidthSliderV265");
+      const decoderBandwidthInput = document.getElementById("spectrumDecoderBandwidthSliderV266");
+      const gainInput = document.getElementById("spectrumGainSliderV265");
+      const squelchInput = document.getElementById("spectrumSquelchSliderV265");
+
+      if (bandwidthInput) bandwidthInput.value = String(Math.round(spectrumWaterfallSettingsV265.bandwidthHz));
+      if (decoderBandwidthInput) decoderBandwidthInput.value = String(Math.round(spectrumWaterfallSettingsV265.decoderBandwidthHz || 8000));
+      if (gainInput) gainInput.value = String(Math.round(spectrumWaterfallSettingsV265.gainDb));
+      if (squelchInput) squelchInput.value = String(Math.round(spectrumWaterfallSettingsV265.squelchDb));
+
+      if (bandwidthValue) bandwidthValue.textContent = spectrumFormatBandwidthV265(spectrumWaterfallSettingsV265.bandwidthHz);
+      if (decoderBandwidthValue) decoderBandwidthValue.textContent = spectrumFormatBandwidthV265(spectrumWaterfallSettingsV265.decoderBandwidthHz || 8000);
+      if (gainValue) gainValue.textContent = spectrumFormatGainV265(spectrumWaterfallSettingsV265.gainDb);
+      if (squelchValue) squelchValue.textContent = spectrumFormatDbV265(spectrumWaterfallSettingsV265.squelchDb);
+    }
+
+    function redrawSpectrumWithCurrentControlsV265() {
+      const canvas = document.getElementById("spectrumCanvasV250");
+      if (canvas && spectrumWaterfallLastBinsV265.length) {
+        try { drawSpectrumV250(canvas, spectrumWaterfallLastBinsV265); } catch (error) { console.warn("Spectrum redraw fallback", error); drawSpectrumFallbackV269(canvas, spectrumWaterfallLastBinsV265); }
+      }
+    }
+
+    function bindSpectrumTuningControlsV265() {
+      const bandwidthInput = document.getElementById("spectrumBandwidthSliderV265");
+      const decoderBandwidthInput = document.getElementById("spectrumDecoderBandwidthSliderV266");
+      const gainInput = document.getElementById("spectrumGainSliderV265");
+      const squelchInput = document.getElementById("spectrumSquelchSliderV265");
+      const autoButton = document.getElementById("spectrumAutoSquelchButtonV265");
+
+      if (bandwidthInput) {
+        bandwidthInput.addEventListener("input", () => {
+          spectrumWaterfallSettingsV265.bandwidthHz = spectrumClampV265(Number(bandwidthInput.value || 200000), 200000, SPECTRUM_SAMPLE_RATE_HZ_V265);
+          updateSpectrumTuningControlLabelsV265();
+          redrawSpectrumWithCurrentControlsV265();
+        });
+      }
+      if (decoderBandwidthInput) {
+        decoderBandwidthInput.addEventListener("input", () => {
+          spectrumWaterfallSettingsV265.decoderBandwidthHz = spectrumClampV265(Number(decoderBandwidthInput.value || 8000), 4000, 30000);
+          updateSpectrumTuningControlLabelsV265();
+          redrawSpectrumWithCurrentControlsV265();
+        });
+      }
+      if (gainInput) {
+        gainInput.addEventListener("input", () => {
+          spectrumWaterfallSettingsV265.gainDb = spectrumClampV265(Number(gainInput.value || 40), 0, 70);
+          updateSpectrumTuningControlLabelsV265();
+        });
+      }
+      if (squelchInput) {
+        squelchInput.addEventListener("input", () => {
+          spectrumSquelchUserAdjustedV265 = true;
+          spectrumWaterfallSettingsV265.squelchDb = spectrumClampV265(Number(squelchInput.value || -96), -120, -40);
+          updateSpectrumTuningControlLabelsV265();
+          redrawSpectrumWithCurrentControlsV265();
+        });
+      }
+      if (autoButton) {
+        autoButton.addEventListener("click", () => {
+          spectrumSquelchUserAdjustedV265 = false;
+          spectrumMaybeAutoSetSquelchV265(spectrumWaterfallLastBinsV265);
+          redrawSpectrumWithCurrentControlsV265();
+        });
+      }
+
+      updateSpectrumTuningControlLabelsV265();
     }
 
     function createSpectrumWaterfallModalV250() {
@@ -1012,6 +1135,30 @@
             <button id="spectrumWaterfallCloseButton" type="button" class="secondary">Close</button>
           </div>
           <div class="spectrum-waterfall-body">
+            <!-- SPECTRUM_COMPACT_TUNING_CONTROLS_V2_6_7 -->
+          <div class="spectrum-tuning-controls spectrum-tuning-controls-compact" id="spectrumTuningControlsV265" aria-label="Spectrum tuning controls">
+            <div class="spectrum-tuning-row">
+              <label for="spectrumBandwidthSliderV265">RF BW</label>
+              <input id="spectrumBandwidthSliderV265" type="range" min="200000" max="2400000" step="25000" value="200000">
+              <span id="spectrumBandwidthValueV265" class="spectrum-tuning-value">200 kHz</span>
+            </div>
+            <div class="spectrum-tuning-row">
+              <label for="spectrumDecoderBandwidthSliderV266">Decoder</label>
+              <input id="spectrumDecoderBandwidthSliderV266" type="range" min="4000" max="30000" step="1000" value="8000">
+              <span id="spectrumDecoderBandwidthValueV266" class="spectrum-tuning-value">8 kHz</span>
+            </div>
+            <div class="spectrum-tuning-row">
+              <label for="spectrumGainSliderV265">Gain</label>
+              <input id="spectrumGainSliderV265" type="range" min="0" max="70" step="1" value="40">
+              <span id="spectrumGainValueV265" class="spectrum-tuning-value">40 dB</span>
+            </div>
+            <div class="spectrum-tuning-row spectrum-tuning-row-squelch">
+              <label for="spectrumSquelchSliderV265">Squelch</label>
+              <input id="spectrumSquelchSliderV265" type="range" min="-120" max="-40" step="1" value="-96">
+              <span id="spectrumSquelchValueV265" class="spectrum-tuning-value">-96 dB</span>
+              <button id="spectrumAutoSquelchButtonV265" type="button" class="secondary small-button compact-auto-button" title="Set squelch to noise floor plus 6 dB">Auto +6</button>
+            </div>
+          </div>
             <div class="spectrum-waterfall-panel">
               <div class="spectrum-waterfall-panel-title">Spectrum</div>
               <canvas id="spectrumCanvasV250" width="960" height="260"></canvas>
@@ -1021,7 +1168,7 @@
               <canvas id="waterfallCanvasV250" width="960" height="380"></canvas>
             </div>
             <div id="spectrumWaterfallStatus" class="spectrum-waterfall-status">
-              Ready to request live Pluto spectrum snapshots.
+              Ready to request live Pluto spectrum snapshots. Live audio uses these controls when Listen starts.
             </div>
           </div>
         </div>
@@ -1035,6 +1182,7 @@
 
       document.body.appendChild(modal);
       document.getElementById("spectrumWaterfallCloseButton")?.addEventListener("click", closeSpectrumWaterfallModalV250);
+      bindSpectrumTuningControlsV265();
     }
 
     function closeSpectrumWaterfallModalV250() {
@@ -1080,6 +1228,210 @@
       const hz = Number(freqHz || 0);
       if (!Number.isFinite(hz) || hz <= 0) return "";
       return `${(hz / 1000000).toFixed(6)} MHz`;
+    }
+
+    function drawSpectrumTuningOverlayV265(ctx, padL, padT, plotW, plotH, dbMin, dbMax) {
+      const settings = spectrumWaterfallSettingsV265 || {};
+      const centerX = padL + plotW / 2;
+      const rfBandwidthHz = spectrumClampV265(Number(settings.bandwidthHz || 200000), 200000, SPECTRUM_SAMPLE_RATE_HZ_V265);
+      const rfPassbandW = spectrumClampV265((rfBandwidthHz / SPECTRUM_SAMPLE_RATE_HZ_V265) * plotW, 10, plotW);
+      const rfLeftX = centerX - rfPassbandW / 2;
+      const rfRightX = centerX + rfPassbandW / 2;
+
+      const decoderBandwidthHz = spectrumClampV265(Number(settings.decoderBandwidthHz || 8000), 4000, 30000);
+      const decoderPassbandW = spectrumClampV265((decoderBandwidthHz / SPECTRUM_SAMPLE_RATE_HZ_V265) * plotW, 6, plotW);
+      const decoderLeftX = centerX - decoderPassbandW / 2;
+      const decoderRightX = centerX + decoderPassbandW / 2;
+
+      ctx.save();
+      ctx.fillStyle = "rgba(56, 189, 248, 0.055)";
+      ctx.fillRect(rfLeftX, padT, rfPassbandW, plotH);
+      ctx.strokeStyle = "rgba(56, 189, 248, 0.34)";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(rfLeftX, padT);
+      ctx.lineTo(rfLeftX, padT + plotH);
+      ctx.moveTo(rfRightX, padT);
+      ctx.lineTo(rfRightX, padT + plotH);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = "rgba(34, 197, 94, 0.12)";
+      ctx.fillRect(decoderLeftX, padT, decoderPassbandW, plotH);
+      ctx.strokeStyle = "rgba(34, 197, 94, 0.92)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(decoderLeftX, padT);
+      ctx.lineTo(decoderLeftX, padT + plotH);
+      ctx.moveTo(decoderRightX, padT);
+      ctx.lineTo(decoderRightX, padT + plotH);
+      ctx.stroke();
+
+      const squelchDb = spectrumClampV265(Number(settings.squelchDb || -96), dbMin, dbMax);
+      const squelchY = padT + ((dbMax - squelchDb) / (dbMax - dbMin)) * plotH;
+      ctx.strokeStyle = "rgba(250, 204, 21, 0.95)";
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([9, 5]);
+      ctx.beginPath();
+      ctx.moveTo(padL, squelchY);
+      ctx.lineTo(padL + plotW, squelchY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = "rgba(7, 17, 28, 0.86)";
+      ctx.fillRect(padL + 7, squelchY - 15, 92, 18);
+      ctx.strokeStyle = "rgba(250, 204, 21, 0.65)";
+      ctx.strokeRect(padL + 7, squelchY - 15, 92, 18);
+      ctx.fillStyle = "#fde68a";
+      ctx.font = "11px system-ui, sans-serif";
+      ctx.fillText(`Squelch ${squelchDb.toFixed(0)} dB`, padL + 12, squelchY - 2);
+      ctx.restore();
+    }
+
+    /* SPECTRUM_RENDER_GUARD_V2_6_9
+     * Safety fallback: draw a basic spectrum/waterfall even if optional tuning overlays throw.
+     */
+    function drawSpectrumFallbackV269(canvas, bins) {
+      const ctx = canvas && canvas.getContext ? canvas.getContext("2d") : null;
+      const values = (bins || []).map((db) => Number(db)).filter((db) => Number.isFinite(db));
+      if (!ctx || !values.length) return;
+
+      const rect = canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : { width: canvas.width || 960, height: canvas.height || 260 };
+      const scale = window.devicePixelRatio || 1;
+      const w = Math.max(320, Math.floor((rect.width || canvas.width || 960) * scale));
+      const h = Math.max(180, Math.floor((rect.height || canvas.height || 260) * scale));
+      if (canvas.width !== w) canvas.width = w;
+      if (canvas.height !== h) canvas.height = h;
+
+      const padL = 52 * scale;
+      const padR = 18 * scale;
+      const padT = 20 * scale;
+      const padB = 30 * scale;
+      const plotW = Math.max(1, w - padL - padR);
+      const plotH = Math.max(1, h - padT - padB);
+      const dbMin = -125;
+      const dbMax = -40;
+
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = "#07111c";
+      ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = "rgba(148, 163, 184, 0.24)";
+      ctx.lineWidth = 1 * scale;
+      ctx.font = `${12 * scale}px system-ui, sans-serif`;
+      ctx.fillStyle = "#9db1c3";
+
+      for (let db = -120; db <= -40; db += 20) {
+        const y = padT + ((dbMax - db) / (dbMax - dbMin)) * plotH;
+        ctx.beginPath();
+        ctx.moveTo(padL, y);
+        ctx.lineTo(w - padR, y);
+        ctx.stroke();
+        ctx.fillText(`${db} dB`, 8 * scale, y + 4 * scale);
+      }
+
+      const centerX = padL + plotW / 2;
+      ctx.strokeStyle = "rgba(56, 189, 248, 0.55)";
+      ctx.setLineDash([6 * scale, 5 * scale]);
+      ctx.beginPath();
+      ctx.moveTo(centerX, padT);
+      ctx.lineTo(centerX, padT + plotH);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.strokeStyle = "#38bdf8";
+      ctx.lineWidth = 2 * scale;
+      ctx.beginPath();
+      values.forEach((db, index) => {
+        const x = padL + (index / Math.max(1, values.length - 1)) * plotW;
+        const y = padT + ((dbMax - db) / (dbMax - dbMin)) * plotH;
+        if (index === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+
+      ctx.strokeStyle = "rgba(226, 232, 240, 0.34)";
+      ctx.strokeRect(padL, padT, plotW, plotH);
+      ctx.fillStyle = "#9db1c3";
+      ctx.fillText("Live Pluto snapshot", w - 176 * scale, 16 * scale);
+    }
+
+    function waterfallColorFallbackV269(db) {
+      const t = Math.max(0, Math.min(1, (Number(db || -125) + 125) / 85));
+      const r = Math.round(8 + t * 235);
+      const g = Math.round(20 + Math.max(0, t - 0.15) * 210);
+      const b = Math.round(45 + Math.max(0, 0.80 - t) * 175);
+      return `rgb(${r},${g},${b})`;
+    }
+
+    function drawWaterfallFallbackV269(canvas, rows) {
+      const ctx = canvas && canvas.getContext ? canvas.getContext("2d") : null;
+      if (!ctx) return;
+      const rect = canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : { width: canvas.width || 960, height: canvas.height || 380 };
+      const scale = window.devicePixelRatio || 1;
+      const w = Math.max(320, Math.floor((rect.width || canvas.width || 960) * scale));
+      const h = Math.max(180, Math.floor((rect.height || canvas.height || 380) * scale));
+      if (canvas.width !== w) canvas.width = w;
+      if (canvas.height !== h) canvas.height = h;
+
+      const padL = 46 * scale;
+      const padR = 16 * scale;
+      const padT = 16 * scale;
+      const padB = 24 * scale;
+      const plotW = Math.max(1, w - padL - padR);
+      const plotH = Math.max(1, h - padT - padB);
+      const validRows = (rows || []).filter((row) => Array.isArray(row) && row.length);
+
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = "#06111f";
+      ctx.fillRect(0, 0, w, h);
+      if (!validRows.length) {
+        ctx.fillStyle = "#94a3b8";
+        ctx.font = `${13 * scale}px system-ui, sans-serif`;
+        ctx.fillText("Waiting for spectrum rows...", padL, padT + 28 * scale);
+      } else {
+        const maxRows = Math.min(validRows.length, Math.floor(plotH));
+        for (let y = 0; y < maxRows; y += 1) {
+          const row = validRows[y];
+          for (let x = 0; x < plotW; x += 1) {
+            const idx = Math.min(row.length - 1, Math.floor((x / Math.max(1, plotW - 1)) * row.length));
+            ctx.fillStyle = waterfallColorFallbackV269(row[idx]);
+            ctx.fillRect(padL + x, padT + y, 1, 1);
+          }
+        }
+      }
+      const centerX = padL + plotW / 2;
+      ctx.setLineDash([5 * scale, 5 * scale]);
+      ctx.strokeStyle = "rgba(224, 242, 254, 0.78)";
+      ctx.beginPath();
+      ctx.moveTo(centerX, padT);
+      ctx.lineTo(centerX, padT + plotH);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.strokeStyle = "rgba(226, 232, 240, 0.34)";
+      ctx.strokeRect(padL, padT, plotW, plotH);
+    }
+
+    function drawSpectrumWaterfallSafeV269(spectrumCanvas, waterfallCanvas, bins, rows, status) {
+      const notes = [];
+      try {
+        drawSpectrumV250(spectrumCanvas, bins);
+      } catch (error) {
+        console.warn("Spectrum overlay draw failed; using fallback renderer", error);
+        drawSpectrumFallbackV269(spectrumCanvas, bins);
+        notes.push("spectrum overlay fallback");
+      }
+
+      try {
+        drawWaterfallV250(waterfallCanvas, rows);
+      } catch (error) {
+        console.warn("Waterfall draw failed; using fallback renderer", error);
+        drawWaterfallFallbackV269(waterfallCanvas, rows);
+        notes.push("waterfall fallback");
+      }
+
+      if (notes.length && status && status.textContent) {
+        status.textContent = `${status.textContent} · ${notes.join(" · ")}`;
+      }
     }
 
     function drawSpectrumV250(canvas, bins) {
@@ -1131,6 +1483,8 @@
       ctx.lineTo(centerX, padT + plotH);
       ctx.stroke();
       ctx.setLineDash([]);
+
+      try { drawSpectrumTuningOverlayV265(ctx, padL, padT, plotW, plotH, dbMin, dbMax); } catch (error) { console.warn("Spectrum tuning overlay disabled", error); }
 
       const centerLabelV254 = spectrumWaterfallFormatCenterMHzV254(spectrumWaterfallCenterHzV254);
       if (centerLabelV254) {
@@ -1224,32 +1578,95 @@
       return waterfallLerpV256(av, bv, frac);
     }
 
-    function drawWaterfallV250(canvas, rows) {
-      const ctx = canvas.getContext("2d");
+    /* PRO_WATERFALL_SCROLL_V2_6_1
+     * Render the waterfall like a traditional SDR display:
+     * - new snapshots are inserted as one fine row at the top,
+     * - older rows move downward,
+     * - unused history remains blank until enough snapshots accumulate,
+     * - rows are not stretched to fill the whole waterfall.
+     */
+    function waterfallBackgroundColorV261(y, height) {
+      const t = waterfallClampV256(y / Math.max(1, height - 1), 0, 1);
+      return [
+        Math.round(waterfallLerpV256(3, 6, t)),
+        Math.round(waterfallLerpV256(8, 17, t)),
+        Math.round(waterfallLerpV256(18, 31, t))
+      ];
+    }
+
+    function waterfallPlotMetricsV261(canvas) {
       const rect = canvas.getBoundingClientRect();
       const scale = window.devicePixelRatio || 1;
       const w = Math.max(320, Math.floor(rect.width * scale));
       const h = Math.max(180, Math.floor(rect.height * scale));
+      const padL = Math.round(46 * scale);
+      const padR = Math.round(16 * scale);
+      const padT = Math.round(16 * scale);
+      const padB = Math.round(24 * scale);
+      const plotW = Math.max(1, Math.floor(w - padL - padR));
+      const plotH = Math.max(1, Math.floor(h - padT - padB));
+      return { rect, scale, w, h, padL, padR, padT, padB, plotW, plotH };
+    }
+
+    function waterfallMaxHistoryRowsV261(canvas) {
+      if (!canvas || !canvas.getBoundingClientRect) return 420;
+      const metrics = waterfallPlotMetricsV261(canvas);
+      return Math.max(180, Math.min(900, metrics.plotH));
+    }
+
+    function drawWaterfallV250(canvas, rows) {
+      const ctx = canvas && canvas.getContext ? canvas.getContext("2d") : null;
+      if (!ctx) return;
+
+      const metrics = waterfallPlotMetricsV261(canvas);
+      const { scale, w, h, padL, padR, padT, plotW, plotH } = metrics;
       if (canvas.width !== w || canvas.height !== h) {
         canvas.width = w;
         canvas.height = h;
       }
 
       ctx.clearRect(0, 0, w, h);
-      const padL = 46 * scale;
-      const padR = 16 * scale;
-      const padT = 16 * scale;
-      const padB = 24 * scale;
-      const plotW = Math.max(1, Math.floor(w - padL - padR));
-      const plotH = Math.max(1, Math.floor(h - padT - padB));
 
-      const gradient = ctx.createLinearGradient(0, 0, 0, h);
-      gradient.addColorStop(0, "#06111f");
-      gradient.addColorStop(1, "#020617");
-      ctx.fillStyle = gradient;
+      const bg = ctx.createLinearGradient(0, 0, 0, h);
+      bg.addColorStop(0, "#06111f");
+      bg.addColorStop(1, "#020617");
+      ctx.fillStyle = bg;
       ctx.fillRect(0, 0, w, h);
 
-      ctx.strokeStyle = "rgba(148, 163, 184, 0.20)";
+      const validRows = (rows || []).filter((row) => Array.isArray(row) && row.length);
+      const image = ctx.createImageData(plotW, plotH);
+      const historyRows = validRows.slice(0, Math.min(validRows.length, plotH));
+
+      for (let y = 0; y < plotH; y += 1) {
+        const row = y < historyRows.length ? historyRows[y] : null;
+        const bgColor = row ? null : waterfallBackgroundColorV261(y, plotH);
+        for (let x = 0; x < plotW; x += 1) {
+          const idx = (y * plotW + x) * 4;
+          let r;
+          let g;
+          let b;
+          if (row) {
+            const db = waterfallSampleRowV256(row, x, plotW);
+            [r, g, b] = waterfallPaletteV256(db);
+          } else {
+            [r, g, b] = bgColor;
+          }
+          image.data[idx] = r;
+          image.data[idx + 1] = g;
+          image.data[idx + 2] = b;
+          image.data[idx + 3] = 255;
+        }
+      }
+
+      ctx.putImageData(image, padL, padT);
+
+      const topShine = ctx.createLinearGradient(0, padT, 0, padT + Math.min(plotH, 46 * scale));
+      topShine.addColorStop(0.00, "rgba(255,255,255,0.08)");
+      topShine.addColorStop(1.00, "rgba(255,255,255,0.00)");
+      ctx.fillStyle = topShine;
+      ctx.fillRect(padL, padT, plotW, Math.min(plotH, 46 * scale));
+
+      ctx.strokeStyle = "rgba(148, 163, 184, 0.18)";
       ctx.lineWidth = 1 * scale;
       for (let i = 0; i <= 4; i += 1) {
         const x = padL + (plotW * i) / 4;
@@ -1257,47 +1674,6 @@
         ctx.moveTo(x, padT);
         ctx.lineTo(x, padT + plotH);
         ctx.stroke();
-      }
-
-      const validRows = (rows || []).filter((row) => Array.isArray(row) && row.length);
-      if (!validRows.length) {
-        ctx.fillStyle = "#94a3b8";
-        ctx.font = `${13 * scale}px system-ui, sans-serif`;
-        ctx.fillText("Waiting for spectrum rows...", padL, padT + 28 * scale);
-      } else {
-        const historyRows = validRows.slice(0, Math.min(validRows.length, 220));
-        const srcW = Math.min(480, Math.max(160, plotW));
-        const srcH = Math.max(2, historyRows.length);
-        const rowCanvas = document.createElement("canvas");
-        rowCanvas.width = srcW;
-        rowCanvas.height = srcH;
-        const rowCtx = rowCanvas.getContext("2d");
-        const image = rowCtx.createImageData(srcW, srcH);
-
-        for (let y = 0; y < srcH; y += 1) {
-          const row = historyRows[y];
-          for (let x = 0; x < srcW; x += 1) {
-            const db = waterfallSampleRowV256(row, x, srcW);
-            const [r, g, b] = waterfallPaletteV256(db);
-            const idx = (y * srcW + x) * 4;
-            image.data[idx] = r;
-            image.data[idx + 1] = g;
-            image.data[idx + 2] = b;
-            image.data[idx + 3] = 255;
-          }
-        }
-
-        rowCtx.putImageData(image, 0, 0);
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = "high";
-        ctx.drawImage(rowCanvas, 0, 0, srcW, srcH, padL, padT, plotW, plotH);
-
-        const topFade = ctx.createLinearGradient(0, padT, 0, padT + plotH);
-        topFade.addColorStop(0.00, "rgba(255,255,255,0.10)");
-        topFade.addColorStop(0.06, "rgba(255,255,255,0.00)");
-        topFade.addColorStop(1.00, "rgba(0,0,0,0.10)");
-        ctx.fillStyle = topFade;
-        ctx.fillRect(padL, padT, plotW, plotH);
       }
 
       const centerX = padL + plotW / 2;
@@ -1309,6 +1685,17 @@
       ctx.lineTo(centerX, padT + plotH);
       ctx.stroke();
       ctx.setLineDash([]);
+
+      if (!validRows.length) {
+        ctx.fillStyle = "#94a3b8";
+        ctx.font = `${13 * scale}px system-ui, sans-serif`;
+        ctx.fillText("Waterfall history will build downward from the top...", padL, padT + 28 * scale);
+      } else {
+        ctx.fillStyle = "rgba(203, 213, 225, 0.92)";
+        ctx.font = `${11 * scale}px system-ui, sans-serif`;
+        const rowText = `${historyRows.length} row${historyRows.length === 1 ? "" : "s"}`;
+        ctx.fillText(rowText, padL + 8 * scale, padT + 15 * scale);
+      }
 
       ctx.strokeStyle = "rgba(226, 232, 240, 0.34)";
       ctx.strokeRect(padL, padT, plotW, plotH);
@@ -1382,15 +1769,79 @@
     function spectrumWaterfallSnapshotUrlV253(pass) {
       const freqHz = spectrumWaterfallFrequencyHzV253(pass);
       const params = new URLSearchParams();
-      params.set("bins", "160");
+      params.set("bins", "192");
       params.set("request", String(Date.now()));
+      const tuning = spectrumWaterfallSettingsV265 || {};
       if (freqHz > 0) {
         params.set("freq_hz", String(freqHz));
       }
+      /* SPECTRUM_SNAPSHOT_NO_TUNING_PARAMS_V2_6_10A */
+      ["bandwidth_hz", "decoder_bandwidth_hz", "decoder_bw_hz", "gain_db", "squelch_db"].forEach((key) => params.delete(key));
+
       return {
         url: `/api/radio/spectrum/snapshot?${params.toString()}`,
         freqHz
       };
+    }
+
+
+
+    /* SPECTRUM_PAUSE_DURING_AUDIO_V2_6_13
+     * The Pluto cannot reliably run live audio DSP and repeated spectrum
+     * iio_readdev snapshots at the same time.  When Listen is active, keep
+     * the modal open but do not poll the spectrum endpoint, so audio is not
+     * starved or killed by competing IIO access.
+     */
+    function spectrumWaterfallLiveAudioActiveV2613() {
+      try {
+        return Boolean(
+          typeof analogAudioSession !== "undefined" &&
+          analogAudioSession &&
+          !analogAudioSession.stopped
+        );
+      } catch (_error) {
+        return false;
+      }
+    }
+
+    function drawSpectrumWaterfallPausedForAudioV2613(canvas, title, detail) {
+      const ctx = canvas && canvas.getContext ? canvas.getContext("2d") : null;
+      if (!ctx) return;
+
+      const rect = canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : { width: canvas.width || 640, height: canvas.height || 220 };
+      const scale = window.devicePixelRatio || 1;
+      const w = Math.max(320, Math.floor((rect.width || canvas.width || 640) * scale));
+      const h = Math.max(170, Math.floor((rect.height || canvas.height || 220) * scale));
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+      }
+
+      ctx.clearRect(0, 0, w, h);
+      const gradient = ctx.createLinearGradient(0, 0, 0, h);
+      gradient.addColorStop(0, "#07111c");
+      gradient.addColorStop(1, "#020617");
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, w, h);
+
+      const pad = 18 * scale;
+      ctx.strokeStyle = "rgba(148, 163, 184, 0.22)";
+      ctx.lineWidth = 1 * scale;
+      ctx.strokeRect(pad, pad, w - 2 * pad, h - 2 * pad);
+
+      ctx.fillStyle = "#e0f2fe";
+      ctx.font = `${16 * scale}px system-ui, sans-serif`;
+      const titleText = title || "Spectrum paused";
+      ctx.fillText(titleText, pad + 16 * scale, pad + 34 * scale);
+
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = `${12 * scale}px system-ui, sans-serif`;
+      const detailText = detail || "Live audio is active; spectrum polling is paused to avoid Pluto/IIO contention.";
+      ctx.fillText(detailText, pad + 16 * scale, pad + 58 * scale);
+
+      ctx.fillStyle = "rgba(250, 204, 21, 0.90)";
+      ctx.font = `${12 * scale}px system-ui, sans-serif`;
+      ctx.fillText("Stop Listen to resume live spectrum and waterfall refresh.", pad + 16 * scale, pad + 80 * scale);
     }
 
     async function renderSpectrumWaterfallV250() {
@@ -1421,6 +1872,24 @@
         status.textContent = "Waiting for live Pluto spectrum snapshot...";
       }
 
+
+      if (spectrumWaterfallLiveAudioActiveV2613()) {
+        if (status) {
+          status.textContent = "Spectrum/waterfall paused while live audio is playing. Stop Listen to resume live spectrum.";
+        }
+        drawSpectrumWaterfallPausedForAudioV2613(
+          spectrumCanvas,
+          "Spectrum paused for audio",
+          "Live audio is using Pluto/IIO resources. Spectrum snapshots are paused to prevent audio dropouts."
+        );
+        drawSpectrumWaterfallPausedForAudioV2613(
+          waterfallCanvas,
+          "Waterfall paused for audio",
+          "This avoids contention between pluto_fm_receiver and spectrum snapshots."
+        );
+        return;
+      }
+
       spectrumWaterfallFrameV250 += 1;
       let bins = [];
       try {
@@ -1434,10 +1903,16 @@
           throw new Error("Spectrum snapshot returned no bins.");
         }
         spectrumWaterfallCenterHzV254 = Number(snapshot.center_hz || request.freqHz || 0);
+        spectrumWaterfallLastBinsV265 = bins.slice();
+        spectrumMaybeAutoSetSquelchV265(bins);
         if (status) {
           status.textContent =
             `Live spectrum from Pluto · ${(Number(snapshot.center_hz || request.freqHz || 0) / 1000000).toFixed(3)} MHz · ` +
-            `${snapshot.bin_count || bins.length} bins · ${snapshot.sample_count || 0} IQ samples`;
+            `${snapshot.bin_count || bins.length} bins · ${snapshot.sample_count || 0} IQ samples · ` +
+            `RF ${spectrumFormatBandwidthV265(spectrumWaterfallSettingsV265.bandwidthHz)} · ` +
+            `Decoder ${spectrumFormatBandwidthV265(spectrumWaterfallSettingsV265.decoderBandwidthHz || 8000)} · ` +
+            `Gain ${spectrumFormatGainV265(spectrumWaterfallSettingsV265.gainDb)} · ` +
+            `Squelch ${spectrumFormatDbV265(spectrumWaterfallSettingsV265.squelchDb)}`;
         }
       } catch (error) {
         if (status) {
@@ -1446,13 +1921,11 @@
         return;
       }
       spectrumWaterfallRowsV250.unshift(bins);
-      const maxRows = 96;
+      const maxRows = waterfallMaxHistoryRowsV261(waterfallCanvas);
       if (spectrumWaterfallRowsV250.length > maxRows) {
         spectrumWaterfallRowsV250.length = maxRows;
       }
-
-      drawSpectrumV250(spectrumCanvas, bins);
-      drawWaterfallV250(waterfallCanvas, spectrumWaterfallRowsV250);
+      drawSpectrumWaterfallSafeV269(spectrumCanvas, waterfallCanvas, bins, spectrumWaterfallRowsV250, status);
     }
 
     function openSpectrumWaterfallModalV250() {
@@ -1466,6 +1939,9 @@
       if (!modal) return;
 
       spectrumWaterfallRowsV250 = [];
+      spectrumWaterfallLastBinsV265 = [];
+      spectrumSquelchUserAdjustedV265 = false;
+      updateSpectrumTuningControlLabelsV265();
       modal.hidden = false;
       modal.classList.add("open");
       document.body.classList.add("spectrum-waterfall-modal-open");
@@ -2104,15 +2580,206 @@ setDl("radioStatus", entries);
      * stopping playback. The backend still owns tuning, DSP, and PCM generation;
      * the browser only plays decoded PCM.
      */
+
+    /* LIVE_AUDIO_SPECTRUM_CONTROL_PARAMS_V2_6_8
+     * Reuse the compact Spectrum modal tuning controls when starting live audio.
+     * These fields are optional; if the controls are not present, backend defaults apply.
+     */
+    function spectrumLiveAudioParamsV268() {
+      const params = {};
+      const readNumber = (ids, fallback = null) => {
+        for (const id of ids) {
+          const node = document.getElementById(id);
+          if (!node) continue;
+          const value = Number(node.value);
+          if (Number.isFinite(value)) return value;
+        }
+        return fallback;
+      };
+
+      const rfBwHz = readNumber([
+        "spectrumRfBandwidthSliderV266",
+        "spectrumRfBandwidthSliderV265",
+        "spectrumBandwidthSliderV265"
+      ]);
+      const decoderBwHz = readNumber([
+        "spectrumDecoderBandwidthSliderV266",
+        "spectrumDecoderBandwidthSliderV265"
+      ]);
+      const gainDb = readNumber([
+        "spectrumGainSliderV265",
+        "spectrumReceiverGainSliderV265"
+      ]);
+      const squelchDb = readNumber([
+        "spectrumSquelchSliderV265",
+        "spectrumSquelchSliderV266"
+      ]);
+
+      if (Number.isFinite(rfBwHz)) params.rf_bw_hz = String(Math.round(rfBwHz));
+      if (Number.isFinite(decoderBwHz)) params.decoder_bw_hz = String(Math.round(decoderBwHz));
+      if (Number.isFinite(gainDb)) params.gain_db = Number(gainDb).toFixed(1);
+      if (Number.isFinite(squelchDb)) params.squelch_db = Number(squelchDb).toFixed(1);
+      return params;
+    }
+
+
+    /* LIVE_AUDIO_SQUELCH_APPLY_V2_6_14 */
+    function spectrumLiveAudioControlParamsV2614() {
+      const readNumber = (ids, fallback) => {
+        for (const id of ids) {
+          const node = document.getElementById(id);
+          if (!node) continue;
+          const value = Number(node.value);
+          if (Number.isFinite(value)) return value;
+        }
+        return fallback;
+      };
+      const settings = (typeof spectrumWaterfallSettingsV265 !== "undefined" && spectrumWaterfallSettingsV265) ? spectrumWaterfallSettingsV265 : {};
+      const rfBw = readNumber([
+        "spectrumRfBandwidthSliderV266",
+        "spectrumRfBwSliderV266",
+        "spectrumBandwidthSliderV265",
+        "spectrumRfBandwidthSliderV265"
+      ], Number(settings.rfBandwidthHz || settings.bandwidthHz || 200000));
+      const decoderBw = readNumber([
+        "spectrumDecoderBandwidthSliderV266",
+        "spectrumDecoderBwSliderV266",
+        "spectrumDecoderBandwidthSliderV265",
+        "spectrumDecoderSliderV266"
+      ], Number(settings.decoderBandwidthHz || settings.decoderBwHz || 8000));
+      const gain = readNumber([
+        "spectrumGainSliderV266",
+        "spectrumGainSliderV265"
+      ], Number(settings.gainDb || 40));
+      const squelch = readNumber([
+        "spectrumSquelchSliderV266",
+        "spectrumSquelchSliderV265"
+      ], Number(settings.squelchDb || -120));
+      return {
+        rf_bw_hz: String(Math.round(Math.max(200000, Math.min(2400000, rfBw || 200000)))),
+        decoder_bw_hz: String(Math.round(Math.max(4000, Math.min(30000, decoderBw || 8000)))),
+        gain_db: String(Math.max(0, Math.min(70, gain || 40)).toFixed(1)),
+        squelch_db: String(Math.max(-120, Math.min(-40, squelch || -120)).toFixed(1))
+      };
+    }
+
+    /* LIVE_AUDIO_SQUELCH_CALIBRATION_V2_6_15
+     * Persist and reuse the Spectrum tuning controls for live audio.
+     * The Listen button may be outside the Spectrum modal, so relying only on DOM slider nodes
+     * can silently fall back to defaults.  This keeps a canonical browser-side state.
+     */
+    const LIVE_AUDIO_CONTROL_STORAGE_KEY_V2615 = "plutoLiveAudioControlsV2615";
+
+    function spectrumLiveAudioDefaultControlsV2615() {
+      return { rf_bw_hz: 200000, decoder_bw_hz: 8000, gain_db: 40, squelch_db: -120 };
+    }
+
+    function spectrumClampNumberV2615(value, fallback, min, max) {
+      const numeric = Number(value);
+      const safe = Number.isFinite(numeric) ? numeric : fallback;
+      return Math.max(min, Math.min(max, safe));
+    }
+
+    function spectrumReadStoredLiveAudioControlsV2615() {
+      const defaults = spectrumLiveAudioDefaultControlsV2615();
+      try {
+        const raw = window.localStorage ? window.localStorage.getItem(LIVE_AUDIO_CONTROL_STORAGE_KEY_V2615) : "";
+        if (!raw) return defaults;
+        return { ...defaults, ...JSON.parse(raw) };
+      } catch (_error) {
+        return defaults;
+      }
+    }
+
+    function spectrumWriteStoredLiveAudioControlsV2615(state) {
+      try {
+        if (window.localStorage) window.localStorage.setItem(LIVE_AUDIO_CONTROL_STORAGE_KEY_V2615, JSON.stringify(state));
+      } catch (_error) {
+      }
+    }
+
+    function spectrumLiveAudioControlsFromUiV2615() {
+      const stored = spectrumReadStoredLiveAudioControlsV2615();
+      const settings = (typeof spectrumWaterfallSettingsV265 !== "undefined" && spectrumWaterfallSettingsV265) ? spectrumWaterfallSettingsV265 : {};
+      const nodeValue = (id, fallback) => {
+        const node = document.getElementById(id);
+        if (!node) return fallback;
+        const value = Number(node.value);
+        return Number.isFinite(value) ? value : fallback;
+      };
+      const state = {
+        rf_bw_hz: Math.round(spectrumClampNumberV2615(
+          nodeValue("spectrumBandwidthSliderV265", settings.bandwidthHz ?? stored.rf_bw_hz),
+          stored.rf_bw_hz, 200000, 2400000)),
+        decoder_bw_hz: Math.round(spectrumClampNumberV2615(
+          nodeValue("spectrumDecoderBandwidthSliderV266", settings.decoderBandwidthHz ?? stored.decoder_bw_hz),
+          stored.decoder_bw_hz, 4000, 30000)),
+        gain_db: spectrumClampNumberV2615(
+          nodeValue("spectrumGainSliderV265", settings.gainDb ?? stored.gain_db),
+          stored.gain_db, 0, 70),
+        squelch_db: spectrumClampNumberV2615(
+          nodeValue("spectrumSquelchSliderV265", settings.squelchDb ?? stored.squelch_db),
+          stored.squelch_db, -120, -40)
+      };
+      spectrumWriteStoredLiveAudioControlsV2615(state);
+      return state;
+    }
+
+    function spectrumLiveAudioControlParamsV2615() {
+      const state = spectrumLiveAudioControlsFromUiV2615();
+      return {
+        rf_bw_hz: String(state.rf_bw_hz),
+        decoder_bw_hz: String(state.decoder_bw_hz),
+        gain_db: String(Number(state.gain_db).toFixed(1)),
+        squelch_db: String(Number(state.squelch_db).toFixed(1))
+      };
+    }
+
+    function installSpectrumLiveAudioControlPersistenceV2615() {
+      if (window.__plutoLiveAudioControlPersistenceV2615) return;
+      window.__plutoLiveAudioControlPersistenceV2615 = true;
+      const watched = new Set([
+        "spectrumBandwidthSliderV265",
+        "spectrumDecoderBandwidthSliderV266",
+        "spectrumGainSliderV265",
+        "spectrumSquelchSliderV265"
+      ]);
+      const capture = (event) => {
+        if (!event || !event.target || !watched.has(event.target.id)) return;
+        const state = spectrumLiveAudioControlsFromUiV2615();
+        try {
+          if (typeof spectrumWaterfallSettingsV265 !== "undefined" && spectrumWaterfallSettingsV265) {
+            spectrumWaterfallSettingsV265.bandwidthHz = state.rf_bw_hz;
+            spectrumWaterfallSettingsV265.decoderBandwidthHz = state.decoder_bw_hz;
+            spectrumWaterfallSettingsV265.gainDb = state.gain_db;
+            spectrumWaterfallSettingsV265.squelchDb = state.squelch_db;
+          }
+        } catch (_error) {
+        }
+      };
+      document.addEventListener("input", capture, true);
+      document.addEventListener("change", capture, true);
+    }
+    installSpectrumLiveAudioControlPersistenceV2615();
     function analogAudioUrl(pass) {
       const radio = pass && pass.radio ? pass.radio : {};
       const downlink = radio.downlink_hz || (pass && pass.downlinks_hz ? pass.downlinks_hz[0] : 0);
       if (!downlink) return "";
-      const params = new URLSearchParams({ downlink_hz: String(downlink) });
+      const streamParams = new URLSearchParams({ downlink_hz: String(downlink) });
+      const startParams = new URLSearchParams({ downlink_hz: String(downlink) });
+      try {
+        const controlParams = spectrumLiveAudioControlParamsV2615();
+        Object.entries(controlParams).forEach(([key, value]) => {
+          if (value !== undefined && value !== null && String(value) !== "") {
+            startParams.set(key, String(value));
+          }
+        });
+      } catch (_error) {
+      }
       return {
         downlink,
-        startUrl: `/api/radio/audio/live/start?${params.toString()}`,
-        streamUrl: `/api/radio/audio/live.wav?stream=1&${params.toString()}`,
+        startUrl: `/api/radio/audio/live/start?${startParams.toString()}`,
+        streamUrl: `/api/radio/audio/live.wav?stream=1&${streamParams.toString()}`,
         stopUrl: `/api/radio/audio/live/stop`
       };
     }
@@ -2178,6 +2845,13 @@ setDl("radioStatus", entries);
       if (session.statusNode?.isConnected) {
         session.statusNode.textContent = reason;
       }
+
+      try {
+        if (spectrumWaterfallModalOpenV250) {
+          renderSpectrumWaterfallV250().catch(() => {});
+        }
+      } catch (_error) {
+      }
     }
 
     async function startAnalogAudio(pass, button, statusNode) {
@@ -2217,7 +2891,7 @@ setDl("radioStatus", entries);
         }
       }
 
-      statusNode.textContent = "Starting backend audio DSP...";
+      statusNode.textContent = `Starting backend audio DSP � ${new URL(audioUrls.startUrl, window.location.origin).searchParams.toString()}`;
       await postJson(audioUrls.startUrl, {});
 
       const context = new AudioCtx({ sampleRate });
@@ -4025,3 +4699,1856 @@ async function loadRotatorState() {
   };
 })();
 
+
+
+/* UI_VERSION_BADGE_V2_6_18 */
+(function () {
+  const uiVersion = "v2.6.25";
+  function setVersionBadge(text, className) {
+    const badge = document.getElementById("appVersionBadge");
+    if (!badge) return;
+    badge.textContent = text;
+    badge.classList.remove("version-backend-ok", "version-backend-warn");
+    if (className) badge.classList.add(className);
+  }
+  async function refreshVersionBadgeV2618() {
+    setVersionBadge(`UI ${uiVersion}`, "version-backend-warn");
+    try {
+      const response = await fetch("/api/status", { cache: "no-store" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const status = await response.json();
+      const backendVersion = status && status.version ? String(status.version) : "unknown";
+      setVersionBadge(`UI ${uiVersion} | Backend ${backendVersion}`, "version-backend-ok");
+    } catch (error) {
+      setVersionBadge(`UI ${uiVersion} | Backend offline`, "version-backend-warn");
+    }
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", refreshVersionBadgeV2618, { once: true });
+  } else {
+    refreshVersionBadgeV2618();
+  }
+  window.refreshVersionBadgeV2618 = refreshVersionBadgeV2618;
+})();
+
+
+/* RECEIVE_MODE_UI_FOUNDATION_V2_6_21 */
+(function receiveModeFoundationV261(){
+  "use strict";
+  const digitalPattern = /\b(CW|MORSE|AX\.?25|APRS|PACKET|FSK|GMSK|BPSK|QPSK|PSK|TELEMETRY|DIGITAL|DATA)\b/i;
+  const voicePattern = /\b(FM|NFM|WFM|VOICE|AUDIO|PHONE|VHF|UHF)\b/i;
+  const modalId = "receiveDecodeModalV261";
+  let lastContext = null;
+
+  function ensureModal(){
+    let modal = document.getElementById(modalId);
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.id = modalId;
+    modal.className = "receive-decode-modal-v261 hidden";
+    modal.innerHTML = [
+      '<div class="receive-decode-card-v261">',
+      '  <div class="receive-decode-header-v261">',
+      '    <div>',
+      '      <div class="receive-decode-title-v261">Decoded Output</div>',
+      '      <div class="receive-decode-subtitle-v261" id="receiveDecodeSubtitleV261">Decoder foundation</div>',
+      '    </div>',
+      '    <button type="button" class="receive-decode-close-v261" id="receiveDecodeCloseV261">×</button>',
+      '  </div>',
+      '  <pre class="receive-decode-console-v261" id="receiveDecodeConsoleV261"></pre>',
+      '  <div class="receive-decode-footer-v261">FM voice still uses the existing Listen path. CW decode output now polls live while capture is active.</div>',
+      '</div>'
+    ].join("");
+    document.body.appendChild(modal);
+    const close = document.getElementById("receiveDecodeCloseV261");
+    if (close) close.addEventListener("click", () => modal.classList.add("hidden"));
+    modal.addEventListener("click", (ev) => { if (ev.target === modal) modal.classList.add("hidden"); });
+    return modal;
+  }
+
+  function nearestContextText(el){
+    const container = el && el.closest ? el.closest(".pass-card,.pass-row,.sat-card,.modal,.card,tr,li,section,article,div") : null;
+    return (container && container.textContent ? container.textContent : (document.body ? document.body.textContent : "")).replace(/\s+/g, " ").slice(0, 3000);
+  }
+
+  function classify(text){
+    if (digitalPattern.test(text || "")) {
+      if (/\b(CW|MORSE)\b/i.test(text || "")) return "cw";
+      return "digital";
+    }
+    if (voicePattern.test(text || "")) return "listen";
+    return "listen";
+  }
+
+  function modeLabel(kind){
+    if (kind === "cw") return "Decode CW";
+    if (kind === "digital") return "Decode";
+    return "Listen";
+  }
+
+  function extractField(text, label){
+    const re = new RegExp(label + "\\s*[:=]\\s*([^|,;\\n]+)", "i");
+    const m = String(text || "").match(re);
+    return m ? m[1].trim().slice(0, 80) : "";
+  }
+
+  function buildContext(el){
+    const text = nearestContextText(el);
+    const kind = classify(text);
+    const mode = extractField(text, "Mode") || (kind === "cw" ? "CW" : kind === "digital" ? "Digital" : "FM voice");
+    const name = extractField(text, "Satellite") || extractField(text, "Name") || "selected satellite";
+    const freqMatch = text.match(/(\d{3,4}\.\d{3,6})\s*MHz/i);
+    const hzMatch = text.match(/(\d{8,10})\s*Hz/i);
+    let downlink = "";
+    if (hzMatch) downlink = hzMatch[1];
+    else if (freqMatch) downlink = String(Math.round(parseFloat(freqMatch[1]) * 1000000));
+    return {kind, mode, name, downlink, text};
+  }
+
+  async function showDecode(ctx){
+    const modal = ensureModal();
+    const subtitle = document.getElementById("receiveDecodeSubtitleV261");
+    const consoleEl = document.getElementById("receiveDecodeConsoleV261");
+    const startedAt = new Date();
+    modal.classList.remove("hidden");
+    if (subtitle) subtitle.textContent = `${ctx.name} | ${ctx.mode} | live decode`;
+    if (window.receiveDecodePollTimerV2625) {
+      clearInterval(window.receiveDecodePollTimerV2625);
+      window.receiveDecodePollTimerV2625 = null;
+    }
+
+    const params = new URLSearchParams();
+    params.set("mode", ctx.mode || ctx.kind);
+    params.set("name", ctx.name || "selected satellite");
+    if (ctx.downlink) params.set("downlink_hz", ctx.downlink);
+
+    function appendLine(line){
+      if (!consoleEl) return;
+      consoleEl.textContent += line + "\n";
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+    }
+
+    function renderObject(obj){
+      const lines = [];
+      const age = Math.round((Date.now() - startedAt.getTime()) / 1000);
+      lines.push(`[${age}s] ${obj.state || "decode"} (${obj.decoder_state || "unknown"})`);
+      if (obj.mode) lines.push(`Mode: ${obj.mode}`);
+      if (obj.sample_count || obj.pcm_bytes) lines.push(`PCM: ${obj.sample_count || 0} samples, ${obj.pcm_bytes || 0} bytes`);
+      if (typeof obj.rms !== "undefined" || typeof obj.peak !== "undefined") lines.push(`Level: RMS ${obj.rms ?? "?"}, peak ${obj.peak ?? "?"}`);
+      if (typeof obj.estimated_tone_hz !== "undefined") lines.push(`Tone estimate: ${obj.estimated_tone_hz} Hz`);
+      if (typeof obj.key_duty_percent !== "undefined") lines.push(`Key duty: ${obj.key_duty_percent}%`);
+      if (obj.morse) lines.push(`Morse: ${obj.morse}`);
+      if (obj.decoded_text) lines.push(`Decoded: ${obj.decoded_text}`);
+      if (Array.isArray(obj.lines)) {
+        for (const line of obj.lines) lines.push(`[decode] ${line}`);
+      }
+      return lines.join("\n");
+    }
+
+    async function pollOnce(){
+      if (!consoleEl) return;
+      if (modal.classList.contains("hidden")) {
+        if (window.receiveDecodePollTimerV2625) clearInterval(window.receiveDecodePollTimerV2625);
+        window.receiveDecodePollTimerV2625 = null;
+        return;
+      }
+      try {
+        const outResp = await fetch(`/api/radio/decode/output?${params.toString()}&request=${Date.now()}`, {cache:"no-store"});
+        const outText = await outResp.text();
+        let rendered = outText;
+        try { rendered = renderObject(JSON.parse(outText)); } catch (_) {}
+        consoleEl.textContent = rendered + "\n";
+        consoleEl.scrollTop = consoleEl.scrollHeight;
+      } catch (err) {
+        appendLine(`Decoder poll error: ${err && err.message ? err.message : err}`);
+      }
+    }
+
+    if (consoleEl) consoleEl.textContent = `Starting ${ctx.kind === "cw" ? "CW" : "digital"} receive/decode...\n`;
+    try {
+      const startResp = await fetch(`/api/radio/receive/start?${params.toString()}`, {method:"POST", cache:"no-store"});
+      const startText = await startResp.text();
+      try { appendLine(JSON.stringify(JSON.parse(startText), null, 2)); } catch (_) { appendLine(startText); }
+      appendLine("\nPolling decoded output every 1.5 seconds. Close this window to stop polling.");
+      setTimeout(pollOnce, 900);
+      let pollCount = 0;
+      window.receiveDecodePollTimerV2625 = setInterval(function(){
+        pollCount += 1;
+        if (pollCount > 40 || modal.classList.contains("hidden")) {
+          clearInterval(window.receiveDecodePollTimerV2625);
+          window.receiveDecodePollTimerV2625 = null;
+          return;
+        }
+        pollOnce();
+      }, 1500);
+    } catch (err) {
+      appendLine(`Decoder endpoint error: ${err && err.message ? err.message : err}`);
+    }
+  }
+
+  function relabelReceiveButtons(){
+    const buttons = Array.from(document.querySelectorAll("button,a[role='button'],.button"));
+    for (const btn of buttons) {
+      const text = (btn.textContent || "").trim();
+      if (!/^(Listen|Receive|Decode|Decode CW)$/i.test(text)) continue;
+      const ctx = buildContext(btn);
+      btn.dataset.receiveModeKindV261 = ctx.kind;
+      if (ctx.kind !== "listen") {
+        btn.textContent = modeLabel(ctx.kind);
+        btn.title = "Open decoded text output for CW/digital modes";
+      } else if (/^(Decode|Decode CW|Receive)$/i.test(text)) {
+        btn.textContent = "Listen";
+      }
+    }
+  }
+
+  document.addEventListener("click", function(ev){
+    const btn = ev.target && ev.target.closest ? ev.target.closest("button,a[role='button'],.button") : null;
+    if (!btn) return;
+    const label = (btn.textContent || "").trim();
+    if (!/^(Decode|Decode CW)$/i.test(label) && btn.dataset.receiveModeKindV261 !== "cw" && btn.dataset.receiveModeKindV261 !== "digital") return;
+    const ctx = buildContext(btn);
+    if (ctx.kind === "listen") return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    if (typeof ev.stopImmediatePropagation === "function") ev.stopImmediatePropagation();
+    lastContext = ctx;
+    showDecode(ctx);
+  }, true);
+
+  document.addEventListener("DOMContentLoaded", function(){
+    ensureModal();
+    relabelReceiveButtons();
+    setInterval(relabelReceiveButtons, 1500);
+  });
+  if (document.readyState !== "loading") {
+    ensureModal();
+    relabelReceiveButtons();
+    setInterval(relabelReceiveButtons, 1500);
+  }
+})();
+
+
+/* DECODE_MODAL_LIVE_POLL_V2_6_25 */
+window.decodeModalLivePollV2625 = true;
+
+
+/* RECEIVE_BUTTON_DECODE_OVERRIDE_V2_6_26AA
+ * Override the pass-detail Listen binding so CW/digital selected passes use the
+ * receive/decode endpoints instead of starting speaker audio. FM/voice passes
+ * intentionally keep the original analog audio path.
+ */
+let receiveDecodeSessionV2626 = null;
+let receiveDecodePollTimerV2626 = 0;
+
+function receivePassTextV2626(pass) {
+  const radio = (pass && pass.radio) || {};
+  const parts = [];
+  const add = (value) => {
+    if (value === undefined || value === null) return;
+    if (Array.isArray(value)) value.forEach(add);
+    else if (typeof value === 'object') Object.keys(value).forEach((key) => add(value[key]));
+    else parts.push(String(value));
+  };
+  add(radio.mode);
+  add(radio.type);
+  add(radio.status);
+  add(radio.description);
+  add(pass && pass.mode);
+  add(pass && pass.modes);
+  return parts.join(' ').toLowerCase();
+}
+
+function receiveKindForPassV2626(pass) {
+  const text = receivePassTextV2626(pass);
+  if (/\b(cw|morse)\b/.test(text) || /\ba1a\b/.test(text)) return 'cw';
+  if (/\b(ax\.?25|aprs|packet|fsk|gmsk|bpsk|bsk|psk|9600|1200\s*baud|telemetry|digital|data)\b/.test(text)) return 'digital';
+  return 'voice';
+}
+
+function receiveModeForPassV2626(pass) {
+  const radio = (pass && pass.radio) || {};
+  return radio.mode || (pass && pass.modes && pass.modes[0]) || '';
+}
+
+function receiveDownlinkForPassV2626(pass) {
+  const radio = (pass && pass.radio) || {};
+  return radio.downlink_hz || ((pass && pass.downlinks_hz) || [])[0] || '';
+}
+
+function ensureDecodeModalV2626() {
+  let modal = document.getElementById('receiveDecodeModalV2626');
+  if (modal) return modal;
+  modal = document.createElement('div');
+  modal.id = 'receiveDecodeModalV2626';
+  modal.hidden = true;
+  modal.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(2,6,23,.72);display:flex;align-items:center;justify-content:center;padding:18px;';
+  modal.innerHTML = `
+    <div style="width:min(920px,96vw);max-height:86vh;overflow:auto;background:#0f172a;color:#e5e7eb;border:1px solid #334155;border-radius:14px;box-shadow:0 20px 80px rgba(0,0,0,.45);">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 18px;border-bottom:1px solid #334155;">
+        <div>
+          <h2 id="receiveDecodeTitleV2626" style="margin:0;font-size:20px;">Decode</h2>
+          <div id="receiveDecodeSubtitleV2626" style="margin-top:4px;color:#94a3b8;font-size:13px;">Starting decoder...</div>
+        </div>
+        <button id="receiveDecodeCloseV2626" type="button" class="secondary">Close</button>
+      </div>
+      <pre id="receiveDecodeOutputV2626" style="margin:0;padding:16px 18px;white-space:pre-wrap;word-break:break-word;font:13px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:#dbeafe;background:#020617;min-height:240px;"></pre>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', (event) => {
+    if (event.target === modal) closeDecodeModalV2626();
+  });
+  document.getElementById('receiveDecodeCloseV2626')?.addEventListener('click', closeDecodeModalV2626);
+  return modal;
+}
+
+function closeDecodeModalV2626() {
+  const modal = document.getElementById('receiveDecodeModalV2626');
+  if (modal) modal.hidden = true;
+  if (receiveDecodePollTimerV2626) {
+    window.clearInterval(receiveDecodePollTimerV2626);
+    receiveDecodePollTimerV2626 = 0;
+  }
+}
+
+function renderDecodeOutputV2626(payload) {
+  const out = document.getElementById('receiveDecodeOutputV2626');
+  if (!out) return;
+  const lines = [];
+  if (!payload || payload.ok === false) {
+    lines.push((payload && payload.error) || 'Decode output unavailable.');
+  } else {
+    lines.push(`State: ${payload.state || '-'}`);
+    lines.push(`Decoder: ${payload.decoder_state || '-'}`);
+    if (payload.receive_kind) lines.push(`Kind: ${payload.receive_kind}`);
+    if (payload.mode) lines.push(`Mode: ${payload.mode}`);
+    if (payload.pcm_bytes !== undefined) lines.push(`PCM bytes: ${payload.pcm_bytes}`);
+    if (payload.sample_count !== undefined) lines.push(`Samples: ${payload.sample_count}`);
+    if (payload.rms !== undefined) lines.push(`RMS: ${payload.rms}`);
+    if (payload.peak !== undefined) lines.push(`Peak: ${payload.peak}`);
+    if (payload.estimated_tone_hz !== undefined) lines.push(`Estimated tone: ${payload.estimated_tone_hz} Hz`);
+    if (payload.key_duty_percent !== undefined) lines.push(`Key duty: ${payload.key_duty_percent}%`);
+    if (payload.morse) lines.push(`Morse: ${payload.morse}`);
+    if (payload.decoded_text) lines.push(`Decoded: ${payload.decoded_text}`);
+    if (Array.isArray(payload.lines) && payload.lines.length) {
+      lines.push('');
+      payload.lines.forEach((line) => lines.push(String(line)));
+    }
+  }
+  out.textContent = lines.join('\n');
+}
+
+async function pollDecodeOutputV2626(kind, mode) {
+  const params = new URLSearchParams({ mode: mode || (kind === 'cw' ? 'CW' : 'digital'), request: String(Date.now()) });
+  const payload = await getJson(`/api/radio/decode/output?${params.toString()}`);
+  renderDecodeOutputV2626(payload);
+}
+
+async function stopReceiveDecodeV2626(message) {
+  if (receiveDecodePollTimerV2626) {
+    window.clearInterval(receiveDecodePollTimerV2626);
+    receiveDecodePollTimerV2626 = 0;
+  }
+  try { await postJson('/api/radio/receive/stop', {}); } catch (_) {}
+  if (receiveDecodeSessionV2626 && receiveDecodeSessionV2626.statusNode?.isConnected) {
+    receiveDecodeSessionV2626.statusNode.textContent = message || 'Decode stopped.';
+  }
+  if (receiveDecodeSessionV2626 && receiveDecodeSessionV2626.button?.isConnected) {
+    receiveDecodeSessionV2626.button.textContent = receiveDecodeSessionV2626.kind === 'cw' ? 'Decode CW' : 'Decode';
+    receiveDecodeSessionV2626.button.disabled = false;
+  }
+  receiveDecodeSessionV2626 = null;
+}
+
+async function startReceiveDecodeV2626(pass, button, status) {
+  const kind = receiveKindForPassV2626(pass);
+  const mode = receiveModeForPassV2626(pass) || (kind === 'cw' ? 'CW' : 'digital');
+  const downlink = receiveDownlinkForPassV2626(pass);
+  const params = new URLSearchParams({
+    mode,
+    name: (pass && pass.name) || '',
+    downlink_hz: String(downlink || '')
+  });
+
+  await stopAnalogAudio();
+  status.textContent = kind === 'cw' ? 'Starting CW decode capture...' : 'Starting digital decode placeholder...';
+  button.disabled = true;
+
+  const payload = await postJson(`/api/radio/receive/start?${params.toString()}`, {});
+  const modal = ensureDecodeModalV2626();
+  document.getElementById('receiveDecodeTitleV2626').textContent = kind === 'cw' ? 'Decode CW' : 'Decode Digital';
+  document.getElementById('receiveDecodeSubtitleV2626').textContent = `${(pass && pass.name) || 'Selected pass'} | ${formatHz(downlink)} | ${mode}`;
+  modal.hidden = false;
+  renderDecodeOutputV2626(payload);
+
+  receiveDecodeSessionV2626 = { passKey: passKey(pass), kind, mode, button, statusNode: status };
+  button.disabled = false;
+  button.textContent = 'Stop Decode';
+  status.textContent = kind === 'cw' ? 'CW decode capture running; audio is not played to speaker.' : 'Digital decode placeholder running; audio is not played to speaker.';
+
+  await pollDecodeOutputV2626(kind, mode).catch(() => {});
+  if (receiveDecodePollTimerV2626) window.clearInterval(receiveDecodePollTimerV2626);
+  receiveDecodePollTimerV2626 = window.setInterval(() => {
+    pollDecodeOutputV2626(kind, mode).catch((error) => {
+      const out = document.getElementById('receiveDecodeOutputV2626');
+      if (out) out.textContent = error.message || 'Decode polling failed.';
+    });
+  }, 1500);
+}
+
+function bindAnalogAudio(pass, node) {
+  const button = node.querySelector('#analogAudioToggleButton');
+  const status = node.querySelector('#analogAudioStatus');
+  const audioUrls = analogAudioUrl(pass);
+  if (!button || !status) return;
+
+  const kind = receiveKindForPassV2626(pass);
+  const isDecode = kind === 'cw' || kind === 'digital';
+
+  button.disabled = !audioUrls && !receiveDownlinkForPassV2626(pass);
+  if (button.disabled) {
+    status.textContent = 'No downlink is available for this pass.';
+    return;
+  }
+
+  if (isDecode) {
+    const idleLabel = kind === 'cw' ? 'Decode CW' : 'Decode';
+    if (receiveDecodeSessionV2626 && receiveDecodeSessionV2626.passKey === passKey(pass)) {
+      receiveDecodeSessionV2626.button = button;
+      receiveDecodeSessionV2626.statusNode = status;
+      button.textContent = 'Stop Decode';
+      status.textContent = kind === 'cw' ? 'CW decode capture running; audio is not played to speaker.' : 'Digital decode placeholder running; audio is not played to speaker.';
+    } else {
+      button.textContent = idleLabel;
+      status.textContent = kind === 'cw' ? 'Ready to decode CW for this pass.' : 'Ready to decode digital telemetry for this pass.';
+    }
+
+    button.addEventListener('click', async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (receiveDecodeSessionV2626 && receiveDecodeSessionV2626.passKey === passKey(pass)) {
+        await stopReceiveDecodeV2626('Decode stopped.');
+        return;
+      }
+      try {
+        await startReceiveDecodeV2626(pass, button, status);
+      } catch (error) {
+        await stopReceiveDecodeV2626();
+        button.textContent = idleLabel;
+        status.textContent = error.message || 'Unable to start decode.';
+        const statusBar = document.getElementById('status');
+        if (statusBar) statusBar.textContent = status.textContent;
+      }
+    }, { capture: true });
+    return;
+  }
+
+  button.disabled = !audioUrls;
+  if (!audioUrls) {
+    status.textContent = 'No downlink is available for this pass.';
+    return;
+  }
+
+  const setIdle = (message) => {
+    button.textContent = 'Listen';
+    status.textContent = message;
+  };
+
+  if (analogAudioSession && analogAudioSession.passKey === passKey(pass)) {
+    analogAudioSession.button = button;
+    analogAudioSession.statusNode = status;
+    button.textContent = 'Stop';
+    status.textContent = 'Streaming live analog FM audio from Pluto...';
+  } else {
+    setIdle('Ready to listen to this pass.');
+  }
+
+  button.addEventListener('click', async () => {
+    if (analogAudioSession && analogAudioSession.passKey === passKey(pass)) {
+      await stopAnalogAudio('Analog monitor stopped.');
+      return;
+    }
+
+    try {
+      await stopReceiveDecodeV2626();
+      status.textContent = 'Connecting to Pluto FM audio stream...';
+      await startAnalogAudio(pass, button, status);
+    } catch (error) {
+      await stopAnalogAudio();
+      setIdle(error.message || 'Unable to start analog audio.');
+      document.getElementById('status').textContent = error.message || 'Unable to start analog audio.';
+    }
+  });
+}
+
+try {
+  if (currentSelectedPass) {
+    renderPassDetail(currentSelectedPass);
+  }
+} catch (_) {}
+
+/* RECEIVE_BUTTON_FM_PRIORITY_V2_6_26D
+ * Final receive button override: explicit FM/voice modes must stay on the
+ * existing analog Listen path. CW/digital modes route to the decode modal only
+ * when those keywords are explicit in the pass metadata.
+ */
+(function installReceiveButtonFmPriorityV2626D() {
+  if (window.__plutoReceiveButtonFmPriorityV2626D) return;
+  window.__plutoReceiveButtonFmPriorityV2626D = true;
+
+  function textV2626D(value) {
+    if (value === undefined || value === null) return "";
+    if (Array.isArray(value)) return value.map(textV2626D).join(" ");
+    if (typeof value === "object") {
+      try { return JSON.stringify(value); } catch (_) { return ""; }
+    }
+    return String(value);
+  }
+
+  function radioTextV2626D(pass, primaryOnly) {
+    const radio = (pass && pass.radio) || {};
+    const primary = [radio.mode, (pass && pass.modes) || [], radio.description].map(textV2626D).join(" ");
+    if (primaryOnly) return primary.toUpperCase();
+    return [
+      pass && pass.name,
+      radio.mode,
+      (pass && pass.modes) || [],
+      radio.description,
+      radio.type,
+      radio.status,
+      pass && pass.transmitters,
+      pass && pass.downlinks,
+      pass && pass.uplinks
+    ].map(textV2626D).join(" ").toUpperCase();
+  }
+
+  function receiveKindForPassV2626D(pass) {
+    const primary = radioTextV2626D(pass, true);
+    const all = radioTextV2626D(pass, false);
+
+    const hasCw = /(^|[^A-Z0-9])(CW|MORSE|A1A)([^A-Z0-9]|$)/.test(all);
+    if (hasCw) return "cw";
+
+    const hasVoice = /(^|[^A-Z0-9])(FM|NFM|WFM|AM|SSB|USB|LSB|VOICE|F3E|A3E|J3E)([^A-Z0-9]|$)/.test(primary);
+    if (hasVoice) return "voice";
+
+    const hasDigital = /(^|[^A-Z0-9])(AX\.?25|APRS|PACKET|AFSK|GMSK|BPSK|QPSK|PSK|FSK|TELEMETRY|DIGITAL|DATA|9K6|9600)([^A-Z0-9]|$)/.test(all);
+    if (hasDigital) return "digital";
+
+    return "voice";
+  }
+
+  function downlinkHzForPassV2626D(pass) {
+    const radio = (pass && pass.radio) || {};
+    return radio.downlink_hz || ((pass && pass.downlinks_hz) || [])[0] || "";
+  }
+
+  function modeForPassV2626D(pass) {
+    const radio = (pass && pass.radio) || {};
+    return radio.mode || (((pass && pass.modes) || [])[0]) || "";
+  }
+
+  function ensureDecodeModalV2626D() {
+    let modal = document.getElementById("receiveDecodeModalV2626D");
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.id = "receiveDecodeModalV2626D";
+    modal.className = "receive-decode-backdrop";
+    modal.hidden = true;
+    modal.innerHTML = `
+      <div class="receive-decode-modal" role="dialog" aria-modal="true" aria-labelledby="receiveDecodeTitleV2626D">
+        <div class="receive-decode-header">
+          <div>
+            <h2 id="receiveDecodeTitleV2626D">Decode</h2>
+            <div id="receiveDecodeSubtitleV2626D" class="receive-decode-subtitle">Ready.</div>
+          </div>
+          <button id="receiveDecodeCloseButtonV2626D" type="button" class="secondary">Close</button>
+        </div>
+        <pre id="receiveDecodeOutputV2626D" class="receive-decode-output">Waiting for decoder output...</pre>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal) closeDecodeModalV2626D();
+    });
+    document.getElementById("receiveDecodeCloseButtonV2626D")?.addEventListener("click", closeDecodeModalV2626D);
+    return modal;
+  }
+
+  function closeDecodeModalV2626D() {
+    const session = window.__plutoDecodeSessionV2626D || {};
+    if (session.timer) window.clearInterval(session.timer);
+    window.__plutoDecodeSessionV2626D = { timer: 0 };
+    const modal = document.getElementById("receiveDecodeModalV2626D");
+    if (modal) {
+      modal.hidden = true;
+      modal.classList.remove("open");
+    }
+    fetch("/api/radio/receive/stop", { method: "POST", cache: "no-store" }).catch(() => {});
+  }
+
+  function formatDecodePayloadV2626D(payload) {
+    if (!payload) return "No decoder payload.";
+    const lines = [];
+    lines.push(`State: ${payload.state || "unknown"}`);
+    if (payload.decoder_state) lines.push(`Decoder: ${payload.decoder_state}`);
+    if (payload.receive_kind) lines.push(`Kind: ${payload.receive_kind}`);
+    if (payload.mode) lines.push(`Mode: ${payload.mode}`);
+    if (payload.sample_count !== undefined) lines.push(`Samples: ${payload.sample_count}`);
+    if (payload.pcm_bytes !== undefined) lines.push(`PCM bytes: ${payload.pcm_bytes}`);
+    if (payload.rms !== undefined) lines.push(`RMS: ${payload.rms}`);
+    if (payload.peak !== undefined) lines.push(`Peak: ${payload.peak}`);
+    if (payload.estimated_tone_hz !== undefined) lines.push(`Tone estimate: ${payload.estimated_tone_hz} Hz`);
+    if (payload.key_duty_percent !== undefined) lines.push(`Key duty: ${payload.key_duty_percent}%`);
+    if (payload.morse) lines.push(`Morse: ${payload.morse}`);
+    if (payload.decoded_text) lines.push(`Decoded: ${payload.decoded_text}`);
+    if (Array.isArray(payload.lines)) {
+      lines.push("");
+      payload.lines.forEach((line) => lines.push(String(line)));
+    }
+    if (!lines.length) return JSON.stringify(payload, null, 2);
+    return lines.join("\n");
+  }
+
+  async function pollDecodeOutputV2626D(kind, mode) {
+    const output = document.getElementById("receiveDecodeOutputV2626D");
+    const subtitle = document.getElementById("receiveDecodeSubtitleV2626D");
+    const params = new URLSearchParams({ mode: mode || (kind === "cw" ? "CW" : "digital"), request: String(Date.now()) });
+    try {
+      const payload = await getJson(`/api/radio/decode/output?${params.toString()}`);
+      if (output) output.textContent = formatDecodePayloadV2626D(payload);
+      if (subtitle) subtitle.textContent = `${kind === "cw" ? "CW" : "Digital"} decode output updating live.`;
+    } catch (error) {
+      if (output) output.textContent = error.message || "Decode output failed.";
+    }
+  }
+
+  async function startDecodeForPassV2626D(pass, kind, button, status) {
+    const modal = ensureDecodeModalV2626D();
+    const title = document.getElementById("receiveDecodeTitleV2626D");
+    const subtitle = document.getElementById("receiveDecodeSubtitleV2626D");
+    const output = document.getElementById("receiveDecodeOutputV2626D");
+    const mode = modeForPassV2626D(pass) || (kind === "cw" ? "CW" : "digital");
+    const downlink = downlinkHzForPassV2626D(pass);
+    const params = new URLSearchParams({
+      mode,
+      name: (pass && pass.name) || "",
+      downlink_hz: String(downlink || "")
+    });
+
+    button.disabled = true;
+    button.textContent = kind === "cw" ? "Starting CW..." : "Starting decode...";
+    if (status) status.textContent = kind === "cw" ? "Starting CW decode capture..." : "Starting digital decode screen...";
+
+    try {
+      const payload = await getJson(`/api/radio/receive/start?${params.toString()}`, { method: "POST" });
+      modal.hidden = false;
+      modal.classList.add("open");
+      if (title) title.textContent = kind === "cw" ? "Decode CW" : "Decode Digital";
+      if (subtitle) subtitle.textContent = `${(pass && pass.name) || "Selected pass"} | ${mode || kind} | ${downlink ? formatHz(downlink) : "no downlink"}`;
+      if (output) output.textContent = formatDecodePayloadV2626D(payload);
+      if (window.__plutoDecodeSessionV2626D && window.__plutoDecodeSessionV2626D.timer) {
+        window.clearInterval(window.__plutoDecodeSessionV2626D.timer);
+      }
+      const timer = window.setInterval(() => pollDecodeOutputV2626D(kind, mode), 1500);
+      window.__plutoDecodeSessionV2626D = { timer, kind, mode };
+      pollDecodeOutputV2626D(kind, mode);
+      button.textContent = kind === "cw" ? "Decode CW" : "Decode";
+      if (status) status.textContent = kind === "cw" ? "CW decode screen open." : "Digital decode screen open.";
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  bindAnalogAudio = function bindAnalogAudioV2626D(pass, node) {
+    const button = node.querySelector("#analogAudioToggleButton");
+    const status = node.querySelector("#analogAudioStatus");
+    const audioUrls = analogAudioUrl(pass);
+    const kind = receiveKindForPassV2626D(pass);
+    if (!button || !status) return;
+
+    button.disabled = !audioUrls;
+    if (!audioUrls) {
+      status.textContent = "No downlink is available for this pass.";
+      return;
+    }
+
+    const idleLabel = kind === "cw" ? "Decode CW" : (kind === "digital" ? "Decode" : "Listen");
+    const idleMessage = kind === "cw"
+      ? "Ready to decode CW for this pass."
+      : (kind === "digital" ? "Ready to decode this digital pass." : "Ready to listen to this pass.");
+
+    const setIdle = (message) => {
+      button.textContent = idleLabel;
+      status.textContent = message || idleMessage;
+    };
+
+    if (kind === "voice" && analogAudioSession && analogAudioSession.passKey === passKey(pass)) {
+      analogAudioSession.button = button;
+      analogAudioSession.statusNode = status;
+      button.textContent = "Stop";
+      status.textContent = "Streaming live analog FM audio from Pluto...";
+    } else {
+      setIdle(idleMessage);
+    }
+
+    button.addEventListener("click", async () => {
+      if (kind === "voice") {
+        if (analogAudioSession && analogAudioSession.passKey === passKey(pass)) {
+          await stopAnalogAudio("Analog monitor stopped.");
+          return;
+        }
+        try {
+          status.textContent = "Connecting to Pluto FM audio stream...";
+          await startAnalogAudio(pass, button, status);
+        } catch (error) {
+          await stopAnalogAudio();
+          setIdle(error.message || "Unable to start analog audio.");
+          const statusBar = document.getElementById("status");
+          if (statusBar) statusBar.textContent = error.message || "Unable to start analog audio.";
+        }
+        return;
+      }
+
+      try {
+        await startDecodeForPassV2626D(pass, kind, button, status);
+      } catch (error) {
+        setIdle(error.message || "Unable to start decoder.");
+        const statusBar = document.getElementById("status");
+        if (statusBar) statusBar.textContent = error.message || "Unable to start decoder.";
+      }
+    });
+  };
+})();
+
+
+/* DECODE_SELFTEST_UI_V2_6_28 START */
+(function installDecodeSelfTestUiV2628() {
+  if (window.__decodeSelfTestUiV2628Installed) return;
+  window.__decodeSelfTestUiV2628Installed = true;
+
+  function prettyJsonV2628(payload) {
+    try {
+      return JSON.stringify(payload, null, 2);
+    } catch (_) {
+      return String(payload);
+    }
+  }
+
+  async function getJsonNoStoreV2628(url) {
+    const response = await fetch(url, { cache: "no-store" });
+    const text = await response.text();
+    if (!response.ok) {
+      throw new Error(`${url}: HTTP ${response.status} ${text.slice(0, 160)}`);
+    }
+    try {
+      return JSON.parse(text);
+    } catch (error) {
+      throw new Error(`${url}: invalid JSON ${error.message} ${text.slice(0, 160)}`);
+    }
+  }
+
+  function ensurePanelV2628() {
+    let panel = document.getElementById("decodeSelfTestPanelV2628");
+    if (panel) return panel;
+
+    panel = document.createElement("section");
+    panel.id = "decodeSelfTestPanelV2628";
+    panel.className = "decode-selftest-panel-v2628";
+    panel.innerHTML = `
+      <div class="decode-selftest-header-v2628">
+        <strong>Decoder Self-Test</strong>
+        <button id="decodeSelfTestMinimizeV2628" type="button" class="secondary">Hide</button>
+      </div>
+      <p class="decode-selftest-note-v2628">
+        Self-tests use synthetic frames/timing. Live satellite decode only shows what Pluto is currently receiving.
+      </p>
+      <div class="decode-selftest-actions-v2628">
+        <button id="decodeSelfTestCwV2628" type="button">CW SOS Test</button>
+        <button id="decodeSelfTestAx25V2628" type="button">AX.25/APRS Test</button>
+      </div>
+      <pre id="decodeSelfTestOutputV2628" class="decode-selftest-output-v2628">Ready.</pre>
+    `;
+    document.body.appendChild(panel);
+
+    const output = panel.querySelector("#decodeSelfTestOutputV2628");
+    const run = async (label, url, expectedText) => {
+      output.textContent = `${label}: running...`;
+      try {
+        const payload = await getJsonNoStoreV2628(url);
+        const flat = prettyJsonV2628(payload);
+        const ok =
+          payload && payload.ok !== false &&
+          (!expectedText || flat.toUpperCase().includes(expectedText.toUpperCase()));
+        output.textContent = `${label}: ${ok ? "PASS" : "WARN"}\n\n${flat}`;
+        const status = document.getElementById("status");
+        if (status) status.textContent = `${label}: ${ok ? "PASS" : "WARN"}`;
+      } catch (error) {
+        output.textContent = `${label}: FAIL\n\n${error.message || error}`;
+        const status = document.getElementById("status");
+        if (status) status.textContent = `${label}: FAIL`;
+      }
+    };
+
+    panel.querySelector("#decodeSelfTestCwV2628")?.addEventListener("click", () => {
+      run("CW SOS self-test", "/api/radio/decode/cw/selftest", "SOS");
+    });
+    panel.querySelector("#decodeSelfTestAx25V2628")?.addEventListener("click", () => {
+      run("AX.25/APRS self-test", "/api/radio/decode/ax25/selftest", "AX25 SELFTEST");
+    });
+    panel.querySelector("#decodeSelfTestMinimizeV2628")?.addEventListener("click", () => {
+      panel.classList.toggle("collapsed");
+      const collapsed = panel.classList.contains("collapsed");
+      panel.querySelector("#decodeSelfTestMinimizeV2628").textContent = collapsed ? "Show" : "Hide";
+    });
+
+    return panel;
+  }
+
+  function ensureLauncherV2628() {
+    if (document.getElementById("decodeSelfTestLauncherV2628")) return;
+    const launcher = document.createElement("button");
+    launcher.id = "decodeSelfTestLauncherV2628";
+    launcher.type = "button";
+    launcher.className = "decode-selftest-launcher-v2628";
+    launcher.textContent = "Decoder Tests";
+    launcher.title = "Run CW and AX.25/APRS decoder self-tests";
+    launcher.addEventListener("click", () => {
+      const panel = ensurePanelV2628();
+      panel.classList.remove("collapsed");
+      const hide = panel.querySelector("#decodeSelfTestMinimizeV2628");
+      if (hide) hide.textContent = "Hide";
+    });
+    document.body.appendChild(launcher);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", ensureLauncherV2628);
+  } else {
+    ensureLauncherV2628();
+  }
+})();
+/* DECODE_SELFTEST_UI_V2_6_28 END */
+
+/* RECEIVE_BUTTON_BPSK_PRIORITY_V2_6_26E
+ * Final receive button override: explicit current transmitter mode is the
+ * strongest classifier. BPSK/PSK/FSK/GMSK/AX.25/APRS/packet modes are digital,
+ * not CW, even if another metadata field mentions beacon/CW historically.
+ */
+(function installReceiveButtonBpskPriorityV2626E() {
+  if (window.__plutoReceiveButtonBpskPriorityV2626E) return;
+  window.__plutoReceiveButtonBpskPriorityV2626E = true;
+
+  function textV2626E(value) {
+    if (value === undefined || value === null) return "";
+    if (Array.isArray(value)) return value.map(textV2626E).join(" ");
+    if (typeof value === "object") {
+      try { return JSON.stringify(value); } catch (_) { return ""; }
+    }
+    return String(value);
+  }
+
+  function rxFieldsV2626E(pass) {
+    const radio = (pass && pass.radio) || {};
+    return {
+      mode: textV2626E(radio.mode || ((pass && pass.modes) || [])[0] || "").toUpperCase(),
+      primary: [radio.mode, (pass && pass.modes) || [], radio.description].map(textV2626E).join(" ").toUpperCase(),
+      all: [
+        pass && pass.name,
+        radio.mode,
+        (pass && pass.modes) || [],
+        radio.description,
+        radio.type,
+        radio.status,
+        pass && pass.transmitters,
+        pass && pass.downlinks,
+        pass && pass.uplinks
+      ].map(textV2626E).join(" ").toUpperCase()
+    };
+  }
+
+  function hasTokenV2626E(text, pattern) {
+    return pattern.test(String(text || ""));
+  }
+
+  const digitalModeReV2626E = /(^|[^A-Z0-9])(AX\.?25|APRS|PACKET|AFSK|GMSK|BPSK|QPSK|PSK|FSK|TELEMETRY|DIGITAL|DATA|9K6|9600)([^A-Z0-9]|$)/;
+  const cwModeReV2626E = /(^|[^A-Z0-9])(CW|MORSE|A1A)([^A-Z0-9]|$)/;
+  const voiceModeReV2626E = /(^|[^A-Z0-9])(FM|NFM|WFM|AM|SSB|USB|LSB|VOICE|F3E|A3E|J3E)([^A-Z0-9]|$)/;
+
+  function receiveKindForPassV2626E(pass) {
+    const fields = rxFieldsV2626E(pass);
+
+    /* The current transmitter Mode field wins first. */
+    if (hasTokenV2626E(fields.mode, digitalModeReV2626E)) return "digital";
+    if (hasTokenV2626E(fields.mode, cwModeReV2626E)) return "cw";
+    if (hasTokenV2626E(fields.mode, voiceModeReV2626E)) return "voice";
+
+    /* Description/modes are next: explicit FM/voice should stay Listen. */
+    if (hasTokenV2626E(fields.primary, voiceModeReV2626E)) return "voice";
+    if (hasTokenV2626E(fields.primary, digitalModeReV2626E)) return "digital";
+    if (hasTokenV2626E(fields.primary, cwModeReV2626E)) return "cw";
+
+    /* Full metadata last; digital beats CW here to avoid BPSK+beacon being CW. */
+    if (hasTokenV2626E(fields.all, digitalModeReV2626E)) return "digital";
+    if (hasTokenV2626E(fields.all, cwModeReV2626E)) return "cw";
+    return "voice";
+  }
+
+  function downlinkHzForPassV2626E(pass) {
+    const radio = (pass && pass.radio) || {};
+    return radio.downlink_hz || ((pass && pass.downlinks_hz) || [])[0] || "";
+  }
+
+  function modeForPassV2626E(pass) {
+    const radio = (pass && pass.radio) || {};
+    return radio.mode || (((pass && pass.modes) || [])[0]) || "";
+  }
+
+  async function postJsonNoBodyV2626E(url) {
+    const response = await fetch(url, { method: "POST", cache: "no-store" });
+    if (typeof parseJsonResponse === "function") return parseJsonResponse(response, url);
+    const text = await response.text();
+    if (!response.ok) throw new Error(`${url}: ${response.status}`);
+    return JSON.parse(text);
+  }
+
+  function ensureDecodeModalV2626E() {
+    let modal = document.getElementById("receiveDecodeModalV2626E");
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.id = "receiveDecodeModalV2626E";
+    modal.className = "receive-decode-backdrop";
+    modal.hidden = true;
+    modal.innerHTML = `
+      <div class="receive-decode-modal" role="dialog" aria-modal="true" aria-labelledby="receiveDecodeTitleV2626E">
+        <div class="receive-decode-header">
+          <div>
+            <h2 id="receiveDecodeTitleV2626E">Decode</h2>
+            <div id="receiveDecodeSubtitleV2626E" class="receive-decode-subtitle">Ready.</div>
+          </div>
+          <button id="receiveDecodeCloseButtonV2626E" type="button" class="secondary">Close</button>
+        </div>
+        <pre id="receiveDecodeOutputV2626E" class="receive-decode-output">Waiting for decoder output...</pre>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal) closeDecodeModalV2626E();
+    });
+    document.getElementById("receiveDecodeCloseButtonV2626E")?.addEventListener("click", closeDecodeModalV2626E);
+    return modal;
+  }
+
+  function closeDecodeModalV2626E() {
+    const session = window.__plutoDecodeSessionV2626E || {};
+    if (session.timer) window.clearInterval(session.timer);
+    window.__plutoDecodeSessionV2626E = { timer: 0 };
+    const modal = document.getElementById("receiveDecodeModalV2626E");
+    if (modal) {
+      modal.hidden = true;
+      modal.classList.remove("open");
+    }
+    fetch("/api/radio/receive/stop", { method: "POST", cache: "no-store" }).catch(() => {});
+  }
+
+  function formatDecodePayloadV2626E(payload) {
+    if (!payload) return "No decoder payload.";
+    const lines = [];
+    lines.push(`State: ${payload.state || "unknown"}`);
+    if (payload.decoder_state) lines.push(`Decoder: ${payload.decoder_state}`);
+    if (payload.receive_kind) lines.push(`Kind: ${payload.receive_kind}`);
+    if (payload.mode) lines.push(`Mode: ${payload.mode}`);
+    if (payload.sample_count !== undefined) lines.push(`Samples: ${payload.sample_count}`);
+    if (payload.pcm_bytes !== undefined) lines.push(`PCM bytes: ${payload.pcm_bytes}`);
+    if (payload.rms !== undefined) lines.push(`RMS: ${payload.rms}`);
+    if (payload.peak !== undefined) lines.push(`Peak: ${payload.peak}`);
+    if (payload.estimated_tone_hz !== undefined) lines.push(`Tone estimate: ${payload.estimated_tone_hz} Hz`);
+    if (payload.key_duty_percent !== undefined) lines.push(`Key duty: ${payload.key_duty_percent}%`);
+    if (payload.morse) lines.push(`Morse: ${payload.morse}`);
+    if (payload.decoded_text) lines.push(`Decoded: ${payload.decoded_text}`);
+    if (payload.info) lines.push(`Info: ${payload.info}`);
+    if (payload.error) lines.push(`Error: ${payload.error}`);
+    if (Array.isArray(payload.lines)) {
+      lines.push("");
+      payload.lines.forEach((line) => lines.push(String(line)));
+    }
+    return lines.join("\n") || JSON.stringify(payload, null, 2);
+  }
+
+  async function pollDecodeOutputV2626E(kind, mode) {
+    const output = document.getElementById("receiveDecodeOutputV2626E");
+    const subtitle = document.getElementById("receiveDecodeSubtitleV2626E");
+    const params = new URLSearchParams({ mode: mode || (kind === "cw" ? "CW" : "digital"), request: String(Date.now()) });
+    try {
+      const payload = await getJson(`/api/radio/decode/output?${params.toString()}`);
+      if (output) output.textContent = formatDecodePayloadV2626E(payload);
+      if (subtitle) subtitle.textContent = `${kind === "cw" ? "CW" : "Digital"} decode output updating live.`;
+    } catch (error) {
+      if (output) output.textContent = error.message || "Decode output failed.";
+    }
+  }
+
+  async function startDecodeForPassV2626E(pass, kind, button, status) {
+    const modal = ensureDecodeModalV2626E();
+    const title = document.getElementById("receiveDecodeTitleV2626E");
+    const subtitle = document.getElementById("receiveDecodeSubtitleV2626E");
+    const output = document.getElementById("receiveDecodeOutputV2626E");
+    const mode = modeForPassV2626E(pass) || (kind === "cw" ? "CW" : "digital");
+    const downlink = downlinkHzForPassV2626E(pass);
+    const params = new URLSearchParams({
+      mode,
+      name: (pass && pass.name) || "",
+      downlink_hz: String(downlink || "")
+    });
+
+    button.disabled = true;
+    button.textContent = kind === "cw" ? "Starting CW..." : "Starting decode...";
+    if (status) status.textContent = kind === "cw" ? "Starting CW decode capture..." : "Starting digital decode screen...";
+
+    try {
+      const payload = await postJsonNoBodyV2626E(`/api/radio/receive/start?${params.toString()}`);
+      modal.hidden = false;
+      modal.classList.add("open");
+      if (title) title.textContent = kind === "cw" ? "Decode CW" : "Decode Digital";
+      if (subtitle) subtitle.textContent = `${(pass && pass.name) || "Selected pass"} | ${mode || kind} | ${downlink ? formatHz(downlink) : "no downlink"}`;
+      if (output) output.textContent = formatDecodePayloadV2626E(payload);
+      if (window.__plutoDecodeSessionV2626E && window.__plutoDecodeSessionV2626E.timer) {
+        window.clearInterval(window.__plutoDecodeSessionV2626E.timer);
+      }
+      const timer = window.setInterval(() => pollDecodeOutputV2626E(kind, mode), 1500);
+      window.__plutoDecodeSessionV2626E = { timer, kind, mode };
+      pollDecodeOutputV2626E(kind, mode);
+      button.textContent = kind === "cw" ? "Decode CW" : "Decode";
+      if (status) status.textContent = kind === "cw" ? "CW decode screen open." : "Digital decode screen open.";
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  bindAnalogAudio = function bindAnalogAudioV2626E(pass, node) {
+    const button = node.querySelector("#analogAudioToggleButton");
+    const status = node.querySelector("#analogAudioStatus");
+    const audioUrls = analogAudioUrl(pass);
+    const kind = receiveKindForPassV2626E(pass);
+    if (!button || !status) return;
+
+    button.disabled = !audioUrls;
+    if (!audioUrls) {
+      status.textContent = "No downlink is available for this pass.";
+      return;
+    }
+
+    const idleLabel = kind === "cw" ? "Decode CW" : (kind === "digital" ? "Decode" : "Listen");
+    const idleMessage = kind === "cw"
+      ? "Ready to decode CW for this pass."
+      : (kind === "digital" ? "Ready to decode this digital pass." : "Ready to listen to this pass.");
+
+    const setIdle = (message) => {
+      button.textContent = idleLabel;
+      status.textContent = message || idleMessage;
+    };
+
+    if (kind === "voice" && analogAudioSession && analogAudioSession.passKey === passKey(pass)) {
+      analogAudioSession.button = button;
+      analogAudioSession.statusNode = status;
+      button.textContent = "Stop";
+      status.textContent = "Streaming live analog FM audio from Pluto...";
+    } else {
+      setIdle(idleMessage);
+    }
+
+    button.addEventListener("click", async () => {
+      if (kind === "voice") {
+        if (analogAudioSession && analogAudioSession.passKey === passKey(pass)) {
+          await stopAnalogAudio("Analog monitor stopped.");
+          return;
+        }
+        try {
+          status.textContent = "Connecting to Pluto FM audio stream...";
+          await startAnalogAudio(pass, button, status);
+        } catch (error) {
+          await stopAnalogAudio();
+          setIdle(error.message || "Unable to start analog audio.");
+          const statusBar = document.getElementById("status");
+          if (statusBar) statusBar.textContent = error.message || "Unable to start analog audio.";
+        }
+        return;
+      }
+
+      try {
+        await startDecodeForPassV2626E(pass, kind, button, status);
+      } catch (error) {
+        setIdle(error.message || "Unable to start decoder.");
+        const statusBar = document.getElementById("status");
+        if (statusBar) statusBar.textContent = error.message || "Unable to start decoder.";
+      }
+    });
+  };
+})();
+
+/* PERIODIC_PASS_REFRESH_V2_6_29
+ * Keep the near-term pass queue fresh while the browser UI is open.
+ * This intentionally queues the existing backend pass refresh endpoint rather
+ * than adding a separate scheduler process. It is guarded against overlapping
+ * refreshes and backs off if the backend already reports a running refresh.
+ */
+(function installPeriodicPassRefreshV2629() {
+  if (window.__plutoPeriodicPassRefreshV2629) return;
+  window.__plutoPeriodicPassRefreshV2629 = true;
+
+  const PERIODIC_PASS_REFRESH_INTERVAL_MS_V2629 = 15 * 60 * 1000;
+  const PERIODIC_PASS_REFRESH_INITIAL_DELAY_MS_V2629 = 60 * 1000;
+  let periodicPassRefreshTimerV2629 = 0;
+  let periodicPassRefreshInFlightV2629 = false;
+  let periodicPassRefreshLastRunMsV2629 = 0;
+
+  function periodicPassRefreshStatusV2629(message) {
+    const node = document.getElementById("status");
+    if (node && message) node.textContent = message;
+  }
+
+  async function periodicPassRefreshBackendBusyV2629() {
+    try {
+      const status = await getJson("/api/refresh/status");
+      const state = String((status && status.state) || "").toLowerCase();
+      const target = String((status && status.target) || "").toLowerCase();
+      return target === "passes" && !["", "idle", "ok", "failed", "complete", "completed"].includes(state);
+    } catch (error) {
+      return false;
+    }
+  }
+
+  async function periodicPassRefreshOnceV2629(reason) {
+    const now = Date.now();
+    if (periodicPassRefreshInFlightV2629) return false;
+    if (reason !== "initial" && periodicPassRefreshLastRunMsV2629 &&
+        (now - periodicPassRefreshLastRunMsV2629) < (PERIODIC_PASS_REFRESH_INTERVAL_MS_V2629 - 30000)) {
+      return false;
+    }
+
+    periodicPassRefreshInFlightV2629 = true;
+    try {
+      if (await periodicPassRefreshBackendBusyV2629()) {
+        periodicPassRefreshStatusV2629("Pass refresh already running on Pluto.");
+        return false;
+      }
+      await postJson("/api/refresh/passes", {});
+      periodicPassRefreshLastRunMsV2629 = Date.now();
+      lastAutoPassRefreshMs = periodicPassRefreshLastRunMsV2629;
+      periodicPassRefreshStatusV2629("Queued periodic pass refresh on Pluto.");
+      if (typeof startPassFileWatchV3 === "function") {
+        startPassFileWatchV3("Refreshing pass queue...", "Periodic 15-minute refresh queued on Pluto.");
+      }
+      if (typeof refresh === "function") {
+        window.setTimeout(() => refresh().catch(() => {}), 2500);
+      }
+      return true;
+    } catch (error) {
+      periodicPassRefreshStatusV2629(error && error.message ? error.message : "Periodic pass refresh failed.");
+      return false;
+    } finally {
+      periodicPassRefreshInFlightV2629 = false;
+    }
+  }
+
+  window.plutoPeriodicPassRefreshNowV2629 = () => periodicPassRefreshOnceV2629("manual");
+
+  function startPeriodicPassRefreshV2629() {
+    if (periodicPassRefreshTimerV2629) return;
+    window.setTimeout(() => periodicPassRefreshOnceV2629("initial"), PERIODIC_PASS_REFRESH_INITIAL_DELAY_MS_V2629);
+    periodicPassRefreshTimerV2629 = window.setInterval(() => {
+      periodicPassRefreshOnceV2629("timer");
+    }, PERIODIC_PASS_REFRESH_INTERVAL_MS_V2629);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", startPeriodicPassRefreshV2629, { once: true });
+  } else {
+    startPeriodicPassRefreshV2629();
+  }
+})();
+
+/* LINEAR_TRANSPONDER_CW_OVERRIDE_V2_6_32
+ * USB/LSB/SSB linear transponders are analog listen targets by default.
+ * They may carry user CW inside the passband, so add a secondary manual
+ * Decode CW button without changing the primary Listen behavior.
+ */
+(function installLinearTransponderCwOverrideV2632() {
+  if (window.__plutoLinearTransponderCwOverrideV2632) return;
+  window.__plutoLinearTransponderCwOverrideV2632 = true;
+
+  function textV2632(value) {
+    if (value === undefined || value === null) return "";
+    if (Array.isArray(value)) return value.map(textV2632).join(" ");
+    if (typeof value === "object") {
+      try { return JSON.stringify(value); } catch (_) { return ""; }
+    }
+    return String(value);
+  }
+
+  function radioV2632(pass) {
+    return (pass && pass.radio) || {};
+  }
+
+  function isLinearSsbTransponderV2632(pass) {
+    const radio = radioV2632(pass);
+    const mode = textV2632(radio.mode || ((pass && pass.modes) || [])[0] || "").toUpperCase();
+    const type = textV2632(radio.type).toUpperCase();
+    const desc = textV2632(radio.description).toUpperCase();
+    const all = [mode, type, desc].join(" ");
+    const ssbMode = /(^|[^A-Z0-9])(USB|LSB|SSB|J3E)([^A-Z0-9]|$)/.test(mode) || /(^|[^A-Z0-9])(USB|LSB|SSB|J3E)([^A-Z0-9]|$)/.test(desc);
+    const transponder = /TRANSPONDER|LINEAR/.test(type) || /TRANSPONDER|LINEAR/.test(desc);
+    const explicitDigital = /(^|[^A-Z0-9])(AX\.?25|APRS|PACKET|AFSK|GMSK|BPSK|QPSK|PSK|FSK|TELEMETRY|DIGITAL|DATA|9K6|9600)([^A-Z0-9]|$)/.test(mode);
+    const explicitCwMode = /(^|[^A-Z0-9])(CW|MORSE|A1A)([^A-Z0-9]|$)/.test(mode);
+    return ssbMode && transponder && !explicitDigital && !explicitCwMode && all.length > 0;
+  }
+
+  function parseDownlinkHzV2632(value) {
+    if (value === undefined || value === null || value === "") return "";
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(Math.round(value < 1000000 ? value * 1000000 : value));
+    }
+    const raw = String(value).trim();
+    const upper = raw.toUpperCase();
+    const match = raw.match(/[-+]?\d+(?:\.\d+)?/);
+    if (!match) return "";
+    let n = Number(match[0]);
+    if (!Number.isFinite(n)) return "";
+    if (upper.includes("GHZ")) n *= 1000000000;
+    else if (upper.includes("MHZ")) n *= 1000000;
+    else if (upper.includes("KHZ")) n *= 1000;
+    else if (n < 1000000) n *= 1000000;
+    return String(Math.round(n));
+  }
+
+  function downlinkHzForPassV2632(pass) {
+    const radio = radioV2632(pass);
+    const candidates = [
+      radio.downlink_hz,
+      radio.downlinkHz,
+      radio.downlink,
+      pass && pass.downlink_hz,
+      pass && pass.downlinkHz,
+      ((pass && pass.downlinks_hz) || [])[0],
+      ((pass && pass.downlinks) || [])[0]
+    ];
+    for (const candidate of candidates) {
+      const hz = parseDownlinkHzV2632(candidate);
+      if (hz) return hz;
+    }
+    return "";
+  }
+
+  function passNameV2632(pass) {
+    return textV2632((pass && (pass.name || pass.satellite || pass.satellite_name || pass.object_name)) || "Selected pass");
+  }
+
+  async function postJsonV2632(url) {
+    const response = await fetch(url, { method: "POST", cache: "no-store" });
+    const body = await response.text();
+    let data = null;
+    try { data = body ? JSON.parse(body) : {}; } catch (_) { data = { ok: false, raw: body }; }
+    data.http_ok = response.ok;
+    if (!response.ok) throw new Error(data.message || data.error || `${url}: HTTP ${response.status}`);
+    return data;
+  }
+
+  async function getJsonV2632(url) {
+    if (typeof getJson === "function") return getJson(url);
+    const response = await fetch(url, { cache: "no-store" });
+    const text = await response.text();
+    const data = text ? JSON.parse(text) : {};
+    data.http_ok = response.ok;
+    return data;
+  }
+
+  function ensureLinearCwModalV2632() {
+    let modal = document.getElementById("linearCwDecodeModalV2632");
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.id = "linearCwDecodeModalV2632";
+    modal.className = "receive-decode-backdrop linear-cw-decode-backdrop-v2632";
+    modal.hidden = true;
+    modal.innerHTML = `
+      <div class="receive-decode-modal linear-cw-decode-modal-v2632" role="dialog" aria-modal="true" aria-labelledby="linearCwDecodeTitleV2632">
+        <div class="receive-decode-header">
+          <div>
+            <h2 id="linearCwDecodeTitleV2632">Decode CW</h2>
+            <div id="linearCwDecodeSubtitleV2632" class="receive-decode-subtitle">Ready.</div>
+          </div>
+          <button id="linearCwDecodeCloseButtonV2632" type="button" class="secondary">Close</button>
+        </div>
+        <pre id="linearCwDecodeOutputV2632" class="receive-decode-output">Waiting for CW decoder output...</pre>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal) closeLinearCwModalV2632();
+    });
+    document.getElementById("linearCwDecodeCloseButtonV2632")?.addEventListener("click", closeLinearCwModalV2632);
+    return modal;
+  }
+
+  function closeLinearCwModalV2632() {
+    const session = window.__plutoLinearCwDecodeSessionV2632 || {};
+    if (session.timer) window.clearInterval(session.timer);
+    window.__plutoLinearCwDecodeSessionV2632 = { timer: 0 };
+    const modal = document.getElementById("linearCwDecodeModalV2632");
+    if (modal) {
+      modal.hidden = true;
+      modal.classList.remove("open");
+    }
+    fetch("/api/radio/receive/stop", { method: "POST", cache: "no-store" }).catch(() => {});
+  }
+
+  function formatPayloadV2632(payload) {
+    if (!payload) return "No decoder payload.";
+    const lines = [];
+    lines.push(`State: ${payload.state || "unknown"}`);
+    if (payload.version) lines.push(`Backend: ${payload.version}`);
+    if (payload.decoder_state) lines.push(`Decoder: ${payload.decoder_state}`);
+    if (payload.mode) lines.push(`Mode: ${payload.mode}`);
+    if (payload.sample_count !== undefined) lines.push(`Samples: ${payload.sample_count}`);
+    if (payload.pcm_bytes !== undefined) lines.push(`PCM bytes: ${payload.pcm_bytes}`);
+    if (payload.rms !== undefined) lines.push(`RMS: ${payload.rms}`);
+    if (payload.peak !== undefined) lines.push(`Peak: ${payload.peak}`);
+    if (payload.estimated_tone_hz !== undefined) lines.push(`Tone estimate: ${payload.estimated_tone_hz} Hz`);
+    if (payload.key_duty_percent !== undefined) lines.push(`Key duty: ${payload.key_duty_percent}%`);
+    if (payload.morse) lines.push(`Morse: ${payload.morse}`);
+    if (payload.decoded_text) lines.push(`Decoded: ${payload.decoded_text}`);
+    if (payload.error) lines.push(`Error: ${payload.error}`);
+    if (Array.isArray(payload.lines) && payload.lines.length) {
+      lines.push("");
+      payload.lines.forEach((line) => lines.push(String(line)));
+    }
+    return lines.join("\n") || JSON.stringify(payload, null, 2);
+  }
+
+  async function pollLinearCwOutputV2632() {
+    const output = document.getElementById("linearCwDecodeOutputV2632");
+    const subtitle = document.getElementById("linearCwDecodeSubtitleV2632");
+    try {
+      const data = await getJsonV2632(`/api/radio/decode/output?mode=CW&request=${Date.now()}`);
+      if (output) output.textContent = formatPayloadV2632(data);
+      if (subtitle) subtitle.textContent = "Manual CW decode output updating live.";
+    } catch (error) {
+      if (output) output.textContent = error.message || "CW decode output failed.";
+    }
+  }
+
+  async function startManualLinearCwV2632(pass, button, status) {
+    const hz = downlinkHzForPassV2632(pass);
+    if (!hz) throw new Error("Unable to determine downlink frequency for CW decode.");
+    const params = new URLSearchParams({
+      mode: "CW",
+      name: passNameV2632(pass),
+      downlink_hz: hz
+    });
+    button.disabled = true;
+    button.textContent = "Starting CW...";
+    if (status) status.textContent = "Starting manual CW decode for this USB/LSB transponder pass...";
+    try {
+      const start = await postJsonV2632(`/api/radio/receive/start?${params.toString()}`);
+      const modal = ensureLinearCwModalV2632();
+      const title = document.getElementById("linearCwDecodeTitleV2632");
+      const subtitle = document.getElementById("linearCwDecodeSubtitleV2632");
+      const output = document.getElementById("linearCwDecodeOutputV2632");
+      modal.hidden = false;
+      modal.classList.add("open");
+      if (title) title.textContent = "Decode CW";
+      if (subtitle) subtitle.textContent = `${passNameV2632(pass)} | manual CW override | ${typeof formatHz === "function" ? formatHz(hz) : hz + " Hz"}`;
+      if (output) output.textContent = formatPayloadV2632(start);
+      const existing = window.__plutoLinearCwDecodeSessionV2632 || {};
+      if (existing.timer) window.clearInterval(existing.timer);
+      const timer = window.setInterval(pollLinearCwOutputV2632, 1500);
+      window.__plutoLinearCwDecodeSessionV2632 = { timer };
+      pollLinearCwOutputV2632();
+      if (status) status.textContent = "Manual CW decode screen open. Close the decode window to stop capture.";
+    } finally {
+      button.disabled = false;
+      button.textContent = "Decode CW";
+    }
+  }
+
+  function addLinearCwButtonV2632(pass, node) {
+    if (!node || !isLinearSsbTransponderV2632(pass)) return;
+    const listenButton = node.querySelector("#analogAudioToggleButton");
+    const status = node.querySelector("#analogAudioStatus");
+    if (!listenButton || !listenButton.parentElement) return;
+    if (node.querySelector("#linearTransponderDecodeCwButtonV2632")) return;
+    const button = document.createElement("button");
+    button.id = "linearTransponderDecodeCwButtonV2632";
+    button.type = "button";
+    button.className = "secondary linear-cw-override-button-v2632";
+    button.textContent = "Decode CW";
+    button.title = "Manual CW decode override for USB/LSB linear transponder passes.";
+    button.addEventListener("click", async (event) => {
+      event.preventDefault();
+      try {
+        await startManualLinearCwV2632(pass, button, status);
+      } catch (error) {
+        if (status) status.textContent = error.message || "Unable to start manual CW decode.";
+        const statusBar = document.getElementById("status");
+        if (statusBar) statusBar.textContent = error.message || "Unable to start manual CW decode.";
+      }
+    });
+    listenButton.insertAdjacentElement("afterend", button);
+    if (status && !String(status.textContent || "").includes("Decode CW")) {
+      status.textContent = `${status.textContent || "Ready."} USB/LSB linear transponder: use Listen for audio, or Decode CW if CW is present in the passband.`;
+    }
+  }
+
+  if (typeof bindAnalogAudio === "function") {
+    const previousBindAnalogAudioV2632 = bindAnalogAudio;
+    bindAnalogAudio = function bindAnalogAudioLinearCwOverrideV2632(pass, node) {
+      previousBindAnalogAudioV2632(pass, node);
+      try { addLinearCwButtonV2632(pass, node); } catch (_) {}
+    };
+  }
+})();
+
+
+// DECODE_MODAL_WAITING_COPY_V2_6_33
+(function installDecodeModalWaitingCopyV2633() {
+  if (window.__decodeModalWaitingCopyV2633Installed) return;
+  window.__decodeModalWaitingCopyV2633Installed = true;
+
+  const replacements = [
+    {
+      from: /\[decode\]\s*Start Decode CW and allow one or two seconds of live capture\./g,
+      to: "Waiting for the first live audio samples from the active Decode CW session."
+    },
+    {
+      from: /Start Decode CW and allow one or two seconds of live capture\./g,
+      to: "Waiting for the first live audio samples from the active Decode CW session."
+    },
+    {
+      from: /\[decode\]\s*Waiting for live PCM capture\./g,
+      to: "Waiting for live audio samples from Pluto."
+    },
+    {
+      from: /Waiting for live PCM capture\./g,
+      to: "Waiting for live audio samples from Pluto."
+    },
+    {
+      from: /\[decode\]\s*/g,
+      to: ""
+    }
+  ];
+
+  function normalizeTextV2633(text) {
+    let next = String(text || "");
+    for (const item of replacements) {
+      next = next.replace(item.from, item.to);
+    }
+    return next;
+  }
+
+  function shouldInspectNodeV2633(node) {
+    if (!node || !node.parentElement) return false;
+    const parent = node.parentElement;
+    const host = parent.closest(
+      "#decodeModal, #decodeOutput, #decodeStatus, .decode-modal, .decode-output, [id*='decode'], [class*='decode']"
+    );
+    if (host) return true;
+    const text = node.nodeValue || "";
+    return text.includes("[decode]") || text.includes("Start Decode CW") || text.includes("live PCM capture");
+  }
+
+  function scrubDecodeCopyV2633(root) {
+    const start = root || document.body;
+    if (!start) return;
+    const walker = document.createTreeWalker(start, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      if (shouldInspectNodeV2633(node)) {
+        nodes.push(node);
+      }
+    }
+    for (const node of nodes) {
+      const before = node.nodeValue || "";
+      const after = normalizeTextV2633(before);
+      if (after !== before) {
+        node.nodeValue = after;
+      }
+    }
+  }
+
+  function annotateDecodeButtonsV2633() {
+    const buttons = Array.from(document.querySelectorAll("button"));
+    for (const button of buttons) {
+      const label = (button.textContent || "").trim().toLowerCase();
+      if (label === "decode cw" && !button.title) {
+        button.title = "Start live CW audio capture and open the decoder. No second start button is required.";
+      }
+      if (label === "decode" && !button.title) {
+        button.title = "Start live digital audio capture and open the decoder. No second start button is required.";
+      }
+    }
+  }
+
+  function refreshDecodeCopyV2633() {
+    scrubDecodeCopyV2633(document.body);
+    annotateDecodeButtonsV2633();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", refreshDecodeCopyV2633, { once: true });
+  } else {
+    refreshDecodeCopyV2633();
+  }
+
+  const observer = new MutationObserver(() => refreshDecodeCopyV2633());
+  observer.observe(document.documentElement || document.body, {
+    childList: true,
+    subtree: true,
+    characterData: true
+  });
+
+  window.plutoScrubDecodeCopyV2633 = refreshDecodeCopyV2633;
+})();
+
+// DECODE_SELFTEST_UI_ALL_DIGITAL_V2_6_36
+(function () {
+  "use strict";
+
+  const MARKER = "DECODE_SELFTEST_UI_ALL_DIGITAL_V2_6_36";
+  const TESTS = [
+    { id: "decoderSelfTestCwButtonV2636", label: "CW SOS", path: "/api/radio/decode/cw/selftest", group: "CW" },
+    { id: "decoderSelfTestAx25ButtonV2636", label: "AX.25 Parser", path: "/api/radio/decode/ax25/selftest", group: "AX.25" },
+    { id: "decoderSelfTestAfskButtonV2636", label: "AX.25 AFSK", path: "/api/radio/decode/ax25/afsk-selftest", group: "AX.25" },
+    { id: "decoderSelfTestDigitalButtonV2636", label: "Digital Stack", path: "/api/radio/decode/digital/selftest", group: "Digital" },
+    { id: "decoderSelfTestBpskButtonV2636", label: "BPSK", path: "/api/radio/decode/bpsk/selftest", group: "Digital" },
+    { id: "decoderSelfTestFskButtonV2636", label: "FSK", path: "/api/radio/decode/fsk/selftest", group: "Digital" },
+    { id: "decoderSelfTestGmskButtonV2636", label: "GMSK", path: "/api/radio/decode/gmsk/selftest", group: "Digital" }
+  ];
+
+  function ready(fn) {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", fn, { once: true });
+    } else {
+      fn();
+    }
+  }
+
+  async function fetchJson(path, options) {
+    const response = await fetch(path, Object.assign({ cache: "no-store" }, options || {}));
+    const text = await response.text();
+    let data;
+    try {
+      data = JSON.parse(text || "{}");
+    } catch (error) {
+      data = {
+        ok: false,
+        error: "invalid_json",
+        raw: text.slice(0, 800)
+      };
+    }
+    data.http_ok = response.ok;
+    data.http_status = response.status;
+    data.endpoint = path;
+    return data;
+  }
+
+  function buttonStyle(button, variant) {
+    button.style.border = "0";
+    button.style.borderRadius = "8px";
+    button.style.padding = "7px 10px";
+    button.style.cursor = "pointer";
+    button.style.fontWeight = variant === "primary" ? "700" : "600";
+    button.style.background = variant === "primary" ? "#dbeafe" : "#e5e7eb";
+    button.style.color = "#0f172a";
+  }
+
+  function ensurePanel() {
+    let panel = document.getElementById("decoderSelfTestPanelV2628");
+    if (panel) {
+      return panel;
+    }
+
+    panel = document.createElement("section");
+    panel.id = "decoderSelfTestPanelV2628";
+    panel.className = "decoder-selftest-panel";
+    panel.style.position = "fixed";
+    panel.style.right = "18px";
+    panel.style.bottom = "18px";
+    panel.style.zIndex = "9999";
+    panel.style.maxWidth = "520px";
+    panel.style.padding = "12px";
+    panel.style.border = "1px solid rgba(148, 163, 184, 0.45)";
+    panel.style.borderRadius = "12px";
+    panel.style.background = "rgba(15, 23, 42, 0.95)";
+    panel.style.color = "#e5e7eb";
+    panel.style.boxShadow = "0 12px 28px rgba(0,0,0,0.35)";
+    panel.style.fontFamily = "system-ui, -apple-system, Segoe UI, sans-serif";
+    panel.innerHTML = [
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;">',
+      '<div><strong>Decoder Tests</strong><div style="font-size:12px;color:#cbd5e1;">Offline decoder self-tests; no satellite pass required.</div></div>',
+      '<button type="button" id="decoderSelfTestCloseV2628" style="border:0;border-radius:8px;padding:4px 8px;cursor:pointer;">×</button>',
+      '</div>',
+      '<div id="decoderSelfTestButtonsV2628" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;"></div>',
+      '<pre id="decoderSelfTestOutputV2628" style="max-height:310px;overflow:auto;white-space:pre-wrap;background:rgba(2,6,23,0.75);border-radius:8px;padding:8px;margin:0;font-size:12px;"></pre>'
+    ].join("");
+    document.body.appendChild(panel);
+
+    const close = document.getElementById("decoderSelfTestCloseV2628");
+    if (close) close.onclick = () => { panel.hidden = true; };
+
+    return panel;
+  }
+
+  function outputNode() {
+    const panel = ensurePanel();
+    return panel.querySelector("#decoderSelfTestOutputV2628");
+  }
+
+  function setOutput(data) {
+    const out = outputNode();
+    if (out) out.textContent = JSON.stringify(data, null, 2);
+  }
+
+  async function runOne(test) {
+    const result = await fetchJson(test.path);
+    result.test = test.label;
+    result.group = test.group;
+    return result;
+  }
+
+  function makeTestButton(test) {
+    const button = document.createElement("button");
+    button.id = test.id;
+    button.type = "button";
+    button.textContent = test.label;
+    button.title = test.path;
+    buttonStyle(button);
+    button.onclick = async () => {
+      const oldText = button.textContent;
+      button.disabled = true;
+      button.textContent = `${test.label}...`;
+      try {
+        setOutput({ ok: true, state: "running", test: test.label, endpoint: test.path });
+        setOutput(await runOne(test));
+      } catch (error) {
+        setOutput({ ok: false, test: test.label, error: String(error && error.message ? error.message : error) });
+      } finally {
+        button.disabled = false;
+        button.textContent = oldText;
+      }
+    };
+    return button;
+  }
+
+  function ensureAllButtons() {
+    const panel = ensurePanel();
+    const box = panel.querySelector("#decoderSelfTestButtonsV2628") || panel;
+
+    if (!document.getElementById("decoderSelfTestRunAllButtonV2636")) {
+      const runAll = document.createElement("button");
+      runAll.id = "decoderSelfTestRunAllButtonV2636";
+      runAll.type = "button";
+      runAll.textContent = "Run All";
+      buttonStyle(runAll, "primary");
+      runAll.onclick = async () => {
+        const oldText = runAll.textContent;
+        runAll.disabled = true;
+        runAll.textContent = "Running...";
+        const results = [];
+        setOutput({ ok: true, state: "running_all", tests: TESTS.map((test) => test.label) });
+        for (const test of TESTS) {
+          try {
+            results.push(await runOne(test));
+          } catch (error) {
+            results.push({ ok: false, test: test.label, endpoint: test.path, error: String(error && error.message ? error.message : error) });
+          }
+          setOutput({ ok: true, state: "running_all", completed: results.length, total: TESTS.length, results });
+        }
+        const failed = results.filter((result) => !(result && result.ok !== false && result.http_ok !== false && result.pass !== false && result.decoder_state !== "fail"));
+        setOutput({ ok: failed.length === 0, state: "complete", passed: results.length - failed.length, failed: failed.length, results });
+        runAll.disabled = false;
+        runAll.textContent = oldText;
+      };
+      box.appendChild(runAll);
+    }
+
+    for (const test of TESTS) {
+      if (!document.getElementById(test.id)) {
+        box.appendChild(makeTestButton(test));
+      }
+    }
+  }
+
+  function ensureLauncher() {
+    let launcher = document.getElementById("decoderSelfTestLauncherV2628");
+    if (!launcher) {
+      launcher = document.createElement("button");
+      launcher.id = "decoderSelfTestLauncherV2628";
+      launcher.type = "button";
+      launcher.textContent = "Decoder Tests";
+      launcher.style.position = "fixed";
+      launcher.style.right = "18px";
+      launcher.style.bottom = "18px";
+      launcher.style.zIndex = "9998";
+      launcher.style.border = "0";
+      launcher.style.borderRadius = "999px";
+      launcher.style.padding = "9px 13px";
+      launcher.style.cursor = "pointer";
+      launcher.style.boxShadow = "0 8px 20px rgba(0,0,0,0.28)";
+      document.body.appendChild(launcher);
+    }
+    launcher.onclick = () => {
+      const panel = ensurePanel();
+      ensureAllButtons();
+      panel.hidden = false;
+    };
+  }
+
+  ready(() => {
+    ensureLauncher();
+    const existingPanel = document.getElementById("decoderSelfTestPanelV2628");
+    if (existingPanel) ensureAllButtons();
+    window.plutoDecoderSelfTestsV2636 = {
+      tests: TESTS.slice(),
+      run: (labelOrPath) => {
+        const key = String(labelOrPath || "").toLowerCase();
+        const test = TESTS.find((item) => item.label.toLowerCase() === key || item.path.toLowerCase() === key || item.id.toLowerCase() === key);
+        if (!test) return Promise.reject(new Error(`Unknown decoder self-test: ${labelOrPath}`));
+        return runOne(test).then((data) => { setOutput(data); return data; });
+      },
+      runAll: async () => {
+        const results = [];
+        for (const test of TESTS) results.push(await runOne(test));
+        setOutput({ ok: true, state: "complete", results });
+        return results;
+      }
+    };
+    console.log(`${MARKER}: installed`);
+  });
+})();
+
+// DIGITAL_DECODE_MODAL_FRIENDLY_STATE_V2_6_38
+// User-facing cleanup for digital decode modal states. Backend state names remain unchanged.
+(function installDigitalDecodeModalFriendlyStateV2638() {
+  "use strict";
+
+  const marker = "DIGITAL_DECODE_MODAL_FRIENDLY_STATE_V2_6_38_INSTALLED";
+  if (window[marker]) return;
+  window[marker] = true;
+
+  function friendlyDigitalDecodeTextV2638(text) {
+    if (text === null || text === undefined) return text;
+    let value = String(text);
+
+    value = value.replace(/\[decode\]\s*/gi, "");
+
+    const replacements = [
+      [/\bdigital_bpsk_live_diagnostic\b/gi, "BPSK signal diagnostics"],
+      [/\bdigital_bpsk_waiting\b/gi, "BPSK decoder waiting"],
+      [/\bdigital_fsk_gmsk_live_diagnostic\b/gi, "FSK/GMSK signal diagnostics"],
+      [/\bdigital_fsk_gmsk_waiting\b/gi, "FSK/GMSK decoder waiting"],
+      [/\bax25_afsk_live_diagnostic\b/gi, "AX.25/APRS AFSK signal diagnostics"],
+      [/\bax25_afsk_waiting\b/gi, "AX.25/APRS AFSK decoder waiting"],
+      [/\bax25_live_diagnostic\b/gi, "AX.25/APRS signal diagnostics"],
+      [/\bax25_waiting\b/gi, "AX.25/APRS decoder waiting"],
+      [/\bcw_morse_experimental_waiting\b/gi, "CW decoder waiting"],
+      [/\bcw_morse_experimental\b/gi, "CW decoder"],
+      [/\(signal_diagnostic\)/gi, "(signal diagnostics)"],
+      [/\bsignal_diagnostic\b/gi, "signal diagnostics"],
+      [/\blive_diagnostic\b/gi, "live diagnostics"],
+      [/\bnot_implemented\b/gi, "not implemented"],
+      [/\bselftest\b/gi, "self-test"],
+      [/\bdecoder_state\b/gi, "decoder state"]
+    ];
+
+    for (const [pattern, replacement] of replacements) {
+      value = value.replace(pattern, replacement);
+    }
+
+    value = value.replace(
+      /Waiting for live PCM from Decode on a digital\/packet pass\./gi,
+      "Waiting for live audio samples from the active digital decode session."
+    );
+    value = value.replace(
+      /Waiting for live PCM capture\./gi,
+      "Waiting for live audio samples from Pluto."
+    );
+    value = value.replace(
+      /Next stage after this diagnostic is Bell 202 bit\/HDLC recovery\./gi,
+      "The decoder is measuring signal quality before attempting packet recovery."
+    );
+    value = value.replace(
+      /Live BPSK pass decoding will reuse this signal path after carrier\/clock recovery is connected\./gi,
+      "Live BPSK decoding is using this path for carrier and clock diagnostics."
+    );
+    value = value.replace(
+      /GMSK\/9600 live decoding still needs mode-specific clock and slicing against real audio\./gi,
+      "Live FSK/GMSK decoding is using this path for signal and clock diagnostics."
+    );
+
+    return value;
+  }
+
+  function cleanDigitalDecodeModalNodeV2638(node) {
+    if (!node) return;
+
+    if (node.nodeType === Node.TEXT_NODE) {
+      const next = friendlyDigitalDecodeTextV2638(node.nodeValue);
+      if (next !== node.nodeValue) node.nodeValue = next;
+      return;
+    }
+
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+
+    const id = String(node.id || "").toLowerCase();
+    const cls = String(node.className || "").toLowerCase();
+    const role = String(node.getAttribute && (node.getAttribute("role") || "")).toLowerCase();
+    const likelyDecode =
+      id.includes("decode") ||
+      cls.includes("decode") ||
+      role.includes("dialog") ||
+      node.closest?.('[id*="decode" i], [class*="decode" i]');
+
+    if (!likelyDecode) return;
+
+    for (const child of Array.from(node.childNodes || [])) {
+      cleanDigitalDecodeModalNodeV2638(child);
+    }
+  }
+
+  function cleanAllDigitalDecodeModalTextV2638() {
+    const roots = document.querySelectorAll(
+      '[id*="decode" i], [class*="decode" i], [role="dialog"]'
+    );
+    roots.forEach(cleanDigitalDecodeModalNodeV2638);
+  }
+
+  const observer = new MutationObserver((mutations) => {
+    let shouldSweep = false;
+    for (const mutation of mutations) {
+      if (mutation.type === "characterData") {
+        cleanDigitalDecodeModalNodeV2638(mutation.target);
+        shouldSweep = true;
+      }
+      for (const node of Array.from(mutation.addedNodes || [])) {
+        cleanDigitalDecodeModalNodeV2638(node);
+        shouldSweep = true;
+      }
+    }
+    if (shouldSweep) cleanAllDigitalDecodeModalTextV2638();
+  });
+
+  function startV2638() {
+    cleanAllDigitalDecodeModalTextV2638();
+    observer.observe(document.body || document.documentElement, {
+      childList: true,
+      subtree: true,
+      characterData: true
+    });
+    window.setInterval(cleanAllDigitalDecodeModalTextV2638, 1500);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", startV2638, { once: true });
+  } else {
+    startV2638();
+  }
+
+  window.plutoFriendlyDigitalDecodeTextV2638 = friendlyDigitalDecodeTextV2638;
+})();
