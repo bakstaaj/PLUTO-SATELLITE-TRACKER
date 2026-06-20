@@ -2542,3 +2542,100 @@ body.spectrum-waterfall-modal-open {
   gap: 0.35rem !important;
 }
 /* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6E_END */
+
+
+/* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6G_ROTATOR_SPECTRUM_COLORS_BEGIN */
+/* Keep Rotator and Spectrum visually aligned with the compact active-pass
+ * action buttons.  This is CSS-only; button behavior and disabled state remain
+ * controlled by the existing JavaScript.
+ */
+.listen-panel #openRotatorFromListenButton,
+.listen-panel #openSpectrumWaterfallButton,
+.listen-panel .rotator-open-button,
+.listen-panel .spectrum-open-button {
+  appearance: none !important;
+  border: 1px solid #0284c7 !important;
+  border-radius: 999px !important;
+  background: #0ea5e9 !important;
+  color: #ffffff !important;
+  font-size: 0.64rem !important;
+  font-weight: 800 !important;
+  line-height: 1 !important;
+  min-height: 1.18rem !important;
+  padding: 0.11rem 0.38rem !important;
+  box-shadow: none !important;
+  letter-spacing: 0 !important;
+  text-decoration: none !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.18rem !important;
+  white-space: nowrap !important;
+}
+
+.listen-panel #openRotatorFromListenButton:hover:not(:disabled),
+.listen-panel #openSpectrumWaterfallButton:hover:not(:disabled),
+.listen-panel .rotator-open-button:hover:not(:disabled),
+.listen-panel .spectrum-open-button:hover:not(:disabled) {
+  background: #0284c7 !important;
+  border-color: #0369a1 !important;
+  color: #ffffff !important;
+}
+
+.listen-panel #openRotatorFromListenButton:disabled,
+.listen-panel #openSpectrumWaterfallButton:disabled,
+.listen-panel .rotator-open-button:disabled,
+.listen-panel .spectrum-open-button:disabled {
+  background: #dbeafe !important;
+  border-color: #93c5fd !important;
+  color: #64748b !important;
+  opacity: 0.72 !important;
+  cursor: not-allowed !important;
+}
+/* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6G_ROTATOR_SPECTRUM_COLORS_END */
+
+/* SPECTRUM_DISABLED_COLOR_MATCH_V2_8_6H START */
+.listen-panel #openRotatorFromListenButton.rotator-open-button,
+.listen-panel #openSpectrumWaterfallButton.spectrum-open-button {
+  appearance: none !important;
+  border: 1px solid #0284c7 !important;
+  border-radius: 999px !important;
+  background: #0ea5e9 !important;
+  color: #ffffff !important;
+  font-size: 0.64rem !important;
+  font-weight: 800 !important;
+  line-height: 1 !important;
+  min-height: 1.18rem !important;
+  padding: 0.11rem 0.38rem !important;
+  box-shadow: none !important;
+  letter-spacing: 0 !important;
+  text-decoration: none !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.18rem !important;
+  white-space: nowrap !important;
+  opacity: 1 !important;
+}
+
+.listen-panel #openRotatorFromListenButton.rotator-open-button:hover:not(:disabled),
+.listen-panel #openSpectrumWaterfallButton.spectrum-open-button:hover:not(:disabled) {
+  background: #0284c7 !important;
+  border-color: #0369a1 !important;
+  color: #ffffff !important;
+}
+
+.listen-panel #openRotatorFromListenButton.rotator-open-button:disabled,
+.listen-panel #openRotatorFromListenButton.rotator-open-button[disabled],
+.listen-panel #openSpectrumWaterfallButton.spectrum-open-button:disabled,
+.listen-panel #openSpectrumWaterfallButton.spectrum-open-button[disabled] {
+  background: #dbeafe !important;
+  border-color: #93c5fd !important;
+  color: #64748b !important;
+  opacity: 0.72 !important;
+  cursor: not-allowed !important;
+  box-shadow: none !important;
+}
+/* SPECTRUM_DISABLED_COLOR_MATCH_V2_8_6H END */
