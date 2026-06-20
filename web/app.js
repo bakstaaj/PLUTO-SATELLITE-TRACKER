@@ -3877,20 +3877,10 @@ function configurePassRowActionButtonV286(button, pass, onSelect) {
         return readiness.state !== "stale";
       });
       const visiblePasses = filteredPasses.slice(0, 12);
-      const filters = document.createElement("div");
-      filters.className = "filter-row";
-      for (const [value, label] of [["actionable", "Upcoming"], ["ready", "Ready"], ["active", "Active"], ["all", "All"]]) {
-        const filterButton = document.createElement("button");
-        filterButton.type = "button";
-        filterButton.textContent = label;
-        filterButton.className = passFilter === value ? "active" : "";
-        filterButton.addEventListener("click", () => {
-          passFilter = value;
-          renderPasses(payload);
-        });
-        filters.appendChild(filterButton);
-      }
-      node.appendChild(filters);
+      /* PASS_FILTER_BUTTONS_REMOVED_V2_8_6F
+       * The pass list intentionally uses the default useful pass set without
+       * the Upcoming/Ready/Active/All filter button row.
+       */
       if (!visiblePasses.length) {
         const empty = document.createElement("div");
         empty.className = "empty";
