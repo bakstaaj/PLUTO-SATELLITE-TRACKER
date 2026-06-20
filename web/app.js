@@ -7318,3 +7318,93 @@ function bindReceiveDiagnosticsPanelV284() {
   }
 })();
 
+
+
+/* PASS_LIST_RECEIVE_BADGES_V2_8_5
+ * Adds lightweight Listen/Receive capability badges to pass-list style rows.
+ * This is UI-only: it does not tune, start audio, or call decoder endpoints.
+ */
+(function installPassListReceiveBadgesV285() {
+  const badgeClass = "receive-capability-badge-v285";
+
+  function modeTextFromElementV285(el) {
+    const text = String(el ? el.textContent || "" : "").replace(/\s+/g, " ").trim().toUpperCase();
+    return text;
+  }
+
+  function receiveFamilyFromTextV285(text) {
+    if (/APRS/.test(text)) return { family: "APRS", kind: "receive", label: "Receive: APRS" };
+    if (/(AX\.25|AX25|PACKET)/.test(text)) return { family: "Packet", kind: "receive", label: "Receive: Packet" };
+    if (/(CW|MORSE|A1A)/.test(text)) return { family: "CW", kind: "receive", label: "Receive: CW" };
+    if (/(AFSK|1200\s*BAUD)/.test(text)) return { family: "AFSK", kind: "receive", label: "Receive: AFSK" };
+    if (/(G3RUH|9600|GMSK|GFSK|FSK|BPSK|PSK|TELEMETRY|DIGITAL|DATA|BEACON)/.test(text)) {
+      return { family: "Digital", kind: "receive", label: "Receive: Digital" };
+    }
+    if (/(FM|NFM|WFM|AM|SSB|USB|LSB|VOICE|F3E|A3E)/.test(text)) {
+      return { family: "Voice", kind: "listen", label: "Listen" };
+    }
+    return { family: "Unknown", kind: "unknown", label: "Radio" };
+  }
+
+  function likelyPassRowV285(el) {
+    if (!el || el.nodeType !== 1) return false;
+    if (el.closest && el.closest("#appDrawer, #receivePlaceholderModalV282, #receiveDecodeModalV2626, #spectrumWaterfallModal, #rotatorControlModal")) return false;
+    const text = modeTextFromElementV285(el);
+    if (text.length < 20) return false;
+    const hasRadioHint = /(MHz|DOWNLINK|MODE|AOS|LOS|MAX EL|SATELLITE|NORAD|DETAILS|LISTEN|RECEIVE|DECODE)/.test(text);
+    const hasAction = !!el.querySelector("button, a[role='button']");
+    return hasRadioHint && hasAction;
+  }
+
+  function badgeHostV285(row) {
+    return row.querySelector(".pass-meta, .pass-summary, .pass-card-header, .pass-list-meta, .detail-subtitle") || row.firstElementChild || row;
+  }
+
+  function decorateOneRowV285(row) {
+    if (!likelyPassRowV285(row)) return;
+    const existing = row.querySelector(`.${badgeClass}`);
+    const classification = receiveFamilyFromTextV285(modeTextFromElementV285(row));
+    if (classification.kind === "unknown") {
+      if (existing) existing.remove();
+      return;
+    }
+
+    const badge = existing || document.createElement("span");
+    badge.className = `${badgeClass} ${badgeClass}-${classification.kind}`;
+    badge.textContent = classification.label;
+    badge.title = classification.kind === "receive"
+      ? `${classification.family} pass: use Receive/decode workflow, not analog Listen.`
+      : "Voice-style pass: use the proven Listen audio path.";
+    badge.setAttribute("aria-label", badge.title);
+
+    if (!existing) {
+      const host = badgeHostV285(row);
+      if (host && host.prepend) host.prepend(badge);
+    }
+  }
+
+  function decoratePassRowsV285() {
+    const rows = Array.from(document.querySelectorAll("tr, li, article, .pass-card, .pass-row, .pass-list-item, .pass-item, .next-pass, .pass-detail-compact"));
+    rows.forEach(decorateOneRowV285);
+  }
+
+  let scheduled = 0;
+  function scheduleDecoratePassRowsV285() {
+    if (scheduled) return;
+    scheduled = window.setTimeout(() => {
+      scheduled = 0;
+      decoratePassRowsV285();
+    }, 100);
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    decoratePassRowsV285();
+    const observer = new MutationObserver(scheduleDecoratePassRowsV285);
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    window.setInterval(decoratePassRowsV285, 2500);
+  });
+  if (document.readyState !== "loading") {
+    decoratePassRowsV285();
+    window.setInterval(decoratePassRowsV285, 2500);
+  }
+})();

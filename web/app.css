@@ -2313,3 +2313,31 @@ body.spectrum-waterfall-modal-open {
   margin-top: 0.45rem;
 }
 
+
+
+/* PASS_LIST_RECEIVE_BADGES_V2_8_5 */
+.receive-capability-badge-v285 {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin: 0 0.35rem 0.25rem 0;
+  padding: 0.16rem 0.48rem;
+  border-radius: 999px;
+  border: 1px solid rgba(71, 85, 105, 0.34);
+  background: rgba(241, 245, 249, 0.92);
+  color: #334155;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.receive-capability-badge-v285-listen {
+  border-color: rgba(37, 99, 235, 0.35);
+  background: rgba(219, 234, 254, 0.95);
+  color: #1d4ed8;
+}
+.receive-capability-badge-v285-receive {
+  border-color: rgba(126, 34, 206, 0.36);
+  background: rgba(243, 232, 255, 0.96);
+  color: #6b21a8;
+}
