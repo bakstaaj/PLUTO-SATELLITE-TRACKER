@@ -7862,3 +7862,198 @@ function passActionInactiveTextV286(pass) {
   window.setInterval(polishAllV286E, 2000);
 })();
 /* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6E_END */
+
+/* GMSK_SIGNAL_DIAGNOSTICS_V2_8_7
+ * Phase 1 GMSK/9k6 receive diagnostics display.
+ * This does not claim bit/HDLC/text decode. It replaces generic AFSK tone
+ * copy in the live decode modal with GMSK-specific clock/slicer readiness
+ * information derived from the existing signal diagnostic output.
+ */
+(function installGmskSignalDiagnosticsV287() {
+  const MARKER = "GMSK_SIGNAL_DIAGNOSTICS_V2_8_7";
+  if (window.__plutoGmskSignalDiagnosticsV287) return;
+  window.__plutoGmskSignalDiagnosticsV287 = true;
+
+  function numberFromTextV287(text, patterns) {
+    for (const pattern of patterns) {
+      const match = String(text || "").match(pattern);
+      if (match && match[1] !== undefined) {
+        const value = Number(match[1]);
+        if (Number.isFinite(value)) return value;
+      }
+    }
+    return null;
+  }
+
+  function hasGmskDiagnosticV287(text) {
+    const upper = String(text || "").toUpperCase();
+    return /\b(GMSK|G3RUH|9K6|9600)\b/.test(upper) || upper.includes("FSK/GMSK");
+  }
+
+  function stripPreviousGmskBlockV287(text) {
+    return String(text || "")
+      .replace(/\n?--- GMSK Phase 1 diagnostics \(GMSK_SIGNAL_DIAGNOSTICS_V2_8_7\)[\s\S]*$/m, "")
+      .replace(/\n?\[GMSK_SIGNAL_DIAGNOSTICS_V2_8_7[\s\S]*$/m, "")
+      .trimEnd();
+  }
+
+  function removeGenericAfskLinesForGmskV287(text) {
+    return String(text || "")
+      .split(/\r?\n/)
+      .filter((line) => {
+        const normalized = line.trim();
+        if (/^(1200|2200)\s*Hz energy/i.test(normalized)) return false;
+        if (/^Dominant tone\b/i.test(normalized)) return false;
+        if (/^mark balance\b/i.test(normalized)) return false;
+        if (/Live bit\/HDLC\/text recovery is not claimed/i.test(normalized)) return false;
+        return true;
+      })
+      .join("\n")
+      .trimEnd();
+  }
+
+  function levelSummaryV287(rms, peak) {
+    if (rms === null && peak === null) return "unknown - no level metrics reported";
+    if (peak !== null && peak >= 30000) return "too hot / clipping risk - reduce gain or input level";
+    if (rms !== null && rms < 200) return "weak - signal may be below reliable slicer threshold";
+    if (rms !== null && rms < 700) return "usable but light - antenna/aim/gain may still matter";
+    if (rms !== null && rms <= 6000 && (peak === null || peak < 22000)) return "healthy diagnostic level";
+    return "strong - verify it is not clipping during peak Doppler/audio changes";
+  }
+
+  function lockSummaryV287(sampleRate, baud, zc, dominant) {
+    const sps = sampleRate / baud;
+    let clock = "diagnostic only - symbol clock recovery not connected";
+    let slicer = "diagnostic only - slicer threshold not locked";
+    let transition = "not estimated from bit transitions yet";
+
+    if (zc !== null) {
+      const normalized = zc / baud;
+      if (normalized > 0.35 && normalized < 1.35) {
+        transition = `candidate transition activity present (${normalized.toFixed(2)} x symbol rate)`;
+      } else {
+        transition = `transition estimate not near symbol rate (${normalized.toFixed(2)} x symbol rate)`;
+      }
+    }
+
+    if (dominant !== null) {
+      if (dominant > 2500 && dominant < 5500) {
+        slicer = "diagnostic candidate - discriminator energy present; slicer still not locked";
+      } else {
+        slicer = "diagnostic only - dominant component does not prove GMSK slicer lock";
+      }
+    }
+
+    if (sps < 2.2) {
+      clock = `very tight at ${sps.toFixed(2)} samples/symbol - prefer higher-rate discriminator path`;
+    } else if (sps < 3.2) {
+      clock = `tight but workable for diagnostics at ${sps.toFixed(2)} samples/symbol`;
+    } else {
+      clock = `adequate diagnostic sampling at ${sps.toFixed(2)} samples/symbol`;
+    }
+
+    return { samplesPerSymbol: sps, clock, slicer, transition };
+  }
+
+  function buildGmskBlockV287(text) {
+    if (!hasGmskDiagnosticV287(text)) return "";
+
+    const sampleRate = numberFromTextV287(text, [
+      /at\s+(\d+(?:\.\d+)?)\s*Hz/i,
+      /sample[_ ]rate[^0-9]*(\d+(?:\.\d+)?)/i
+    ]) || 24000;
+    const samples = numberFromTextV287(text, [
+      /Samples:\s*(\d+(?:\.\d+)?)/i,
+      /PCM samples analyzed:\s*(\d+(?:\.\d+)?)/i
+    ]);
+    const rms = numberFromTextV287(text, [/RMS:\s*([0-9]+(?:\.[0-9]+)?)/i, /RMS\s+([0-9]+(?:\.[0-9]+)?)/i]);
+    const peak = numberFromTextV287(text, [/Peak:\s*([0-9]+(?:\.[0-9]+)?)/i, /peak\s+([0-9]+(?:\.[0-9]+)?)/i]);
+    const zc = numberFromTextV287(text, [/zero-crossing estimate\s+([0-9]+(?:\.[0-9]+)?)/i]);
+    const dominant = numberFromTextV287(text, [/Dominant tone\s+([0-9]+(?:\.[0-9]+)?)/i]);
+    const baud = /\b(9K6|9600|G3RUH)\b/i.test(text) ? 9600 : 9600;
+    const lock = lockSummaryV287(sampleRate, baud, zc, dominant);
+    const duration = samples !== null && sampleRate > 0 ? samples / sampleRate : null;
+
+    const lines = [];
+    lines.push(`--- GMSK Phase 1 diagnostics (${MARKER}) ---`);
+    lines.push(`Target modem: GMSK/FSK diagnostic path, assuming ${baud} symbols/sec until satellite-specific metadata says otherwise.`);
+    lines.push(`Sample window: ${samples !== null ? String(Math.round(samples)) : "unknown"} samples${duration !== null ? ` (${duration.toFixed(2)} sec)` : ""} at ${Math.round(sampleRate)} Hz.`);
+    lines.push(`Samples per symbol: ${lock.samplesPerSymbol.toFixed(2)}.`);
+    lines.push(`Level check: ${levelSummaryV287(rms, peak)}${rms !== null || peak !== null ? ` (RMS ${rms ?? "?"}, peak ${peak ?? "?"}).` : "."}`);
+    lines.push(`Clock readiness: ${lock.clock}.`);
+    lines.push(`Slicer readiness: ${lock.slicer}.`);
+    lines.push(`Transition activity: ${lock.transition}.`);
+    lines.push("Frame recovery: HDLC/AX.25/text decode is not claimed in this phase.");
+    lines.push("Next backend step: feed a higher-rate discriminator/baseband stream into clock recovery, then add slicer and HDLC flag/frame counting.");
+    return lines.join("\n");
+  }
+
+  function enhanceDecodeTextV287(text) {
+    const base = stripPreviousGmskBlockV287(text);
+    const block = buildGmskBlockV287(base);
+    if (!block) return text;
+    const cleaned = removeGenericAfskLinesForGmskV287(base);
+    return `${cleaned}\n\n${block}`;
+  }
+
+  function shouldEnhanceNodeV287(node) {
+    if (!node || node.nodeType !== Node.ELEMENT_NODE) return false;
+    const id = String(node.id || "");
+    const cls = String(node.className || "");
+    return /decode.*output/i.test(id) || /receive.*decode.*output/i.test(id) || /decode.*output/i.test(cls);
+  }
+
+  function enhanceNodeV287(node) {
+    if (!shouldEnhanceNodeV287(node)) return;
+    const before = node.textContent || "";
+    if (!hasGmskDiagnosticV287(before)) return;
+    const after = enhanceDecodeTextV287(before);
+    if (after !== before) node.textContent = after;
+  }
+
+  function scanV287(root) {
+    const scope = root && root.querySelectorAll ? root : document;
+    if (shouldEnhanceNodeV287(scope)) enhanceNodeV287(scope);
+    scope.querySelectorAll?.("pre, code, textarea, #receiveDecodeOutputV2626D, #receiveDecodeOutputV2626, #linearCwDecodeOutputV2632").forEach(enhanceNodeV287);
+  }
+
+  let scheduled = 0;
+  function scheduleScanV287() {
+    if (scheduled) return;
+    scheduled = window.setTimeout(() => {
+      scheduled = 0;
+      scanV287(document);
+    }, 80);
+  }
+
+  function installV287() {
+    scanV287(document);
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        if (record.type === "characterData") {
+          const parent = record.target && record.target.parentElement;
+          if (parent && shouldEnhanceNodeV287(parent)) {
+            scheduleScanV287();
+            return;
+          }
+        }
+        for (const node of record.addedNodes || []) {
+          if (node.nodeType === Node.ELEMENT_NODE && (shouldEnhanceNodeV287(node) || node.querySelector?.("pre, code, textarea"))) {
+            scheduleScanV287();
+            return;
+          }
+        }
+      }
+    });
+    observer.observe(document.body || document.documentElement, { childList: true, subtree: true, characterData: true });
+    window.setInterval(() => scanV287(document), 1500);
+    window.plutoEnhanceGmskDiagnosticsV287 = enhanceDecodeTextV287;
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", installV287, { once: true });
+  } else {
+    installV287();
+  }
+})();
+
