@@ -2409,3 +2409,60 @@ body.spectrum-waterfall-modal-open {
   display: none !important;
 }
 /* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6_END */
+
+
+/* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6D_PROTOCOL_LABEL_FIX */
+.pass-row > div.radio-ok,
+.pass-row > div.radio-warn {
+  display: none !important;
+}
+
+.pass-action-button-v286,
+.pass-row-action-button-v286,
+.receive-capability-badge-v285,
+.receive-capability-badge-v285-listen,
+.receive-capability-badge-v285-receive,
+.receive-capability-badge-v285-unknown {
+  border-color: #7dd3fc !important;
+  background: #e0f2fe !important;
+  color: #075985 !important;
+  font-size: 0.70rem !important;
+  font-weight: 700 !important;
+  line-height: 1.05 !important;
+  padding: 0.18rem 0.44rem !important;
+  min-height: 1.45rem !important;
+  border-radius: 999px !important;
+  box-shadow: none !important;
+}
+
+.listen-panel .pass-action-button-v286,
+.listen-panel #analogAudioToggleButton,
+.listen-panel #receiveDecodePlaceholderButtonV282 {
+  font-size: 0.72rem !important;
+  padding: 0.22rem 0.50rem !important;
+  min-height: 1.55rem !important;
+}
+
+.pass-row-actions-v286 {
+  gap: 0.28rem !important;
+}
+
+#linearTransponderDecodeCwButtonV2632,
+.linear-cw-override-button-v2632,
+.listen-panel #receiveDecodePlaceholderButtonV282,
+.listen-panel #receiveDecodeStatusV282,
+.listen-panel #analogAudioStatus {
+  display: none !important;
+}
+
+.pass-action-button-v286:disabled,
+.pass-action-button-v286[disabled],
+.pass-row-action-button-v286:disabled,
+.pass-row-action-button-v286[disabled] {
+  background: #f0f9ff !important;
+  border-color: #bae6fd !important;
+  color: #64748b !important;
+  opacity: 0.64 !important;
+  cursor: not-allowed !important;
+}
+/* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6D_PROTOCOL_LABEL_FIX_END */

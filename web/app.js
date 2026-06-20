@@ -7578,3 +7578,91 @@ function bindReceiveDiagnosticsPanelV284() {
 })();
 /* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6_END */
 
+
+
+/* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6D_PROTOCOL_LABEL_FIX
+ * Correct active-pass action labels so the compact buttons use the same
+ * protocol-aware language as the pass-list badges.  Also remove the redundant
+ * secondary Decode CW button under the sky plot; the primary action button now
+ * carries the correct protocol label and remains inactive until AOS.
+ */
+function passActionTextV286D(value) {
+  if (value === undefined || value === null) return "";
+  if (Array.isArray(value)) return value.map(passActionTextV286D).join(" ");
+  if (typeof value === "object") {
+    try { return JSON.stringify(value); } catch (_error) { return ""; }
+  }
+  return String(value);
+}
+
+function passActionClassificationV286(pass) {
+  const radio = (pass && pass.radio) || {};
+  const text = [
+    radio.mode,
+    radio.description,
+    radio.type,
+    radio.status,
+    (pass && pass.modes) || [],
+    pass && pass.name,
+    pass && pass.transmitters,
+    pass && pass.downlinks,
+    pass && pass.uplinks
+  ].map(passActionTextV286D).join(" ").replace(/\s+/g, " ").toUpperCase();
+
+  if (/APRS/.test(text)) return { family: "APRS", kind: "receive", label: "Receive: APRS" };
+  if (/(AX\.?25|PACKET)/.test(text)) return { family: "Packet", kind: "receive", label: "Receive: Packet" };
+  if (/(CW|MORSE|A1A)/.test(text)) return { family: "CW", kind: "receive", label: "Receive: CW" };
+  if (/(AFSK|1200\s*BAUD|1K2)/.test(text)) return { family: "AFSK", kind: "receive", label: "Receive: AFSK" };
+  if (/(G3RUH|9600|9K6|GMSK|GFSK|FSK|BPSK|QPSK|PSK|TELEMETRY|DIGITAL|DATA|BEACON)/.test(text)) {
+    return { family: "Digital", kind: "receive", label: "Receive: Digital" };
+  }
+  if (/(FM|NFM|WFM|AM|SSB|USB|LSB|VOICE|F3E|A3E|J3E)/.test(text)) {
+    return { family: "Voice", kind: "listen", label: "Listen" };
+  }
+  return { family: "Unknown", kind: "listen", label: "Radio" };
+}
+
+function passActionKindV286(pass) {
+  const classification = passActionClassificationV286(pass);
+  return classification.kind === "receive" ? "receive" : "listen";
+}
+
+function passActionLabelV286(pass) {
+  return passActionClassificationV286(pass).label;
+}
+
+function passActionInactiveTextV286(pass) {
+  const label = passActionLabelV286(pass);
+  if (!pass) return `${label} is inactive until a pass is selected.`;
+  if (!passActionTargetAvailableV286(pass)) return `${label} unavailable: no tunable downlink.`;
+  const state = passActionTimingStateV286(pass);
+  if (state === "upcoming") return `${label} active at AOS (${formatTime(pass.aos_utc)}).`;
+  if (state === "stale") return `${label} inactive; pass ended.`;
+  return `${label} inactive until the pass is active.`;
+}
+
+(function installActivePassActionButtonCleanupV286D() {
+  if (window.__plutoActivePassActionButtonCleanupV286D) return;
+  window.__plutoActivePassActionButtonCleanupV286D = true;
+
+  function cleanupV286D() {
+    document.querySelectorAll("#linearTransponderDecodeCwButtonV2632, .linear-cw-override-button-v2632").forEach((button) => button.remove());
+    document.querySelectorAll(".listen-panel #analogAudioStatus, .listen-panel #receiveDecodeStatusV282").forEach((node) => {
+      node.hidden = true;
+      node.textContent = "";
+    });
+    document.querySelectorAll(".pass-row-action-button-v286, #analogAudioToggleButton.pass-action-button-v286").forEach((button) => {
+      if (/^Receive$/.test(String(button.textContent || "").trim())) {
+        button.textContent = button.dataset.passActionKindV286 === "receive" ? "Receive: Digital" : button.textContent;
+      }
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", cleanupV286D, { once: true });
+  } else {
+    cleanupV286D();
+  }
+  window.setInterval(cleanupV286D, 1200);
+})();
+/* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6D_PROTOCOL_LABEL_FIX_END */
