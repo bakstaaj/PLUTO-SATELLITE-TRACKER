@@ -4121,7 +4121,7 @@ const tbody = document.getElementById("satellites");
       return host;
     }
 
-    return "192.168.3.1";
+    return "192.168.68.104";
   }
 
   function updateRotatorDirtyNoticeV2410() {
@@ -4607,7 +4607,7 @@ async function loadRotatorState() {
       <div class="rotator-grid">
         ${createField("Enabled", '<input id="rotatorEnabled" type="checkbox" />')}
         ${createField("Type", `<select id="rotatorType">${typeOptions}</select>`)}
-        ${createField("Host", '<input id="rotatorHost" type="text" value="192.168.3.1" />')}
+        ${createField("Host", '<input id="rotatorHost" type="text" value="192.168.68.104" />')}
         ${createField("Port", '<input id="rotatorPort" type="number" value="4533" min="1" max="65535" />')}
         ${createField("Update sec", '<input id="rotatorUpdateInterval" type="number" value="2" min="1" max="60" />')}
         ${createField("Min move deg", '<input id="rotatorMinMove" type="number" value="1.0" step="0.1" />')}
@@ -6551,4 +6551,485 @@ try {
   }
 
   window.plutoFriendlyDigitalDecodeTextV2638 = friendlyDigitalDecodeTextV2638;
+})();
+
+// REMOVE_DECODER_TESTS_UI_V2_7_1 START
+// Release cleanup: hide/remove offline decoder self-test launcher from the normal app UI.
+(function removeDecoderTestsUiV271() {
+  "use strict";
+
+  if (window.__removeDecoderTestsUiV271Installed) return;
+  window.__removeDecoderTestsUiV271Installed = true;
+
+  const ids = [
+    "decodeSelfTestLauncherV2628",
+    "decodeSelfTestPanelV2628",
+    "decoderSelfTestLauncherV2628",
+    "decoderSelfTestPanelV2628"
+  ];
+
+  const selectors = [
+    "#decodeSelfTestLauncherV2628",
+    "#decodeSelfTestPanelV2628",
+    "#decoderSelfTestLauncherV2628",
+    "#decoderSelfTestPanelV2628",
+    ".decode-selftest-launcher-v2628",
+    ".decode-selftest-panel-v2628",
+    ".decoder-selftest-panel"
+  ];
+
+  function removeDecodeTestNodes() {
+    ids.forEach((id) => {
+      const node = document.getElementById(id);
+      if (node && node.parentNode) node.parentNode.removeChild(node);
+    });
+    document.querySelectorAll(selectors.join(",")).forEach((node) => {
+      if (node && node.parentNode) node.parentNode.removeChild(node);
+    });
+  }
+
+  function installRemovalObserver() {
+    if (!document.body || window.__removeDecoderTestsUiV271Observer) return;
+    window.__removeDecoderTestsUiV271Observer = new MutationObserver(() => removeDecodeTestNodes());
+    window.__removeDecoderTestsUiV271Observer.observe(document.body, { childList: true, subtree: true });
+  }
+
+  try {
+    window.plutoDecoderSelfTestsV2636 = undefined;
+  } catch (_) {}
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => {
+      removeDecodeTestNodes();
+      installRemovalObserver();
+      window.setTimeout(removeDecodeTestNodes, 250);
+      window.setTimeout(removeDecodeTestNodes, 1000);
+    }, { once: true });
+  } else {
+    removeDecodeTestNodes();
+    installRemovalObserver();
+    window.setTimeout(removeDecodeTestNodes, 250);
+    window.setTimeout(removeDecodeTestNodes, 1000);
+  }
+})();
+// REMOVE_DECODER_TESTS_UI_V2_7_1 END
+
+
+// PLUTO_UI_BADGE_PASS_REFRESH_RESCUE_V2_7_2_BEGIN
+(function () {
+  "use strict";
+  const UI_VERSION = "v2.7.2";
+  const BADGE_ID = "plutoVersionBadge";
+  const PASS_RESCUE_KEY = "plutoPassRefreshRescueLastQueuedMsV272";
+  const PASS_RESCUE_COOLDOWN_MS = 12 * 60 * 1000;
+  const PASS_RESCUE_INTERVAL_MS = 60 * 1000;
+
+  function ready(fn) {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", fn, { once: true });
+    } else {
+      fn();
+    }
+  }
+
+  function ensureBadge() {
+    let badge = document.getElementById(BADGE_ID);
+    if (!badge) {
+      badge = document.createElement("div");
+      badge.id = BADGE_ID;
+      badge.setAttribute("aria-label", "Pluto Satellite Tracker version");
+      badge.style.position = "fixed";
+      badge.style.right = "10px";
+      badge.style.bottom = "8px";
+      badge.style.zIndex = "9999";
+      badge.style.padding = "4px 8px";
+      badge.style.borderRadius = "8px";
+      badge.style.fontFamily = "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+      badge.style.fontSize = "11px";
+      badge.style.lineHeight = "1.25";
+      badge.style.color = "#d8ecff";
+      badge.style.background = "rgba(2, 11, 22, 0.78)";
+      badge.style.border = "1px solid rgba(125, 180, 255, 0.35)";
+      badge.style.boxShadow = "0 2px 10px rgba(0,0,0,0.25)";
+      badge.style.backdropFilter = "blur(4px)";
+      document.body.appendChild(badge);
+    }
+    return badge;
+  }
+
+  function setBadge(text, warn) {
+    const badge = ensureBadge();
+    badge.textContent = text;
+    badge.style.color = warn ? "#ffd6a0" : "#d8ecff";
+    badge.title = "UI version and backend version. Added by v2.7.2 UI hotfix.";
+  }
+
+  async function refreshVersionBadge() {
+    try {
+      const resp = await fetch(`/api/status?version_badge=${Date.now()}`, { cache: "no-store" });
+      if (!resp.ok) {
+        setBadge(`UI ${UI_VERSION} | Backend unavailable`, true);
+        return;
+      }
+      const data = await resp.json();
+      const backend = data && data.version ? String(data.version) : "unknown";
+      setBadge(`UI ${UI_VERSION} | Backend v${backend}`, false);
+    } catch (err) {
+      setBadge(`UI ${UI_VERSION} | Backend unavailable`, true);
+    }
+  }
+
+  function pageLooksLikeWaitingForPassFile() {
+    const text = (document.body && document.body.innerText ? document.body.innerText : "").toLowerCase();
+    return text.includes("watching /api/passes for a new pass file") ||
+           text.includes("loading quick pass preview");
+  }
+
+  function getLastRescueMs() {
+    const raw = window.localStorage ? window.localStorage.getItem(PASS_RESCUE_KEY) : "";
+    const value = Number(raw || 0);
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  function setLastRescueMs(value) {
+    try {
+      if (window.localStorage) {
+        window.localStorage.setItem(PASS_RESCUE_KEY, String(value));
+      }
+    } catch (err) {
+      // Ignore private-mode/localStorage errors.
+    }
+  }
+
+  async function getRefreshState() {
+    try {
+      const resp = await fetch(`/api/refresh/status?pass_rescue=${Date.now()}`, { cache: "no-store" });
+      if (!resp.ok) return "unknown";
+      const data = await resp.json();
+      return String((data && data.state) || "unknown").toLowerCase();
+    } catch (err) {
+      return "unknown";
+    }
+  }
+
+  async function queuePassRefresh(reason) {
+    const now = Date.now();
+    const last = getLastRescueMs();
+    if (now - last < PASS_RESCUE_COOLDOWN_MS) {
+      return false;
+    }
+    const state = await getRefreshState();
+    if (state === "running" || state === "queued" || state === "busy") {
+      return false;
+    }
+    try {
+      const resp = await fetch(`/api/refresh/passes?source=ui_rescue_v272&reason=${encodeURIComponent(reason)}`, {
+        method: "POST",
+        cache: "no-store"
+      });
+      if (resp.ok) {
+        setLastRescueMs(now);
+        console.info("[Pluto] Queued pass refresh rescue:", reason);
+        refreshVersionBadge();
+        return true;
+      }
+    } catch (err) {
+      console.warn("[Pluto] Pass refresh rescue failed:", err);
+    }
+    return false;
+  }
+
+  async function passRefreshRescueTick() {
+    if (pageLooksLikeWaitingForPassFile()) {
+      await queuePassRefresh("quick_pass_preview_waiting");
+    }
+  }
+
+  ready(function () {
+    refreshVersionBadge();
+    window.setInterval(refreshVersionBadge, 60 * 1000);
+
+    // If the app opens to a missing/stale pass file while refresh is idle, kick a pass scan.
+    window.setTimeout(passRefreshRescueTick, 2500);
+    window.setInterval(passRefreshRescueTick, PASS_RESCUE_INTERVAL_MS);
+
+    // Manual browser-console hook for field debugging.
+    window.plutoPassRefreshRescueNowV272 = function () {
+      return queuePassRefresh("manual_console");
+    };
+    window.plutoRefreshVersionBadgeV272 = refreshVersionBadge;
+  });
+})();
+// PLUTO_UI_BADGE_PASS_REFRESH_RESCUE_V2_7_2_END
+
+// PASS_REFRESH_IDLE_FORCE_V2_7_3 START
+(function () {
+  "use strict";
+
+  const MARKER = "PASS_REFRESH_IDLE_FORCE_V2_7_3";
+  const COOLDOWN_MS = 10 * 60 * 1000;
+  const TICK_MS = 20000;
+  let lastRefreshPostMs = 0;
+  let inFlight = false;
+
+  function pageText() {
+    return (document.body && document.body.innerText) ? document.body.innerText : "";
+  }
+
+  function pageLooksStuckWaitingForPasses() {
+    const text = pageText();
+    return text.includes("Loading quick pass preview") &&
+      text.includes("Watching /api/passes for a new pass file") &&
+      text.includes("Refresh state: idle");
+  }
+
+  function ensureRefreshRescueBadge() {
+    let badge = document.getElementById("plutoPassRefreshRescueBadgeV273");
+    if (badge) return badge;
+    badge = document.createElement("div");
+    badge.id = "plutoPassRefreshRescueBadgeV273";
+    badge.style.position = "fixed";
+    badge.style.right = "12px";
+    badge.style.bottom = "42px";
+    badge.style.zIndex = "99999";
+    badge.style.padding = "6px 9px";
+    badge.style.borderRadius = "8px";
+    badge.style.background = "rgba(15, 23, 42, 0.86)";
+    badge.style.color = "#e5e7eb";
+    badge.style.font = "12px system-ui, -apple-system, Segoe UI, sans-serif";
+    badge.style.boxShadow = "0 6px 20px rgba(0,0,0,0.25)";
+    badge.style.display = "none";
+    document.body.appendChild(badge);
+    return badge;
+  }
+
+  function showRefreshRescueMessage(message, ms) {
+    const badge = ensureRefreshRescueBadge();
+    badge.textContent = message;
+    badge.style.display = "block";
+    window.clearTimeout(showRefreshRescueMessage._timer);
+    showRefreshRescueMessage._timer = window.setTimeout(() => {
+      badge.style.display = "none";
+    }, ms || 9000);
+  }
+
+  async function fetchJson(path, options) {
+    const response = await fetch(path + (path.includes("?") ? "&" : "?") + "_=" + Date.now(), Object.assign({ cache: "no-store" }, options || {}));
+    let data = null;
+    try {
+      data = await response.json();
+    } catch (_) {
+      data = { ok: false, parse_error: true };
+    }
+    data.http_ok = response.ok;
+    data.http_status = response.status;
+    return data;
+  }
+
+  function refreshStateIsBusy(data) {
+    const state = String((data && data.state) || "").toLowerCase();
+    return state === "running" || state === "queued" || state === "busy" || state === "refreshing";
+  }
+
+  async function queuePassRefreshV273(reason) {
+    const now = Date.now();
+    if (inFlight) return { ok: false, skipped: "in_flight" };
+    if (now - lastRefreshPostMs < COOLDOWN_MS) return { ok: false, skipped: "cooldown" };
+
+    inFlight = true;
+    try {
+      const status = await fetchJson("/api/refresh/status");
+      if (refreshStateIsBusy(status)) {
+        showRefreshRescueMessage("Pass refresh is already running.");
+        return { ok: true, skipped: "already_running", status };
+      }
+
+      lastRefreshPostMs = now;
+      const queued = await fetchJson("/api/refresh/passes", { method: "POST", body: "" });
+      window.plutoLastPassRefreshRescueV273 = { marker: MARKER, reason, queued, at: new Date().toISOString() };
+      if (queued && queued.http_ok && queued.ok !== false) {
+        showRefreshRescueMessage("Queued pass refresh on Pluto.");
+        if (typeof window.loadPasses === "function") {
+          window.setTimeout(() => window.loadPasses().catch(() => {}), 5000);
+        }
+      } else {
+        showRefreshRescueMessage("Pass refresh request failed; check backend status.", 12000);
+      }
+      return queued;
+    } catch (error) {
+      window.plutoLastPassRefreshRescueV273 = { marker: MARKER, reason, error: String(error), at: new Date().toISOString() };
+      showRefreshRescueMessage("Pass refresh rescue error; check console.", 12000);
+      return { ok: false, error: String(error) };
+    } finally {
+      inFlight = false;
+    }
+  }
+
+  async function refreshRescueTickV273() {
+    if (pageLooksStuckWaitingForPasses()) {
+      await queuePassRefreshV273("quick pass preview waiting while refresh status is idle");
+    }
+  }
+
+  window.plutoForcePassRefreshWhenIdleV273 = queuePassRefreshV273;
+  window.plutoPassRefreshIdleRescueTickV273 = refreshRescueTickV273;
+
+  function startRefreshRescueV273() {
+    window.setTimeout(refreshRescueTickV273, 1500);
+    window.setTimeout(refreshRescueTickV273, 8000);
+    window.setInterval(refreshRescueTickV273, TICK_MS);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", startRefreshRescueV273, { once: true });
+  } else {
+    startRefreshRescueV273();
+  }
+})();
+// PASS_REFRESH_IDLE_FORCE_V2_7_3 END
+
+// VERSION_BADGE_PASS_REPAIR_V2_7_4
+(function () {
+  const UI_VERSION = "2.7.4";
+  const REFRESH_COOLDOWN_MS = 12 * 60 * 1000;
+  let lastForcedRefreshMs = 0;
+
+  function ensureVersionBadgeV274() {
+    let style = document.getElementById("plutoVersionBadgeV274Style");
+    if (!style) {
+      style = document.createElement("style");
+      style.id = "plutoVersionBadgeV274Style";
+      style.textContent = "#plutoVersionBadgeV274{position:fixed;right:10px;bottom:8px;z-index:2147483000;padding:4px 8px;border-radius:8px;background:rgba(15,23,42,.84);color:#e5e7eb;font:11px/1.25 system-ui,-apple-system,Segoe UI,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.25);pointer-events:none;white-space:nowrap}#plutoVersionBadgeV274.warn{background:rgba(127,29,29,.88);color:#fee2e2}";
+      (document.head || document.documentElement).appendChild(style);
+    }
+    let badge = document.getElementById("plutoVersionBadgeV274");
+    if (!badge) {
+      badge = document.createElement("div");
+      badge.id = "plutoVersionBadgeV274";
+      badge.textContent = "UI v" + UI_VERSION + " | Backend ...";
+      (document.body || document.documentElement).appendChild(badge);
+    }
+    return badge;
+  }
+
+  function setVersionBadgeV274(text, warn) {
+    const badge = ensureVersionBadgeV274();
+    badge.textContent = text;
+    badge.classList.toggle("warn", !!warn);
+  }
+
+  async function refreshVersionBadgeV274() {
+    try {
+      const res = await fetch("/api/status?version_badge=" + Date.now(), { cache: "no-store" });
+      const data = await res.json();
+      const backend = data && data.version ? data.version : "unknown";
+      setVersionBadgeV274("UI v" + UI_VERSION + " | Backend v" + backend, !res.ok);
+    } catch (err) {
+      setVersionBadgeV274("UI v" + UI_VERSION + " | Backend unavailable", true);
+    }
+  }
+
+  function pageLooksPassRefreshStuckV274() {
+    const text = (document.body && document.body.innerText) ? document.body.innerText : "";
+    return text.includes("Loading quick pass preview") &&
+      text.includes("Watching /api/passes for a new pass file") &&
+      text.toLowerCase().includes("refresh state: idle");
+  }
+
+  async function forcePassRefreshWhenIdleV274(reason) {
+    const now = Date.now();
+    if (now - lastForcedRefreshMs < REFRESH_COOLDOWN_MS) {
+      return { ok: true, skipped: true, reason: "cooldown" };
+    }
+    try {
+      const statusRes = await fetch("/api/refresh/status?pass_rescue=" + now, { cache: "no-store" });
+      const status = await statusRes.json().catch(() => ({}));
+      const state = String((status && status.state) || "").toLowerCase();
+      if (state && state !== "idle" && state !== "stopped" && state !== "complete" && state !== "completed") {
+        return { ok: true, skipped: true, state };
+      }
+      lastForcedRefreshMs = now;
+      const res = await fetch("/api/refresh/passes?pass_rescue=" + encodeURIComponent(reason || "ui"), {
+        method: "POST",
+        cache: "no-store"
+      });
+      const data = await res.json().catch(() => ({}));
+      console.log("Pass refresh rescue queued", reason, data);
+      return data;
+    } catch (err) {
+      console.warn("Pass refresh rescue failed", err);
+      return { ok: false, error: String(err) };
+    }
+  }
+
+  function startPassRefreshWatcherV274() {
+    setInterval(() => {
+      if (pageLooksPassRefreshStuckV274()) {
+        forcePassRefreshWhenIdleV274("quick-pass-preview-idle");
+      }
+    }, 5000);
+    setTimeout(() => {
+      if (pageLooksPassRefreshStuckV274()) {
+        forcePassRefreshWhenIdleV274("quick-pass-preview-initial");
+      }
+    }, 1500);
+  }
+
+  function bootV274() {
+    ensureVersionBadgeV274();
+    refreshVersionBadgeV274();
+    startPassRefreshWatcherV274();
+    setInterval(refreshVersionBadgeV274, 15000);
+  }
+
+  window.plutoRefreshVersionBadgeV274 = refreshVersionBadgeV274;
+  window.plutoForcePassRefreshWhenIdleV274 = forcePassRefreshWhenIdleV274;
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bootV274, { once: true });
+  } else {
+    bootV274();
+  }
+})();
+
+
+
+// TMP_TRANSACTIONAL_DATA_VERSION_BADGE_V2_7_6
+(function () {
+  const UI_VERSION = "2.7.6";
+  async function refreshBadge() {
+    let badge = document.getElementById("plutoRuntimeVersionBadge");
+    if (!badge) {
+      badge = document.createElement("div");
+      badge.id = "plutoRuntimeVersionBadge";
+      badge.style.position = "fixed";
+      badge.style.right = "10px";
+      badge.style.bottom = "8px";
+      badge.style.zIndex = "9999";
+      badge.style.padding = "4px 7px";
+      badge.style.borderRadius = "8px";
+      badge.style.background = "rgba(0,0,0,0.72)";
+      badge.style.color = "#fff";
+      badge.style.font = "12px/1.3 system-ui, sans-serif";
+      badge.style.pointerEvents = "none";
+      badge.style.boxShadow = "0 2px 8px rgba(0,0,0,0.25)";
+      document.body.appendChild(badge);
+    }
+    let backend = "unknown";
+    let dataDir = "";
+    try {
+      const res = await fetch("/api/status?request=" + Date.now(), { cache: "no-store" });
+      const data = await res.json();
+      backend = data && data.version ? data.version : backend;
+      dataDir = data && data.data_dir ? String(data.data_dir) : "";
+    } catch (_) {}
+    badge.textContent = "UI v" + UI_VERSION + " | Backend v" + backend + (dataDir.includes("/tmp/") ? " | /tmp data" : "");
+  }
+  window.plutoRefreshVersionBadgeV276 = refreshBadge;
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", refreshBadge);
+  } else {
+    refreshBadge();
+  }
+  window.setInterval(refreshBadge, 60000);
 })();

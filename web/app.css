@@ -2142,3 +2142,18 @@ body.spectrum-waterfall-modal-open {
 .linear-cw-decode-backdrop-v2632 {
   z-index: 1210;
 }
+
+/* REMOVE_DECODER_TESTS_UI_CSS_V2_7_1 START */
+#decodeSelfTestLauncherV2628,
+#decodeSelfTestPanelV2628,
+#decoderSelfTestLauncherV2628,
+#decoderSelfTestPanelV2628,
+.decode-selftest-launcher-v2628,
+.decode-selftest-panel-v2628,
+.decoder-selftest-panel {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+/* REMOVE_DECODER_TESTS_UI_CSS_V2_7_1 END */
+
