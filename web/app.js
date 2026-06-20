@@ -2052,9 +2052,8 @@
                 ${focusSky ? `<circle class="sky-focus-dot" cx="${focusSky.x.toFixed(1)}" cy="${focusSky.y.toFixed(1)}" r="6" fill="#102030" stroke="#fff" stroke-width="2" />` : ""}
                 ${renderSkySatelliteIcon(liveSky)}
               </svg>
-              <div class="listen-panel">
-                <button id="analogAudioToggleButton" type="button">Listen</button>
-                <button id="receiveDecodePlaceholderButtonV282" class="receive-open-button" type="button" disabled hidden>Receive</button>
+              <div class="listen-panel pass-action-panel-v286">
+                <button id="analogAudioToggleButton" class="pass-action-button-v286 pass-primary-action-button-v286" type="button" disabled>Listen</button>
                 <button id="openRotatorFromListenButton" class="rotator-open-button" type="button">Rotator</button>
                 <button id="openSpectrumWaterfallButton" class="spectrum-open-button" type="button" disabled>Spectrum</button>
                 <span id="analogAudioStatus" class="listen-panel-status-hidden" hidden></span>
@@ -3757,6 +3756,107 @@ function bindAnalogAudio(pass, node) {
 
 
         /* PASS_DETAIL_MODAL_LISTEN_V1B */
+
+/* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6_BEGIN
+ * Make pass-list capability badges into operator action buttons, use the same
+ * light-blue action style under the sky/azimuth chart, and keep Listen/Receive
+ * disabled until the selected pass is actively overhead.
+ */
+function passActionTimingStateV286(pass) {
+  try {
+    if (typeof passTimingState === "function") return passTimingState(pass);
+  } catch (_error) {
+  }
+  return "unknown";
+}
+
+function passActionIsActiveV286(pass) {
+  return passActionTimingStateV286(pass) === "active";
+}
+
+function passActionKindV286(pass) {
+  try {
+    if (typeof receiveKindForPassV2626D === "function") {
+      const kind = receiveKindForPassV2626D(pass);
+      if (kind === "cw" || kind === "digital") return "receive";
+      return "listen";
+    }
+  } catch (_error) {
+  }
+  try {
+    if (typeof isDecodeReceiveModeV282 === "function" && isDecodeReceiveModeV282(pass)) return "receive";
+  } catch (_error) {
+  }
+  return "listen";
+}
+
+function passActionLabelV286(pass) {
+  return passActionKindV286(pass) === "receive" ? "Receive" : "Listen";
+}
+
+function passActionDownlinkHzV286(pass) {
+  const radio = (pass && pass.radio) || {};
+  return radio.downlink_hz || ((pass && pass.downlinks_hz) || [])[0] || "";
+}
+
+function passActionTargetAvailableV286(pass) {
+  if (!pass) return false;
+  if (!passActionDownlinkHzV286(pass)) return false;
+  try {
+    if (typeof isPassTunable === "function") return !!isPassTunable(pass);
+  } catch (_error) {
+  }
+  return true;
+}
+
+function passActionInactiveTextV286(pass) {
+  const label = passActionLabelV286(pass);
+  if (!pass) return `${label} is inactive until a pass is selected.`;
+  if (!passActionTargetAvailableV286(pass)) return `${label} is unavailable because this pass has no tunable downlink.`;
+  const state = passActionTimingStateV286(pass);
+  if (state === "upcoming") return `${label} becomes active at AOS (${formatTime(pass.aos_utc)}).`;
+  if (state === "stale") return `${label} is inactive because this pass has ended.`;
+  return `${label} is inactive until the pass is active.`;
+}
+
+function applyPassActionButtonVisualsV286(button, pass) {
+  if (!button) return false;
+  const label = passActionLabelV286(pass);
+  const active = passActionIsActiveV286(pass);
+  const target = passActionTargetAvailableV286(pass);
+  button.classList.add("pass-action-button-v286");
+  button.classList.toggle("pass-action-receive-v286", label === "Receive");
+  button.classList.toggle("pass-action-listen-v286", label === "Listen");
+  button.dataset.passActionKindV286 = label.toLowerCase();
+  button.dataset.passActiveV286 = active ? "1" : "0";
+  if (!/^Stop/i.test(String(button.textContent || ""))) {
+    button.textContent = label;
+  }
+  button.disabled = !(active && target);
+  button.title = active && target ? `${label} active for this pass.` : passActionInactiveTextV286(pass);
+  button.setAttribute("aria-disabled", button.disabled ? "true" : "false");
+  return active && target;
+}
+
+function configurePassRowActionButtonV286(button, pass, onSelect) {
+  if (!button) return;
+  applyPassActionButtonVisualsV286(button, pass);
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!passActionIsActiveV286(pass) || !passActionTargetAvailableV286(pass)) {
+      button.title = passActionInactiveTextV286(pass);
+      return;
+    }
+    if (typeof onSelect === "function") onSelect();
+    window.setTimeout(() => {
+      const primary = document.getElementById("analogAudioToggleButton");
+      if (primary && !primary.disabled) primary.click();
+    }, 80);
+  });
+}
+/* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6_END */
+
     function renderPasses(payload) {
       const node = document.getElementById("passes");
       const passes = payload.passes || [];
@@ -3819,7 +3919,10 @@ function bindAnalogAudio(pass, node) {
           <div><strong></strong><span></span></div>
           <div></div>
           <div></div>
-          <div><button class="pass-detail-button" type="button">Details</button></div>
+          <div class="pass-row-actions-v286">
+            <button class="pass-row-action-button-v286 pass-action-button-v286" type="button" disabled>Radio</button>
+            <button class="pass-detail-button" type="button">Details</button>
+          </div>
         `;
         row.children[0].querySelector("strong").textContent = pass.name || "";
         row.children[0].querySelector("span").textContent =
@@ -3837,6 +3940,11 @@ function bindAnalogAudio(pass, node) {
           selectPass(pass, row);
           openPassDetailModal(pass);
         });
+
+        const passActionButtonV286 = row.querySelector(".pass-row-action-button-v286");
+        if (passActionButtonV286 && typeof configurePassRowActionButtonV286 === "function") {
+          configurePassRowActionButtonV286(passActionButtonV286, pass, () => selectPass(pass, row));
+        }
 
         row.addEventListener("click", () => {
           selectPass(pass, row);
@@ -7408,3 +7516,65 @@ function bindReceiveDiagnosticsPanelV284() {
     window.setInterval(decoratePassRowsV285, 2500);
   }
 })();
+
+
+/* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6_BEGIN */
+(function installActivePassActionButtonPolicyV286() {
+  if (window.__plutoActivePassActionButtonPolicyV286) return;
+  window.__plutoActivePassActionButtonPolicyV286 = true;
+
+  if (typeof bindReceiveDecodePlaceholderV282 === "function") {
+    bindReceiveDecodePlaceholderV282 = function bindReceiveDecodePlaceholderHiddenV286(_pass, node) {
+      const receiveButton = node && node.querySelector ? node.querySelector("#receiveDecodePlaceholderButtonV282") : null;
+      const receiveStatus = node && node.querySelector ? node.querySelector("#receiveDecodeStatusV282") : null;
+      if (receiveButton) {
+        receiveButton.hidden = true;
+        receiveButton.disabled = true;
+        receiveButton.classList.add("pass-action-button-v286");
+      }
+      if (receiveStatus) {
+        receiveStatus.hidden = true;
+        receiveStatus.textContent = "";
+      }
+    };
+  }
+
+  if (typeof bindAnalogAudio === "function" && !bindAnalogAudio.activePassActionWrappedV286) {
+    const previousBindAnalogAudioV286 = bindAnalogAudio;
+    bindAnalogAudio = function bindAnalogAudioActivePassActionV286(pass, node) {
+      const result = previousBindAnalogAudioV286.apply(this, arguments);
+      const button = node && node.querySelector ? node.querySelector("#analogAudioToggleButton") : null;
+      const status = node && node.querySelector ? node.querySelector("#analogAudioStatus") : null;
+      if (!button) return result;
+      button.classList.add("pass-action-button-v286", "pass-primary-action-button-v286");
+      const allowed = applyPassActionButtonVisualsV286(button, pass);
+      if (status && !allowed) status.textContent = passActionInactiveTextV286(pass);
+      button.addEventListener("click", (event) => {
+        if (!passActionIsActiveV286(pass) || !passActionTargetAvailableV286(pass)) {
+          event.preventDefault();
+          event.stopPropagation();
+          if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
+          if (status) status.textContent = passActionInactiveTextV286(pass);
+        }
+      }, true);
+      return result;
+    };
+    bindAnalogAudio.activePassActionWrappedV286 = true;
+  }
+
+  function cleanupOldPassiveBadgesV286() {
+    document.querySelectorAll(".pass-row .receive-capability-badge-v285").forEach((badge) => {
+      if (badge.closest(".pass-row-actions-v286")) return;
+      badge.remove();
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", cleanupOldPassiveBadgesV286, { once: true });
+  } else {
+    cleanupOldPassiveBadgesV286();
+  }
+  window.setInterval(cleanupOldPassiveBadgesV286, 2500);
+})();
+/* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6_END */
+

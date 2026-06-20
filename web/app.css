@@ -2341,3 +2341,71 @@ body.spectrum-waterfall-modal-open {
   background: rgba(243, 232, 255, 0.96);
   color: #6b21a8;
 }
+
+/* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6_BEGIN */
+.pass-action-panel-v286,
+.pass-row-actions-v286 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.pass-row-actions-v286 {
+  justify-content: flex-end;
+}
+
+.pass-action-button-v286,
+.pass-row-action-button-v286,
+.receive-capability-badge-v285,
+.receive-capability-badge-v285-listen,
+.receive-capability-badge-v285-receive,
+.receive-capability-badge-v285-unknown {
+  appearance: none;
+  border: 1px solid #7dd3fc !important;
+  border-radius: 999px;
+  background: #e0f2fe !important;
+  color: #075985 !important;
+  font-weight: 700;
+  line-height: 1.1;
+  padding: 0.46rem 0.74rem;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+.pass-row-action-button-v286,
+.receive-capability-badge-v285 {
+  font-size: 0.76rem;
+  padding: 0.28rem 0.58rem;
+  min-height: 1.7rem;
+}
+
+.pass-action-button-v286:hover:not(:disabled),
+.pass-row-action-button-v286:hover:not(:disabled) {
+  background: #bae6fd !important;
+  border-color: #38bdf8 !important;
+  color: #0c4a6e !important;
+}
+
+.pass-action-button-v286:disabled,
+.pass-action-button-v286[disabled],
+.pass-row-action-button-v286:disabled,
+.pass-row-action-button-v286[disabled],
+.receive-capability-badge-v285[aria-disabled="true"] {
+  background: #f0f9ff !important;
+  border-color: #bae6fd !important;
+  color: #64748b !important;
+  cursor: not-allowed;
+  opacity: 0.68;
+  box-shadow: none;
+}
+
+.pass-row > div:first-child > .receive-capability-badge-v285 {
+  display: none !important;
+}
+/* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6_END */
