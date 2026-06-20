@@ -2219,3 +2219,88 @@ body.spectrum-waterfall-modal-open {
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+
+
+/* RECEIVE_CAPABILITY_GUIDANCE_V2_8_3 */
+.receive-guidance-hero-v283 {
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 14px;
+  background: #f8fafc;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+.receive-guidance-hero-v283 h3 {
+  margin: 0.35rem 0 0.35rem;
+}
+.receive-badge-v283 {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(23, 96, 145, 0.28);
+  background: rgba(23, 96, 145, 0.08);
+  color: #0f4c75;
+  font-weight: 700;
+  font-size: 0.78rem;
+  line-height: 1;
+  padding: 0.35rem 0.55rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.receive-capability-grid-v283 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+.receive-capability-cell-v283 {
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 12px;
+  padding: 0.75rem;
+  background: #fff;
+}
+.receive-capability-cell-v283 strong {
+  display: block;
+  color: #475569;
+  font-size: 0.75rem;
+  margin-bottom: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.receive-capability-cell-v283 span {
+  color: #0f172a;
+  font-weight: 600;
+}
+.receive-step-list-v283 {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0.75rem 0 1rem;
+}
+.receive-step-v283 {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.7rem;
+  align-items: start;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 12px;
+  padding: 0.75rem;
+  background: #f8fafc;
+}
+.receive-step-number-v283 {
+  width: 1.65rem;
+  height: 1.65rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #0f4c75;
+  color: #fff;
+  font-weight: 800;
+  font-size: 0.82rem;
+}
+.receive-step-v283 strong {
+  display: block;
+  margin-bottom: 0.15rem;
+}
+.receive-step-v283 span {
+  color: #475569;
+}

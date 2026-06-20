@@ -3380,6 +3380,85 @@ setDl("radioStatus", entries);
       button.addEventListener("click", () => openReceivePlaceholderModalV282(pass));
     }
 
+
+
+    /* RECEIVE_CAPABILITY_GUIDANCE_V2_8_3
+     * Adds operator-facing decode guidance to the Receive placeholder without
+     * touching backend DSP.  This makes the next decoder phases explicit while
+     * preserving the proven Listen path for analog voice passes.
+     */
+    function receiveModeFamilyV283(pass) {
+      const text = passModeTextV282(pass);
+      if (/APRS/.test(text)) return { label: "APRS", detail: "APRS packet frames over AX.25." };
+      if (/(PACKET|AX\.25|AX25)/.test(text)) return { label: "Packet", detail: "AX.25 packet receive/decode path." };
+      if (/(CW|MORSE)/.test(text)) return { label: "CW", detail: "Morse tone detection and text decode path." };
+      if (/(AFSK|1200)/.test(text)) return { label: "AFSK 1200", detail: "1200 baud audio FSK packet-style decode path." };
+      if (/(G3RUH|9600)/.test(text)) return { label: "G3RUH 9600", detail: "9600 baud FSK/GMSK baseband decode path." };
+      if (/(FSK|GFSK|GMSK)/.test(text)) return { label: "FSK/GMSK", detail: "Frequency-shift keyed telemetry decode path." };
+      if (/(TELEMETRY|DATA|DIGITAL|BEACON)/.test(text)) return { label: "Telemetry", detail: "Generic digital telemetry capture/decode path." };
+      return { label: "Digital", detail: "Future non-voice receive/decode path." };
+    }
+
+    function receiveCapabilityRowsV283(pass) {
+      const radio = pass && pass.radio ? pass.radio : {};
+      const mode = radio.mode || (pass && pass.modes && pass.modes[0]) || "unknown";
+      const downlink = radio.downlink_hz || (pass && pass.downlinks_hz ? pass.downlinks_hz[0] : 0);
+      const family = receiveModeFamilyV283(pass);
+      const tunable = isPassTunable(pass) ? "Yes" : "No";
+      return [
+        ["Satellite", (pass && pass.name) || "Selected pass"],
+        ["Detected family", family.label],
+        ["Mode", mode],
+        ["Downlink", downlink ? formatHz(downlink) : "No downlink"],
+        ["Pluto tunable", tunable],
+        ["Future decoder", receiveDecoderLabelV282(pass)]
+      ];
+    }
+
+    function receiveStepListV283(pass) {
+      const family = receiveModeFamilyV283(pass);
+      const rows = [
+        ["1", "Track", "Use the existing pass selection and Doppler planning so the receiver knows the satellite and downlink."],
+        ["2", "Capture", "Future work will start the correct IQ/audio capture path for this mode family."],
+        ["3", "Decode", family.detail],
+        ["4", "Display", "Future work will show decoded frames/text/telemetry in this Receive dialog."]
+      ];
+      return rows.map(([num, title, detail]) => `
+        <div class="receive-step-v283">
+          <div class="receive-step-number-v283">${escapeHtml(num)}</div>
+          <div><strong>${escapeHtml(title)}</strong><span>${escapeHtml(detail)}</span></div>
+        </div>`).join("");
+    }
+
+    function receiveCapabilityGridV283(pass) {
+      return receiveCapabilityRowsV283(pass).map(([label, value]) => `
+        <div class="receive-capability-cell-v283">
+          <strong>${escapeHtml(label)}</strong>
+          <span>${escapeHtml(value)}</span>
+        </div>`).join("");
+    }
+
+    function openReceivePlaceholderModalV282(pass) {
+      const modal = ensureReceivePlaceholderModalV282();
+      const body = document.getElementById("receivePlaceholderBodyV282");
+      const family = receiveModeFamilyV283(pass);
+      if (body) {
+        body.innerHTML = `
+          <div class="receive-guidance-hero-v283">
+            <div>
+              <div class="receive-badge-v283">${escapeHtml(family.label)}</div>
+              <h3>Receive ${escapeHtml(receiveDecoderLabelV282(pass))}</h3>
+              <p class="meta">This is a planning placeholder only. It does not start unsupported DSP, change the receiver, or interfere with the proven Listen audio path.</p>
+            </div>
+          </div>
+          <div class="receive-capability-grid-v283">${receiveCapabilityGridV283(pass)}</div>
+          <h3>Future receive flow</h3>
+          <div class="receive-step-list-v283">${receiveStepListV283(pass)}</div>
+          <div class="help-note">Voice-like FM/AM satellites continue to use Listen. Non-voice modes now land here so CW, APRS, packet, and telemetry decoder work can be added one mode at a time.</div>`;
+      }
+      modal.hidden = false;
+    }
+
 /* SPECTRUM_BUTTON_ROW_CLEANUP_V2_5_1 */
 function bindAnalogAudio(pass, node) {
       const button = node.querySelector("#analogAudioToggleButton");
