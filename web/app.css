@@ -2157,3 +2157,65 @@ body.spectrum-waterfall-modal-open {
 }
 /* REMOVE_DECODER_TESTS_UI_CSS_V2_7_1 END */
 
+
+
+/* MODE_AWARE_RECEIVE_UI_PHASE1_V2_8_2 */
+.receive-open-button {
+  border-color: rgba(23, 96, 145, 0.35);
+}
+.receive-placeholder-modal-v282 {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.42);
+  padding: 1rem;
+}
+.receive-placeholder-modal-v282[hidden] {
+  display: none;
+}
+.receive-placeholder-card-v282 {
+  width: min(720px, 96vw);
+  max-height: 88vh;
+  overflow: auto;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.35);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+}
+.receive-placeholder-header-v282 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.28);
+}
+.receive-placeholder-header-v282 h2 {
+  margin: 0;
+}
+.receive-placeholder-body-v282 {
+  padding: 1rem 1.25rem 1.25rem;
+}
+.receive-placeholder-grid-v282 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+.receive-placeholder-grid-v282 div {
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 12px;
+  padding: 0.75rem;
+  background: #f8fafc;
+}
+.receive-placeholder-grid-v282 strong {
+  display: block;
+  color: #475569;
+  font-size: 0.78rem;
+  margin-bottom: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}

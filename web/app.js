@@ -2054,9 +2054,11 @@
               </svg>
               <div class="listen-panel">
                 <button id="analogAudioToggleButton" type="button">Listen</button>
+                <button id="receiveDecodePlaceholderButtonV282" class="receive-open-button" type="button" disabled hidden>Receive</button>
                 <button id="openRotatorFromListenButton" class="rotator-open-button" type="button">Rotator</button>
                 <button id="openSpectrumWaterfallButton" class="spectrum-open-button" type="button" disabled>Spectrum</button>
                 <span id="analogAudioStatus" class="listen-panel-status-hidden" hidden></span>
+                <span id="receiveDecodeStatusV282" class="listen-panel-status-hidden" hidden></span>
               </div>
             </div>
           </div>
@@ -2073,6 +2075,7 @@
 
       renderLeafletMap(pass, config, focusPoint, activeTrackPoint);
       bindAnalogAudio(pass, node);
+      bindReceiveDecodePlaceholderV282(pass, node);
       bindRotatorModalOpenButtonsV248();
       bindSpectrumWaterfallButtonV250();
       setMapLocationPickEnabled(mapLocationPickEnabled);
@@ -3266,12 +3269,130 @@ setDl("radioStatus", entries);
       });
     }
 
+
+
+    /* MODE_AWARE_RECEIVE_UI_PHASE1_V2_8_2
+     * Phase 1 separates analog voice listening from future decoder receive work.
+     * FM/AM voice modes keep using the proven Listen audio path. CW, packet,
+     * APRS, AFSK, FSK, telemetry, and other data-like modes expose a Receive
+     * button that explains the planned decoder path without starting unsupported
+     * DSP yet.
+     */
+    function passModeTextV282(pass) {
+      const values = [];
+      const radio = pass && pass.radio ? pass.radio : {};
+      if (radio.mode) values.push(radio.mode);
+      if (radio.description) values.push(radio.description);
+      for (const mode of (pass && pass.modes ? pass.modes : [])) {
+        if (mode) values.push(mode);
+      }
+      return values.join(" ").toUpperCase();
+    }
+
+    function isDecodeReceiveModeV282(pass) {
+      const text = passModeTextV282(pass);
+      if (!text) return false;
+      return /(CW|MORSE|APRS|PACKET|AFSK|FSK|GFSK|BPSK|QPSK|GMSK|G3RUH|AX\.25|AX25|RTTY|SSTV|PSK31|1200|9600|DATA|DIGITAL|TELEMETRY|BEACON)/.test(text);
+    }
+
+    function isVoiceListenModeV282(pass) {
+      const text = passModeTextV282(pass);
+      if (!text) return true;
+      if (isDecodeReceiveModeV282(pass)) return false;
+      return /(FM|NFM|WFM|AM|SSB|USB|LSB|VOICE|F3E|A3E)/.test(text) || true;
+    }
+
+    function receiveDecoderLabelV282(pass) {
+      const text = passModeTextV282(pass);
+      if (/APRS/.test(text)) return "APRS / AX.25 packet decoder";
+      if (/(PACKET|AX\.25|AX25)/.test(text)) return "packet / AX.25 decoder";
+      if (/(CW|MORSE)/.test(text)) return "CW / Morse decoder";
+      if (/(AFSK|1200)/.test(text)) return "1200 baud AFSK decoder";
+      if (/(G3RUH|9600|GMSK|FSK|GFSK)/.test(text)) return "FSK/GMSK data decoder";
+      if (/(TELEMETRY|DATA|DIGITAL|BEACON)/.test(text)) return "digital telemetry decoder";
+      return "future decoder";
+    }
+
+    function receiveModeSummaryV282(pass) {
+      const radio = pass && pass.radio ? pass.radio : {};
+      const mode = radio.mode || (pass && pass.modes && pass.modes[0]) || "unknown";
+      const downlink = radio.downlink_hz || (pass && pass.downlinks_hz ? pass.downlinks_hz[0] : 0);
+      const parts = [];
+      parts.push(`<div><strong>Satellite</strong>${escapeHtml((pass && pass.name) || "Selected pass")}</div>`);
+      parts.push(`<div><strong>Mode</strong>${escapeHtml(mode)}</div>`);
+      parts.push(`<div><strong>Downlink</strong>${escapeHtml(downlink ? formatHz(downlink) : "No downlink")}</div>`);
+      parts.push(`<div><strong>Decoder</strong>${escapeHtml(receiveDecoderLabelV282(pass))}</div>`);
+      parts.push(`<div><strong>Status</strong>Decoder DSP is not implemented yet. Phase 1 only routes non-voice modes to Receive instead of analog Listen.</div>`);
+      return parts.join("");
+    }
+
+    function ensureReceivePlaceholderModalV282() {
+      let modal = document.getElementById("receivePlaceholderModalV282");
+      if (modal) return modal;
+      modal = document.createElement("div");
+      modal.id = "receivePlaceholderModalV282";
+      modal.className = "receive-placeholder-modal-v282";
+      modal.hidden = true;
+      modal.innerHTML = `
+        <div class="receive-placeholder-card-v282" role="dialog" aria-modal="true" aria-labelledby="receivePlaceholderTitleV282">
+          <div class="receive-placeholder-header-v282">
+            <h2 id="receivePlaceholderTitleV282">Receive Decoder</h2>
+            <button id="receivePlaceholderCloseButtonV282" class="icon-button" type="button">Close</button>
+          </div>
+          <div id="receivePlaceholderBodyV282" class="receive-placeholder-body-v282"></div>
+        </div>`;
+      modal.addEventListener("click", (event) => {
+        if (event.target === modal) modal.hidden = true;
+      });
+      document.body.appendChild(modal);
+      document.getElementById("receivePlaceholderCloseButtonV282")?.addEventListener("click", () => {
+        modal.hidden = true;
+      });
+      return modal;
+    }
+
+    function openReceivePlaceholderModalV282(pass) {
+      const modal = ensureReceivePlaceholderModalV282();
+      const body = document.getElementById("receivePlaceholderBodyV282");
+      if (body) {
+        body.innerHTML = `
+          <p class="meta">This pass appears to use a non-voice satellite mode. Future releases will start the right decoder from this Receive control.</p>
+          <div class="receive-placeholder-grid-v282">${receiveModeSummaryV282(pass)}</div>
+          <div class="help-note">FM/AM voice satellites continue to use Listen. Data/CW/packet satellites now route here so decoder work can be added without disturbing the proven audio path.</div>`;
+      }
+      modal.hidden = false;
+    }
+
+    function bindReceiveDecodePlaceholderV282(pass, node) {
+      const button = node.querySelector("#receiveDecodePlaceholderButtonV282");
+      const status = node.querySelector("#receiveDecodeStatusV282");
+      if (!button) return;
+      const decodeMode = isDecodeReceiveModeV282(pass);
+      button.hidden = !decodeMode;
+      button.disabled = !decodeMode;
+      button.textContent = "Receive";
+      button.title = decodeMode ? `Open ${receiveDecoderLabelV282(pass)} placeholder` : "Receive is shown for CW/data/packet/APRS modes.";
+      if (status) {
+        status.hidden = true;
+        status.textContent = decodeMode ? `${receiveDecoderLabelV282(pass)} placeholder ready.` : "";
+      }
+      if (!decodeMode) return;
+      button.addEventListener("click", () => openReceivePlaceholderModalV282(pass));
+    }
+
 /* SPECTRUM_BUTTON_ROW_CLEANUP_V2_5_1 */
 function bindAnalogAudio(pass, node) {
       const button = node.querySelector("#analogAudioToggleButton");
       const status = node.querySelector("#analogAudioStatus");
       const audioUrls = analogAudioUrl(pass);
       if (!button || !status) return;
+
+      if (typeof isDecodeReceiveModeV282 === "function" && isDecodeReceiveModeV282(pass)) {
+        button.disabled = true;
+        button.title = "Use Receive for CW/data/packet/APRS modes.";
+        status.textContent = "Use Receive for this non-voice mode.";
+        return;
+      }
 
       button.disabled = !audioUrls;
       if (!audioUrls) {
