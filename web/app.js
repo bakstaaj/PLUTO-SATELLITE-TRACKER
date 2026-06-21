@@ -8233,4 +8233,79 @@ function passActionInactiveTextV286(pass) {
   renderAudioErrorPanelV2816();
 })();
 
+/* PASS_ACTION_VISIBLE_MODE_LABELS_V2_8_17
+ * Force pass-list action buttons to use the literal visible transmitter mode
+ * from the pass row instead of broad satellite/family hints.  This prevents
+ * AFSK being relabeled APRS, BPSK being relabeled Packet, GMSK/FSK/QPSK being
+ * relabeled Digital, DVB-S2/CW being inferred from satellite names, and USB
+ * being treated as a decode mode.
+ */
+function passActionVisibleModeTextV2817(pass) {
+  if (!pass) return "";
+  const modes = Array.isArray(pass.modes) ? pass.modes : [];
+  const radio = pass.radio || {};
+  const candidates = [
+    modes[0],
+    radio.mode,
+    pass.mode
+  ];
+  for (const candidate of candidates) {
+    const text = String(candidate || "").replace(/\s+/g, " ").trim();
+    if (text) return text;
+  }
+  return "";
+}
 
+function passActionModeIsListenOnlyV2817(modeText) {
+  const mode = String(modeText || "").replace(/\s+/g, " ").trim().toUpperCase();
+  if (!mode) return true;
+  const tokens = mode.split(/[^A-Z0-9+-]+/).filter(Boolean);
+  const first = tokens[0] || mode;
+  const analog = new Set([
+    "AM", "FM", "NFM", "WFM", "FMN", "USB", "LSB", "SSB", "VOICE", "AUDIO"
+  ]);
+  if (analog.has(mode) || analog.has(first)) return true;
+  if (mode.includes("TRANSPONDER") && !mode.includes("CW")) return true;
+  return false;
+}
+
+function passActionKindV286(pass) {
+  return passActionModeIsListenOnlyV2817(passActionVisibleModeTextV2817(pass)) ? "listen" : "receive";
+}
+
+function passActionLabelV286(pass) {
+  const mode = passActionVisibleModeTextV2817(pass);
+  if (passActionKindV286(pass) === "listen") return "Listen";
+  return mode ? `Receive: ${mode}` : "Receive";
+}
+
+function passActionInactiveTextV286(pass) {
+  const label = passActionLabelV286(pass);
+  if (!pass) return `${label} is inactive until a pass is selected.`;
+  if (!passActionTargetAvailableV286(pass)) return `${label} is unavailable because this pass has no tunable downlink.`;
+  const state = passActionTimingStateV286(pass);
+  if (state === "upcoming") return `${label} becomes active at AOS (${formatTime(pass.aos_utc)}).`;
+  if (state === "stale") return `${label} is inactive because this pass has ended.`;
+  return `${label} is inactive until the pass is active.`;
+}
+
+function applyPassActionButtonVisualsV286(button, pass) {
+  if (!button) return false;
+  const label = passActionLabelV286(pass);
+  const kind = passActionKindV286(pass);
+  const active = passActionIsActiveV286(pass);
+  const target = passActionTargetAvailableV286(pass);
+  button.classList.add("pass-action-button-v286");
+  button.classList.toggle("pass-action-receive-v286", kind === "receive");
+  button.classList.toggle("pass-action-listen-v286", kind === "listen");
+  button.dataset.passActionKindV286 = kind;
+  button.dataset.passActionModeV2817 = passActionVisibleModeTextV2817(pass);
+  button.dataset.passActiveV286 = active ? "1" : "0";
+  if (!/^Stop/i.test(String(button.textContent || ""))) {
+    button.textContent = label;
+  }
+  button.disabled = !(active && target);
+  button.title = active && target ? `${label} active for this pass.` : passActionInactiveTextV286(pass);
+  button.setAttribute("aria-disabled", button.disabled ? "true" : "false");
+  return active && target;
+}
