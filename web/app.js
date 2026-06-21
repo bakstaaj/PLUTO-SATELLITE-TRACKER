@@ -3857,6 +3857,100 @@ function configurePassRowActionButtonV286(button, pass, onSelect) {
 }
 /* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6_END */
 
+/* PASS_ACTION_MODE_LABEL_MATCH_V2_8_13_BEGIN
+ * Make the pass-list action button label follow the visible transmitter mode
+ * line instead of satellite/name metadata.  This keeps rows such as
+ * "437.200 MHz CW" labeled "Receive: CW" even when the satellite also has
+ * APRS/packet metadata in the catalog.
+ */
+function passActionVisibleModeTextV2813(pass) {
+  const firstText = (items) => {
+    for (const item of items || []) {
+      const value = String(item || "").trim();
+      if (value) return value;
+    }
+    return "";
+  };
+  const modes = Array.isArray(pass && pass.modes) ? pass.modes : [];
+  const mode = firstText(modes);
+  if (mode) return mode;
+  const radio = (pass && pass.radio) || {};
+  return firstText([radio.mode, radio.type, radio.description]);
+}
+
+function passActionModeTokenV2813(pass) {
+  const visible = passActionVisibleModeTextV2813(pass);
+  const upper = visible.toUpperCase().replace(/[^A-Z0-9.+/-]+/g, " ").trim();
+  if (!upper) return "";
+
+  const has = (pattern) => pattern.test(upper);
+
+  // Match explicit visible modes first.  Do not infer APRS/packet from the
+  // satellite name or broad catalog notes because that caused LILACSAT-2 CW
+  // passes to be mislabeled as APRS.
+  if (has(/(^| )CW( |$)/) || has(/MORSE/)) return "CW";
+  if (has(/APRS/)) return "APRS";
+  if (has(/AFSK/)) return "AFSK";
+  if (has(/GMSK/)) return "GMSK";
+  if (has(/BPSK/)) return "BPSK";
+  if (has(/QPSK/)) return "QPSK";
+  if (has(/AX\.?25/) || has(/PACKET/)) return has(/AX\.?25/) ? "AX.25" : "Packet";
+  if (has(/9K6/)) return "9k6";
+  if (has(/DUV/)) return "DUV";
+  if (has(/FSK/)) return "FSK";
+  if (has(/MSK/)) return "MSK";
+  if (has(/PSK/)) return "PSK";
+  if (has(/DATA/) || has(/DIGITAL/) || has(/TELEMETRY/)) return "Digital";
+
+  // Voice/audio modes remain Listen.
+  if (has(/(^| )(FM|NFM|WFM|AM|SSB|USB|LSB|VOICE)( |$)/)) return "";
+  return "";
+}
+
+function passActionKindV286(pass) {
+  return passActionModeTokenV2813(pass) ? "receive" : "listen";
+}
+
+function passActionLabelV286(pass) {
+  const token = passActionModeTokenV2813(pass);
+  return token ? `Receive: ${token}` : "Listen";
+}
+
+function passActionClassificationV286C(pass) {
+  const token = passActionModeTokenV2813(pass);
+  const label = passActionLabelV286(pass);
+  return {
+    kind: token ? "receive" : "listen",
+    label,
+    mode: passActionVisibleModeTextV2813(pass),
+    token
+  };
+}
+
+function applyPassActionButtonVisualsV286(button, pass) {
+  if (!button) return false;
+  const label = passActionLabelV286(pass);
+  const active = passActionIsActiveV286(pass);
+  const target = passActionTargetAvailableV286(pass);
+  const receive = /^Receive\b/.test(label);
+  button.classList.add("pass-action-button-v286");
+  button.classList.toggle("pass-action-receive-v286", receive);
+  button.classList.toggle("pass-action-listen-v286", !receive);
+  button.dataset.passActionKindV286 = receive ? "receive" : "listen";
+  button.dataset.passActionModeV2813 = passActionVisibleModeTextV2813(pass);
+  button.dataset.passActionTokenV2813 = passActionModeTokenV2813(pass);
+  button.dataset.passActiveV286 = active ? "1" : "0";
+  if (!/^Stop/i.test(String(button.textContent || ""))) {
+    button.textContent = label;
+  }
+  button.disabled = !(active && target);
+  button.title = active && target ? `${label} active for this pass.` : passActionInactiveTextV286(pass);
+  button.setAttribute("aria-disabled", button.disabled ? "true" : "false");
+  return active && target;
+}
+/* PASS_ACTION_MODE_LABEL_MATCH_V2_8_13_END */
+
+
     function renderPasses(payload) {
       const node = document.getElementById("passes");
       const passes = payload.passes || [];
