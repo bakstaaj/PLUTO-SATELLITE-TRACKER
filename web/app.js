@@ -8233,4 +8233,110 @@ function passActionInactiveTextV286(pass) {
   renderAudioErrorPanelV2816();
 })();
 
+/* PASS_ACTION_DOM_LABEL_REPAIR_V2_8_18
+ * Last-mile repair for pass-list action button labels.
+ *
+ * Earlier code paths can still classify passes by satellite family/name
+ * (APRS/Packet/Digital/CW).  This repair intentionally ignores those hints
+ * and derives the button label from the exact visible pass-row mode string:
+ *   "145.825 MHz AFSK"      -> "Receive: AFSK"
+ *   "401.030 MHz GMSK USP"  -> "Receive: GMSK USP"
+ *   "10475.000 MHz DVB-S2"  -> "Receive: DVB-S2"
+ *   "29.354 MHz USB"        -> "Listen"
+ */
+(function installPassActionDomLabelRepairV2818() {
+  if (window.__plutoPassActionDomLabelRepairV2818) return;
+  window.__plutoPassActionDomLabelRepairV2818 = true;
 
+  function modeFromVisiblePassRowV2818(row) {
+    try {
+      const span = row && row.querySelector ? row.querySelector("div:first-child span") : null;
+      const text = String((span && span.textContent) || "").replace(/\s+/g, " ").trim();
+      if (!text) return "";
+      const match = text.match(/^\s*[0-9]+(?:\.[0-9]+)?\s+MHz\s+(.+)$/i);
+      return String(match ? match[1] : text).replace(/\s+/g, " ").trim();
+    } catch (_error) {
+      return "";
+    }
+  }
+
+  function modeIsListenOnlyV2818(modeText) {
+    const mode = String(modeText || "").replace(/\s+/g, " ").trim().toUpperCase();
+    if (!mode) return true;
+    const first = (mode.split(/[^A-Z0-9+-]+/).filter(Boolean)[0] || mode);
+    const analog = new Set(["AM", "FM", "NFM", "WFM", "FMN", "USB", "LSB", "SSB", "VOICE", "AUDIO"]);
+    if (analog.has(mode) || analog.has(first)) return true;
+    if (mode.includes("TRANSPONDER") && !mode.includes("CW")) return true;
+    return false;
+  }
+
+  function labelForVisibleModeV2818(modeText) {
+    const mode = String(modeText || "").replace(/\s+/g, " ").trim();
+    if (modeIsListenOnlyV2818(mode)) return "Listen";
+    return mode ? `Receive: ${mode}` : "Receive";
+  }
+
+  function repairOnePassRowLabelV2818(row) {
+    const button = row && row.querySelector ? row.querySelector(".pass-row-action-button-v286, .pass-action-button-v286") : null;
+    if (!button) return false;
+    const mode = modeFromVisiblePassRowV2818(row);
+    const label = labelForVisibleModeV2818(mode);
+    if (!/^Stop/i.test(String(button.textContent || ""))) {
+      button.textContent = label;
+    }
+    button.dataset.passActionVisibleModeV2818 = mode;
+    button.dataset.passActionDomLabelV2818 = label;
+    button.dataset.passActionKindV286 = label === "Listen" ? "listen" : "receive";
+    button.classList.toggle("pass-action-listen-v286", label === "Listen");
+    button.classList.toggle("pass-action-receive-v286", label !== "Listen");
+    if (button.title) {
+      button.title = button.title.replace(/^(Listen|Receive(?:: [^ ]+(?: [^ ]+)*)?)/, label);
+    }
+    return true;
+  }
+
+  function repairPassActionDomLabelsV2818() {
+    const root = document.getElementById("passes");
+    if (!root || !root.querySelectorAll) return 0;
+    let count = 0;
+    root.querySelectorAll(".pass-row").forEach((row) => {
+      if (repairOnePassRowLabelV2818(row)) count += 1;
+    });
+    return count;
+  }
+
+  window.plutoRepairPassActionLabels = repairPassActionDomLabelsV2818;
+
+  try {
+    const originalRenderPasses = typeof renderPasses === "function" ? renderPasses : null;
+    if (originalRenderPasses && !originalRenderPasses.__domLabelRepairV2818) {
+      const wrapped = function renderPassesWithDomLabelRepairV2818(payload) {
+        const result = originalRenderPasses.apply(this, arguments);
+        try { repairPassActionDomLabelsV2818(); } catch (_error) {}
+        window.setTimeout(() => { try { repairPassActionDomLabelsV2818(); } catch (_error) {} }, 0);
+        return result;
+      };
+      wrapped.__domLabelRepairV2818 = true;
+      renderPasses = wrapped;
+    }
+  } catch (_error) {
+  }
+
+  try {
+    const root = document.getElementById("passes");
+    if (root && window.MutationObserver) {
+      const observer = new MutationObserver(() => {
+        try { repairPassActionDomLabelsV2818(); } catch (_error) {}
+      });
+      observer.observe(root, { childList: true, subtree: true, characterData: true });
+      window.__plutoPassActionDomLabelObserverV2818 = observer;
+    }
+  } catch (_error) {
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    try { repairPassActionDomLabelsV2818(); } catch (_error) {}
+  });
+  window.setTimeout(() => { try { repairPassActionDomLabelsV2818(); } catch (_error) {} }, 250);
+  window.setTimeout(() => { try { repairPassActionDomLabelsV2818(); } catch (_error) {} }, 1200);
+})();
