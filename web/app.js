@@ -8042,3 +8042,194 @@ function passActionInactiveTextV286(pass) {
   window.setInterval(polishAllV286E, 2000);
 })();
 /* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6E_END */
+
+/* AUDIO_STREAM_409_CAPTURE_V2_8_16
+ * Persist fast-moving live.wav 409 failures so the operator can copy them.
+ * This is intentionally browser-only: it wraps fetch, records audio-stream
+ * conflicts to localStorage/window.plutoAudioErrors, and shows a small
+ * copyable panel without changing backend DSP or decoder behavior.
+ */
+(function installAudioStream409CaptureV2816() {
+  if (window.__plutoAudioStream409CaptureV2816) return;
+  window.__plutoAudioStream409CaptureV2816 = true;
+
+  const STORE_KEY = "pluto.audio.errors.v2816";
+  const MAX_ENTRIES = 12;
+  const originalFetch = window.fetch ? window.fetch.bind(window) : null;
+  if (!originalFetch) return;
+
+  function safeIsoNowV2816() {
+    try { return new Date().toISOString().replace(".000Z", "Z"); }
+    catch (_error) { return String(Date.now()); }
+  }
+
+  function compactTextV2816(value, limit = 900) {
+    return String(value == null ? "" : value).replace(/\s+/g, " ").trim().slice(0, limit);
+  }
+
+  function loadAudioErrorsV2816() {
+    try {
+      const raw = window.localStorage ? window.localStorage.getItem(STORE_KEY) : "";
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_error) {
+      return [];
+    }
+  }
+
+  function saveAudioErrorsV2816(entries) {
+    const clean = (Array.isArray(entries) ? entries : []).slice(0, MAX_ENTRIES);
+    window.__plutoAudioErrorEntriesV2816 = clean;
+    try {
+      if (window.localStorage) window.localStorage.setItem(STORE_KEY, JSON.stringify(clean));
+    } catch (_error) {
+    }
+    return clean;
+  }
+
+  function latestAudioErrorV2816() {
+    const entries = loadAudioErrorsV2816();
+    return entries.length ? entries[0] : null;
+  }
+
+  function audioErrorCopyTextV2816(entry) {
+    const value = entry || latestAudioErrorV2816() || { message: "No captured Pluto audio error yet." };
+    try { return JSON.stringify(value, null, 2); }
+    catch (_error) { return String(value); }
+  }
+
+  function copyLatestAudioErrorV2816() {
+    const text = audioErrorCopyTextV2816();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).then(() => text);
+    }
+    return Promise.resolve(text);
+  }
+
+  function clearAudioErrorsV2816() {
+    saveAudioErrorsV2816([]);
+    renderAudioErrorPanelV2816();
+  }
+
+  window.plutoAudioErrors = {
+    list: loadAudioErrorsV2816,
+    latest: latestAudioErrorV2816,
+    copyLatest: copyLatestAudioErrorV2816,
+    clear: clearAudioErrorsV2816
+  };
+
+  function ensureAudioErrorPanelV2816() {
+    let panel = document.getElementById("audioErrorCapturePanelV2816");
+    if (panel) return panel;
+    panel = document.createElement("div");
+    panel.id = "audioErrorCapturePanelV2816";
+    panel.style.cssText = [
+      "position:fixed",
+      "right:14px",
+      "bottom:14px",
+      "z-index:9999",
+      "max-width:min(560px,calc(100vw - 28px))",
+      "font:12px/1.35 system-ui,-apple-system,Segoe UI,sans-serif",
+      "background:#0f172a",
+      "color:#e2e8f0",
+      "border:1px solid rgba(125,211,252,0.45)",
+      "box-shadow:0 14px 36px rgba(2,6,23,0.38)",
+      "border-radius:14px",
+      "padding:10px 12px",
+      "display:none"
+    ].join(";");
+    document.body.appendChild(panel);
+    return panel;
+  }
+
+  function renderAudioErrorPanelV2816() {
+    const panel = ensureAudioErrorPanelV2816();
+    const latest = latestAudioErrorV2816();
+    if (!latest) {
+      panel.style.display = "none";
+      panel.innerHTML = "";
+      return;
+    }
+    panel.style.display = "block";
+    const body = compactTextV2816(latest.body || latest.statusText || latest.message || "", 220);
+    const url = compactTextV2816(latest.url || "", 340);
+    panel.innerHTML = `
+      <div style="display:flex;gap:10px;align-items:flex-start;justify-content:space-between;">
+        <div style="min-width:0;">
+          <div style="font-weight:700;color:#bae6fd;margin-bottom:4px;">Last audio stream error captured</div>
+          <div><strong>Status:</strong> ${String(latest.status || "-")} ${String(latest.statusText || "")}</div>
+          <div><strong>Time:</strong> ${String(latest.when || "-")}</div>
+          <div style="word-break:break-all;"><strong>URL:</strong> ${url}</div>
+          ${body ? `<div style="word-break:break-word;"><strong>Body:</strong> ${body}</div>` : ""}
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">
+          <button id="copyAudioErrorButtonV2816" type="button" style="border:0;border-radius:999px;padding:5px 10px;background:#38bdf8;color:#082f49;font-weight:700;cursor:pointer;">Copy</button>
+          <button id="clearAudioErrorButtonV2816" type="button" style="border:1px solid rgba(148,163,184,0.45);border-radius:999px;padding:5px 10px;background:#1e293b;color:#e2e8f0;cursor:pointer;">Clear</button>
+        </div>
+      </div>
+    `;
+    const copyButton = document.getElementById("copyAudioErrorButtonV2816");
+    if (copyButton) {
+      copyButton.addEventListener("click", () => {
+        copyLatestAudioErrorV2816().then(() => { copyButton.textContent = "Copied"; })
+          .catch(() => { copyButton.textContent = "Copy failed"; });
+      });
+    }
+    const clearButton = document.getElementById("clearAudioErrorButtonV2816");
+    if (clearButton) clearButton.addEventListener("click", clearAudioErrorsV2816);
+  }
+
+  function rememberAudioErrorV2816(entry) {
+    const fullEntry = {
+      marker: "AUDIO_STREAM_409_CAPTURE_V2_8_16",
+      when: safeIsoNowV2816(),
+      ...entry
+    };
+    const entries = loadAudioErrorsV2816();
+    saveAudioErrorsV2816([fullEntry, ...entries]);
+    renderAudioErrorPanelV2816();
+    try { console.warn("Pluto audio stream error captured", fullEntry); }
+    catch (_error) {}
+    return fullEntry;
+  }
+
+  function urlTextFromFetchInputV2816(input) {
+    try {
+      if (typeof input === "string") return input;
+      if (input && input.url) return String(input.url);
+      return String(input || "");
+    } catch (_error) {
+      return "";
+    }
+  }
+
+  window.fetch = async function fetchWithAudio409CaptureV2816(input, init) {
+    const response = await originalFetch(input, init);
+    const url = urlTextFromFetchInputV2816(input);
+    if (response && response.status === 409 && url.includes("/api/radio/audio/live.wav")) {
+      const baseEntry = rememberAudioErrorV2816({
+        status: response.status,
+        statusText: response.statusText || "Conflict",
+        url,
+        method: (init && init.method) || "GET",
+        message: "Backend returned HTTP 409 for live audio stream. A stale or busy radio/audio session is likely."
+      });
+      try {
+        response.clone().text().then((text) => {
+          if (!text) return;
+          const entries = loadAudioErrorsV2816();
+          if (entries.length && entries[0].when === baseEntry.when && entries[0].url === baseEntry.url) {
+            entries[0].body = compactTextV2816(text, 900);
+            saveAudioErrorsV2816(entries);
+            renderAudioErrorPanelV2816();
+          }
+        }).catch(() => {});
+      } catch (_error) {
+      }
+    }
+    return response;
+  };
+
+  renderAudioErrorPanelV2816();
+})();
+
