@@ -2856,6 +2856,65 @@ setDl("radioStatus", entries);
       }
     }
 
+
+    /* AUDIO_STREAM_409_RECOVERY_V2_8_15
+     * Recover cleanly when /api/radio/audio/live.wav returns HTTP 409.
+     * A 409 means the backend radio/audio resource is busy, stale, or not yet
+     * ready for a stream.  Stop the backend audio path, restart it once, and
+     * retry the stream instead of leaving the browser in a failed state.
+     */
+    function audioConflictMessageV2815(prefix, detail) {
+      const cleanDetail = String(detail || "").replace(/\s+/g, " ").trim();
+      return cleanDetail ? `${prefix}: ${cleanDetail.slice(0, 160)}` : prefix;
+    }
+
+    function audioSleepV2815(ms) {
+      return new Promise((resolve) => window.setTimeout(resolve, Math.max(0, Number(ms || 0))));
+    }
+
+    async function postJsonBestEffortV2815(url, payload) {
+      try {
+        return await postJson(url, payload || {});
+      } catch (_error) {
+        return null;
+      }
+    }
+
+    async function startBackendAudioWithConflictRecoveryV2815(audioUrls, statusNode) {
+      const startParams = new URL(audioUrls.startUrl, window.location.origin).searchParams.toString();
+      if (statusNode?.isConnected) {
+        statusNode.textContent = `Starting backend audio DSP - ${startParams}`;
+      }
+      try {
+        return await postJson(audioUrls.startUrl, {});
+      } catch (error) {
+        const message = String(error && error.message ? error.message : error || "");
+        if (!message.includes("409")) throw error;
+        if (statusNode?.isConnected) {
+          statusNode.textContent = "Backend audio was busy; stopping stale audio session and retrying...";
+        }
+        await postJsonBestEffortV2815(audioUrls.stopUrl, {});
+        await audioSleepV2815(350);
+        if (statusNode?.isConnected) {
+          statusNode.textContent = `Restarting backend audio DSP - ${startParams}`;
+        }
+        return await postJson(audioUrls.startUrl, {});
+      }
+    }
+
+    async function restartBackendAudioAfterStream409V2815(audioUrls, statusNode, detail) {
+      if (statusNode?.isConnected) {
+        statusNode.textContent = audioConflictMessageV2815(
+          "Audio stream returned 409; resetting backend audio and retrying",
+          detail
+        );
+      }
+      await postJsonBestEffortV2815(audioUrls.stopUrl, {});
+      await audioSleepV2815(350);
+      await startBackendAudioWithConflictRecoveryV2815(audioUrls, statusNode);
+      await audioSleepV2815(200);
+    }
+
     async function startAnalogAudio(pass, button, statusNode) {
       const audioUrls = analogAudioUrl(pass);
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -2894,7 +2953,7 @@ setDl("radioStatus", entries);
       }
 
       statusNode.textContent = `Starting backend audio DSP � ${new URL(audioUrls.startUrl, window.location.origin).searchParams.toString()}`;
-      await postJson(audioUrls.startUrl, {});
+      await startBackendAudioWithConflictRecoveryV2815(audioUrls, statusNode);
 
       const context = new AudioCtx({ sampleRate });
       await context.resume();
@@ -2903,6 +2962,7 @@ setDl("radioStatus", entries);
         button,
         context,
         controller: null,
+        conflictRecoveries: 0,
         nextTime: context.currentTime + 0.35,
         passKey: passKey(pass),
         reconnectCount: 0,
@@ -2955,7 +3015,17 @@ setDl("radioStatus", entries);
         });
 
         if (!response.ok) {
-          throw new Error(`${streamUrl}: ${response.status}`);
+          let conflictDetail = "";
+          try {
+            conflictDetail = await response.text();
+          } catch (_error) {
+          }
+          if (response.status === 409 && Number(session.conflictRecoveries || 0) < 2) {
+            session.conflictRecoveries = Number(session.conflictRecoveries || 0) + 1;
+            await restartBackendAudioAfterStream409V2815(audioUrls, statusNode, conflictDetail);
+            return 0;
+          }
+          throw new Error(audioConflictMessageV2815(`${streamUrl}: ${response.status}`, conflictDetail));
         }
         if (!response.body || !response.body.getReader) {
           throw new Error("Browser streaming fetch is not available.");
