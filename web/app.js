@@ -311,12 +311,13 @@
     }
 
     function renderRadioTarget(pass) {
-      const radio = pass.radio || {};
+      const radio = (typeof protocolResolvedRadioV2821 === "function") ? protocolResolvedRadioV2821(pass) : (pass.radio || {});
       const downlink = radio.downlink_hz || (pass.downlinks_hz || [])[0];
       if (!downlink) return "No downlink";
       const mode = radio.mode || (pass.modes || [])[0] || "";
+      const profile = radio.decoder_profile ? ` / ${radio.decoder_profile}` : "";
       const prefix = isPassTunable(pass) ? "Tune" : "Out of range";
-      return `${prefix} ${formatHz(downlink)} ${mode}`.trim();
+      return `${prefix} ${formatHz(downlink)} ${mode}${profile}`.trim();
     }
 
     function formatOffsetHz(value) {
@@ -2447,7 +2448,7 @@ setDl("radioStatus", entries);
     }
 
     function dopplerTrackPayload(pass) {
-      const radio = pass.radio || {};
+      const radio = (typeof protocolResolvedRadioV2821 === "function") ? protocolResolvedRadioV2821(pass) : (pass.radio || {});
       const plan = densifyDopplerPlanForRadioV1(pass.doppler_plan);
       return {
         ok: true,
@@ -2764,7 +2765,7 @@ setDl("radioStatus", entries);
     }
     installSpectrumLiveAudioControlPersistenceV2615();
     function analogAudioUrl(pass) {
-      const radio = pass && pass.radio ? pass.radio : {};
+      const radio = (typeof protocolResolvedRadioV2821 === "function") ? protocolResolvedRadioV2821(pass) : (pass && pass.radio ? pass.radio : {});
       const downlink = radio.downlink_hz || (pass && pass.downlinks_hz ? pass.downlinks_hz[0] : 0);
       if (!downlink) return "";
       const streamParams = new URLSearchParams({ downlink_hz: String(downlink) });
@@ -2877,8 +2878,8 @@ setDl("radioStatus", entries);
           norad: String(pass.norad_id || ""),
           aos: pass.aos_utc || "",
           downlink: String(audioUrls.downlink),
-          mode: (pass.radio && pass.radio.mode) || (pass.modes || [])[0] || "",
-          description: (pass.radio && pass.radio.description) || ""
+          mode: radio.mode || (pass.modes || [])[0] || "",
+          description: radio.description || ""
         }).toString()}`);
       } catch (_error) {
         // Continue: live/start can still tune directly by downlink_hz.
@@ -3510,7 +3511,209 @@ function bindAnalogAudio(pass, node) {
     }
 
 
-        /* PASS_DETAIL_MODAL_LISTEN_V1B */
+    
+/* PROTOCOL_RESOLVER_V2_8_21
+ * Resolve the selected satellite signal as three separate concepts:
+ *   - modulation: literal signal/modem mode from the selected pass/transmitter
+ *   - protocol_hint: secondary metadata such as APRS/AX.25/USP/telemetry/voice
+ *   - decoder_profile: internal route derived from modulation + protocol_hint
+ *
+ * Important: protocol hints must not overwrite modulation. AFSK remains AFSK
+ * even when the description says APRS. FSK remains FSK even when the description
+ * says packet or AX.25. This object becomes the single source used for labels,
+ * tuning targets, and future decoder routing.
+ */
+function protocolCleanTextV2821(value) {
+  return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function protocolCanonicalModeV2821(value) {
+  const text = protocolCleanTextV2821(value).toUpperCase();
+  if (!text) return "";
+  if (text === "GMSK2K4 USP" || text === "GMSK 2K4 USP") return "GMSK USP";
+  if (text === "GFSK9K6" || text === "GFSK 9K6") return "GFSK";
+  if (text === "FSK9K6" || text === "FSK 9K6") return "FSK";
+  if (text === "BPSK1K2" || text === "BPSK 1K2") return "BPSK";
+  if (text === "QPSK9K6" || text === "QPSK 9K6") return "QPSK";
+  return text;
+}
+
+function protocolModeFromPassV2821(pass) {
+  const modes = Array.isArray(pass && pass.modes) ? pass.modes : [];
+  const radio = (pass && pass.radio) || {};
+  return protocolCanonicalModeV2821(modes[0] || radio.mode || "");
+}
+
+function protocolDownlinkFromPassV2821(pass) {
+  const downlinks = Array.isArray(pass && pass.downlinks_hz) ? pass.downlinks_hz : [];
+  const radio = (pass && pass.radio) || {};
+  const value = Number(downlinks[0] || radio.downlink_hz || pass?.downlink_hz || 0);
+  return Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
+}
+
+function protocolTxDownlinkHzV2821(tx) {
+  if (!tx) return 0;
+  for (const key of ["downlink_hz", "downlink_low_hz", "downlink_high_hz"]) {
+    const value = Number(tx[key] || 0);
+    if (Number.isFinite(value) && value > 0) return Math.round(value);
+  }
+  const lowMhz = Number(tx.downlink_low_mhz || 0);
+  if (Number.isFinite(lowMhz) && lowMhz > 0) return Math.round(lowMhz * 1000000);
+  const highMhz = Number(tx.downlink_high_mhz || 0);
+  if (Number.isFinite(highMhz) && highMhz > 0) return Math.round(highMhz * 1000000);
+  return 0;
+}
+
+function protocolMatchCatalogTransmitterV2821(pass, catalog) {
+  const satellites = Array.isArray(catalog && catalog.satellites) ? catalog.satellites : [];
+  const norad = String(pass && pass.norad_id ? pass.norad_id : "");
+  const sat = satellites.find((item) => String(item.norad_id || "") === norad) || null;
+  const txs = Array.isArray(sat && sat.transmitters) ? sat.transmitters : [];
+  const targetHz = protocolDownlinkFromPassV2821(pass);
+  const visibleMode = protocolModeFromPassV2821(pass);
+  let best = null;
+  let bestScore = Infinity;
+
+  txs.forEach((tx) => {
+    const txHz = protocolTxDownlinkHzV2821(tx);
+    const txMode = protocolCanonicalModeV2821(tx.mode || "");
+    const diff = targetHz && txHz ? Math.abs(txHz - targetHz) : 999999999999;
+    let score = diff;
+    if (txMode && visibleMode && txMode !== visibleMode) score += 250000000;
+    if (tx.alive === false || String(tx.status || "").toLowerCase() === "inactive") score += 500000000;
+    if (String(tx.type || "").toLowerCase() === "transceiver") score += 25000;
+    if (score < bestScore) {
+      bestScore = score;
+      best = tx;
+    }
+  });
+
+  if (!best) return null;
+  const bestHz = protocolTxDownlinkHzV2821(best);
+  const bestMode = protocolCanonicalModeV2821(best.mode || "");
+  const closeEnough = targetHz && bestHz ? Math.abs(bestHz - targetHz) <= 50000 : false;
+  const modeAgrees = !visibleMode || !bestMode || visibleMode === bestMode;
+  if (closeEnough && modeAgrees) return best;
+
+  /* If the visible pass selected an analog transponder mode, preserve that
+   * selected mode rather than switching to a nearby beacon transmitter.
+   */
+  if (protocolIsAnalogListenModeV2821(visibleMode)) return null;
+  return closeEnough ? best : null;
+}
+
+function protocolHintSetV2821(...values) {
+  const joined = values.map((value) => protocolCleanTextV2821(value).toUpperCase()).join(" ");
+  const hints = [];
+  const add = (value) => { if (value && !hints.includes(value)) hints.push(value); };
+  if (/\bAPRS\b/.test(joined)) add("APRS");
+  if (/AX\.?25|AX25/.test(joined)) add("AX.25");
+  if (/\bUSP\b/.test(joined)) add("USP");
+  if (/\bDUV\b/.test(joined)) add("DUV");
+  if (/DVB[- ]?S2/.test(joined)) add("DVB-S2");
+  if (/\bSSDV\b/.test(joined)) add("SSDV");
+  if (/DIGIPEATER/.test(joined)) add("DIGIPEATER");
+  if (/TELEMETRY|\bTLM\b/.test(joined)) add("TELEMETRY");
+  if (/BEACON/.test(joined)) add("BEACON");
+  if (/VOICE|FM VOICE/.test(joined)) add("VOICE");
+  if (/PACKET/.test(joined)) add("PACKET");
+  return hints;
+}
+
+function protocolIsAnalogListenModeV2821(mode) {
+  return ["FM", "NFM", "WFM", "AM", "USB", "LSB", "SSB", "CW VOICE"].includes(protocolCanonicalModeV2821(mode));
+}
+
+function protocolDecoderProfileV2821(modulation, hints) {
+  const mode = protocolCanonicalModeV2821(modulation);
+  const hintText = (hints || []).join(" ").toUpperCase();
+  if (protocolIsAnalogListenModeV2821(mode)) return "analog_listen";
+  if (mode === "CW") return "cw_morse";
+  if (mode === "AFSK") return /APRS/.test(hintText) ? "afsk1200_ax25_aprs" : "afsk1200_ax25";
+  if (mode === "GMSK" || mode === "GMSK USP" || mode === "GFSK") return "gmsk_symbol_clock_slicer_pending";
+  if (mode === "FSK") return "fsk_symbol_clock_slicer_pending";
+  if (mode === "BPSK") return "bpsk_demod_pending";
+  if (mode === "QPSK") return "qpsk_demod_pending";
+  if (mode === "DVB-S2") return "unsupported_wideband_dvb_s2";
+  if (mode === "DUV") return "duv_telemetry_pending";
+  return mode ? `${mode.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "")}_pending` : "unknown";
+}
+
+function protocolResolvedForPassV2821(pass, catalog) {
+  if (!pass) return null;
+  if (pass.protocol_resolver && pass.protocol_resolver.marker === "PROTOCOL_RESOLVER_V2_8_21") {
+    return pass.protocol_resolver;
+  }
+
+  const radio = pass.radio || {};
+  const selectedTx = protocolMatchCatalogTransmitterV2821(pass, catalog) || null;
+  const selectedHz = protocolDownlinkFromPassV2821(pass) || protocolTxDownlinkHzV2821(selectedTx) || Number(radio.downlink_hz || 0) || 0;
+  const visibleMode = protocolModeFromPassV2821(pass);
+  const selectedMode = protocolCanonicalModeV2821((selectedTx && selectedTx.mode) || visibleMode || radio.mode || "");
+  const hints = protocolHintSetV2821(
+    selectedTx && selectedTx.description,
+    selectedTx && selectedTx.type,
+    radio.description,
+    radio.type,
+    pass.name
+  );
+  const decoderProfile = protocolDecoderProfileV2821(selectedMode, hints);
+  const label = protocolIsAnalogListenModeV2821(selectedMode) ? "Listen" : `Receive: ${selectedMode}`;
+  const notes = [];
+  if (selectedTx && radio.downlink_hz && selectedHz && Math.abs(Number(radio.downlink_hz) - selectedHz) > 50000) {
+    notes.push("pass.radio.downlink_hz differed from selected transmitter/downlink");
+  }
+  if (radio.mode && selectedMode && protocolCanonicalModeV2821(radio.mode) !== selectedMode) {
+    notes.push("pass.radio.mode differed from selected modulation");
+  }
+
+  return {
+    marker: "PROTOCOL_RESOLVER_V2_8_21",
+    modulation: selectedMode,
+    modulation_source: selectedTx ? "catalog_transmitter_match" : "pass.modes[0]",
+    protocol_hint: hints,
+    decoder_profile: decoderProfile,
+    button_label: label,
+    downlink_hz: selectedHz ? Math.round(selectedHz) : 0,
+    description: protocolCleanTextV2821((selectedTx && selectedTx.description) || radio.description || ""),
+    type: protocolCleanTextV2821((selectedTx && selectedTx.type) || radio.type || ""),
+    selected_tx_mode: selectedTx ? protocolCanonicalModeV2821(selectedTx.mode || "") : "",
+    selected_tx_downlink_hz: selectedTx ? protocolTxDownlinkHzV2821(selectedTx) : 0,
+    radio_mode: protocolCanonicalModeV2821(radio.mode || ""),
+    radio_downlink_hz: Number(radio.downlink_hz || 0) || 0,
+    notes
+  };
+}
+
+function protocolResolvedRadioV2821(pass) {
+  const protocol = (pass && pass.protocol_resolver) || protocolResolvedForPassV2821(pass, window.__plutoLastCatalogV2821 || null) || {};
+  const radio = (pass && pass.radio) || {};
+  return {
+    ...radio,
+    downlink_hz: protocol.downlink_hz || radio.downlink_hz,
+    mode: protocol.modulation || radio.mode || "",
+    description: protocol.description || radio.description || "",
+    type: protocol.type || radio.type || "",
+    decoder_profile: protocol.decoder_profile || "",
+    protocol_hint: protocol.protocol_hint || []
+  };
+}
+
+function protocolResolvePassPayloadV2821(payload, catalog) {
+  window.__plutoLastCatalogV2821 = catalog || null;
+  const passes = Array.isArray(payload && payload.passes) ? payload.passes : [];
+  return {
+    ...(payload || {}),
+    protocol_resolver_marker: "PROTOCOL_RESOLVER_V2_8_21",
+    passes: passes.map((pass) => ({
+      ...pass,
+      protocol_resolver: protocolResolvedForPassV2821(pass, catalog)
+    }))
+  };
+}
+
+
+    /* PASS_DETAIL_MODAL_LISTEN_V1B */
 
     /* PASS_DETAIL_MODAL_LISTEN_V1B */
     function openPassDetailModal(pass) {
@@ -3775,23 +3978,14 @@ function passActionIsActiveV286(pass) {
 }
 
 function passActionKindV286(pass) {
-  try {
-    if (typeof receiveKindForPassV2626D === "function") {
-      const kind = receiveKindForPassV2626D(pass);
-      if (kind === "cw" || kind === "digital") return "receive";
-      return "listen";
-    }
-  } catch (_error) {
-  }
-  try {
-    if (typeof isDecodeReceiveModeV282 === "function" && isDecodeReceiveModeV282(pass)) return "receive";
-  } catch (_error) {
-  }
+  const protocol = (pass && pass.protocol_resolver) || (typeof protocolResolvedForPassV2821 === "function" ? protocolResolvedForPassV2821(pass, window.__plutoLastCatalogV2821 || null) : null);
+  if (protocol && protocol.button_label) return protocol.button_label === "Listen" ? "listen" : "receive";
   return "listen";
 }
 
 function passActionLabelV286(pass) {
-  return passActionKindV286(pass) === "receive" ? "Receive" : "Listen";
+  const protocol = (pass && pass.protocol_resolver) || (typeof protocolResolvedForPassV2821 === "function" ? protocolResolvedForPassV2821(pass, window.__plutoLastCatalogV2821 || null) : null);
+  return (protocol && protocol.button_label) ? protocol.button_label : (passActionKindV286(pass) === "receive" ? "Receive" : "Listen");
 }
 
 function passActionDownlinkHzV286(pass) {
@@ -3825,9 +4019,9 @@ function applyPassActionButtonVisualsV286(button, pass) {
   const active = passActionIsActiveV286(pass);
   const target = passActionTargetAvailableV286(pass);
   button.classList.add("pass-action-button-v286");
-  button.classList.toggle("pass-action-receive-v286", label === "Receive");
+  button.classList.toggle("pass-action-receive-v286", /^Receive/.test(label));
   button.classList.toggle("pass-action-listen-v286", label === "Listen");
-  button.dataset.passActionKindV286 = label.toLowerCase();
+  button.dataset.passActionKindV286 = label.toLowerCase().replace(/[^a-z0-9]+/g, "-");
   button.dataset.passActiveV286 = active ? "1" : "0";
   if (!/^Stop/i.test(String(button.textContent || ""))) {
     button.textContent = label;
@@ -4046,7 +4240,7 @@ const refreshEntries = [
         );
       } else {
         rememberPassPayloadStampV3(passes);
-        renderPasses(passes);
+        renderPasses((typeof protocolResolvePassPayloadV2821 === "function") ? protocolResolvePassPayloadV2821(passes, catalog) : passes);
       }
       scheduleRefreshLoop();
 const tbody = document.getElementById("satellites");
