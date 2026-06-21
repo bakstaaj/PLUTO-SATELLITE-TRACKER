@@ -3857,98 +3857,7 @@ function configurePassRowActionButtonV286(button, pass, onSelect) {
 }
 /* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6_END */
 
-/* PASS_ACTION_MODE_LABEL_MATCH_V2_8_13_BEGIN
- * Make the pass-list action button label follow the visible transmitter mode
- * line instead of satellite/name metadata.  This keeps rows such as
- * "437.200 MHz CW" labeled "Receive: CW" even when the satellite also has
- * APRS/packet metadata in the catalog.
- */
-function passActionVisibleModeTextV2813(pass) {
-  const firstText = (items) => {
-    for (const item of items || []) {
-      const value = String(item || "").trim();
-      if (value) return value;
-    }
-    return "";
-  };
-  const modes = Array.isArray(pass && pass.modes) ? pass.modes : [];
-  const mode = firstText(modes);
-  if (mode) return mode;
-  const radio = (pass && pass.radio) || {};
-  return firstText([radio.mode, radio.type, radio.description]);
-}
 
-function passActionModeTokenV2813(pass) {
-  const visible = passActionVisibleModeTextV2813(pass);
-  const upper = visible.toUpperCase().replace(/[^A-Z0-9.+/-]+/g, " ").trim();
-  if (!upper) return "";
-
-  const has = (pattern) => pattern.test(upper);
-
-  // Match explicit visible modes first.  Do not infer APRS/packet from the
-  // satellite name or broad catalog notes because that caused LILACSAT-2 CW
-  // passes to be mislabeled as APRS.
-  if (has(/(^| )CW( |$)/) || has(/MORSE/)) return "CW";
-  if (has(/APRS/)) return "APRS";
-  if (has(/AFSK/)) return "AFSK";
-  if (has(/GMSK/)) return "GMSK";
-  if (has(/BPSK/)) return "BPSK";
-  if (has(/QPSK/)) return "QPSK";
-  if (has(/AX\.?25/) || has(/PACKET/)) return has(/AX\.?25/) ? "AX.25" : "Packet";
-  if (has(/9K6/)) return "9k6";
-  if (has(/DUV/)) return "DUV";
-  if (has(/FSK/)) return "FSK";
-  if (has(/MSK/)) return "MSK";
-  if (has(/PSK/)) return "PSK";
-  if (has(/DATA/) || has(/DIGITAL/) || has(/TELEMETRY/)) return "Digital";
-
-  // Voice/audio modes remain Listen.
-  if (has(/(^| )(FM|NFM|WFM|AM|SSB|USB|LSB|VOICE)( |$)/)) return "";
-  return "";
-}
-
-function passActionKindV286(pass) {
-  return passActionModeTokenV2813(pass) ? "receive" : "listen";
-}
-
-function passActionLabelV286(pass) {
-  const token = passActionModeTokenV2813(pass);
-  return token ? `Receive: ${token}` : "Listen";
-}
-
-function passActionClassificationV286C(pass) {
-  const token = passActionModeTokenV2813(pass);
-  const label = passActionLabelV286(pass);
-  return {
-    kind: token ? "receive" : "listen",
-    label,
-    mode: passActionVisibleModeTextV2813(pass),
-    token
-  };
-}
-
-function applyPassActionButtonVisualsV286(button, pass) {
-  if (!button) return false;
-  const label = passActionLabelV286(pass);
-  const active = passActionIsActiveV286(pass);
-  const target = passActionTargetAvailableV286(pass);
-  const receive = /^Receive\b/.test(label);
-  button.classList.add("pass-action-button-v286");
-  button.classList.toggle("pass-action-receive-v286", receive);
-  button.classList.toggle("pass-action-listen-v286", !receive);
-  button.dataset.passActionKindV286 = receive ? "receive" : "listen";
-  button.dataset.passActionModeV2813 = passActionVisibleModeTextV2813(pass);
-  button.dataset.passActionTokenV2813 = passActionModeTokenV2813(pass);
-  button.dataset.passActiveV286 = active ? "1" : "0";
-  if (!/^Stop/i.test(String(button.textContent || ""))) {
-    button.textContent = label;
-  }
-  button.disabled = !(active && target);
-  button.title = active && target ? `${label} active for this pass.` : passActionInactiveTextV286(pass);
-  button.setAttribute("aria-disabled", button.disabled ? "true" : "false");
-  return active && target;
-}
-/* PASS_ACTION_MODE_LABEL_MATCH_V2_8_13_END */
 
 
     function renderPasses(payload) {
@@ -4168,6 +4077,110 @@ const tbody = document.getElementById("satellites");
         tbody.appendChild(tr);
       }
     }
+
+
+/* PASS_ACTION_LITERAL_MODE_LABELS_V2_8_14_BEGIN
+ * Make pass-list action labels match the visible pass-row mode literally.
+ *
+ * Earlier classifiers grouped modes by satellite/catalog hints.  That caused
+ * rows visibly shown as AFSK, BPSK, GMSK USP, DVB-S2, or CW to be relabeled as
+ * APRS, Packet, Digital, or CW based on other metadata.  The operator button
+ * should follow the transmitter mode shown next to the downlink frequency.
+ */
+function passActionVisibleModeTextV2814(pass) {
+  const clean = (value) => String(value || "").replace(/\s+/g, " ").trim();
+  const modes = Array.isArray(pass && pass.modes) ? pass.modes : [];
+  for (const mode of modes) {
+    const value = clean(mode);
+    if (value) return value;
+  }
+  const radio = (pass && pass.radio) || {};
+  for (const value of [radio.mode, radio.type]) {
+    const mode = clean(value);
+    if (mode) return mode;
+  }
+  return "";
+}
+
+function passActionModeLooksReceiveV2814(modeText) {
+  const upper = String(modeText || "").toUpperCase().replace(/[^A-Z0-9.+/-]+/g, " ").trim();
+  if (!upper) return false;
+
+  // Explicit data/decode modes.  This list intentionally keys only from the
+  // visible mode text, not satellite name or broad description metadata.
+  if (/(^| )CW( |$)/.test(upper) || /MORSE/.test(upper)) return true;
+  if (/APRS/.test(upper)) return true;
+  if (/AFSK/.test(upper)) return true;
+  if (/GMSK/.test(upper)) return true;
+  if (/BPSK/.test(upper)) return true;
+  if (/QPSK/.test(upper)) return true;
+  if (/DVB[ -]?S2/.test(upper) || /DVB/.test(upper)) return true;
+  if (/AX\.?25/.test(upper) || /PACKET/.test(upper)) return true;
+  if (/(^| )FSK( |$)/.test(upper)) return true;
+  if (/(^| )MSK( |$)/.test(upper)) return true;
+  if (/(^| )PSK( |$)/.test(upper)) return true;
+  if (/9K6/.test(upper)) return true;
+  if (/(^| )DUV( |$)/.test(upper)) return true;
+  if (/DATA|DIGITAL|TELEMETRY/.test(upper)) return true;
+  if (/(^| )USP( |$)/.test(upper)) return true;
+
+  return false;
+}
+
+function passActionKindV286(pass) {
+  return passActionModeLooksReceiveV2814(passActionVisibleModeTextV2814(pass)) ? "receive" : "listen";
+}
+
+function passActionLabelV286(pass) {
+  const mode = passActionVisibleModeTextV2814(pass);
+  if (passActionModeLooksReceiveV2814(mode)) {
+    return `Receive: ${mode}`;
+  }
+  return "Listen";
+}
+
+function passActionClassificationV286C(pass) {
+  const mode = passActionVisibleModeTextV2814(pass);
+  const receive = passActionModeLooksReceiveV2814(mode);
+  return {
+    kind: receive ? "receive" : "listen",
+    label: receive ? `Receive: ${mode}` : "Listen",
+    mode,
+    token: mode
+  };
+}
+
+function passActionInactiveTextV286(pass) {
+  const label = passActionLabelV286(pass);
+  if (!pass) return `${label} is inactive until a pass is selected.`;
+  if (!passActionTargetAvailableV286(pass)) return `${label} is unavailable because this pass has no tunable downlink.`;
+  const state = passActionTimingStateV286(pass);
+  if (state === "upcoming") return `${label} becomes active at AOS (${formatTime(pass.aos_utc)}).`;
+  if (state === "stale") return `${label} is inactive because this pass has ended.`;
+  return `${label} is inactive until the pass is active.`;
+}
+
+function applyPassActionButtonVisualsV286(button, pass) {
+  if (!button) return false;
+  const label = passActionLabelV286(pass);
+  const active = passActionIsActiveV286(pass);
+  const target = passActionTargetAvailableV286(pass);
+  const receive = /^Receive\b/.test(label);
+  button.classList.add("pass-action-button-v286");
+  button.classList.toggle("pass-action-receive-v286", receive);
+  button.classList.toggle("pass-action-listen-v286", !receive);
+  button.dataset.passActionKindV286 = receive ? "receive" : "listen";
+  button.dataset.passActionModeV2814 = passActionVisibleModeTextV2814(pass);
+  button.dataset.passActiveV286 = active ? "1" : "0";
+  if (!/^Stop/i.test(String(button.textContent || ""))) {
+    button.textContent = label;
+  }
+  button.disabled = !(active && target);
+  button.title = active && target ? `${label} active for this pass.` : passActionInactiveTextV286(pass);
+  button.setAttribute("aria-disabled", button.disabled ? "true" : "false");
+  return active && target;
+}
+/* PASS_ACTION_LITERAL_MODE_LABELS_V2_8_14_END */
 
     installCollapsibleDrawerSectionsV248();
 
