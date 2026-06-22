@@ -623,7 +623,12 @@
         window.setTimeout(applyFit, 350);
       } else if (validBounds.length === 1) {
         map.setView(validBounds[0], 4, { animate: false });
-        window.setTimeout(() => map.invalidateSize(false), 80);
+        window.setTimeout(() => {
+          try {
+            if (map && map._container && map._mapPane) map.invalidateSize(false);
+          } catch (_error) {
+          }
+        }, 80);
       }
     }
 
@@ -3938,6 +3943,100 @@ function configurePassRowActionButtonV286(button, pass, onSelect) {
 /* PASS_ACTION_ALWAYS_ENABLED_FOR_TEST_V2_8_22_END */
 
 
+    
+
+/* PASS_ROW_CLICK_ANYTIME_MAP_GUARD_V2_8_24
+ * Backend-test mode final override.  Pass-row action buttons are clickable
+ * whenever a pass has any usable downlink value, independent of AOS/LOS and
+ * independent of broader pass readiness/tunability helpers.  This is meant for
+ * manual backend audio/decode testing from the pass list.  No-downlink rows stay
+ * disabled because there is no RF target.
+ */
+function passActionBackendTestDownlinkHzV2824(pass) {
+  const radio = (pass && pass.radio) || {};
+  const downlinks = (pass && Array.isArray(pass.downlinks_hz)) ? pass.downlinks_hz : [];
+  const candidates = [
+    radio.downlink_hz,
+    pass && pass.downlink_hz,
+    downlinks[0]
+  ];
+  for (const candidate of candidates) {
+    const value = Number(candidate || 0);
+    if (Number.isFinite(value) && value > 0) return Math.round(value);
+  }
+  return 0;
+}
+
+function passActionManualTestAvailableV2824(pass) {
+  return passActionBackendTestDownlinkHzV2824(pass) > 0;
+}
+
+function passActionInactiveTextV286(pass) {
+  const label = passActionLabelV286(pass);
+  if (!pass) return `${label} is unavailable until a pass is selected.`;
+  if (!passActionManualTestAvailableV2824(pass)) return `${label} is unavailable because this pass has no downlink.`;
+  return `${label} is enabled for backend testing outside pass time.`;
+}
+
+function applyPassActionButtonVisualsV286(button, pass) {
+  if (!button) return false;
+  const label = passActionLabelV286(pass);
+  const active = passActionIsActiveV286(pass);
+  const target = passActionManualTestAvailableV2824(pass);
+  const state = passActionTimingStateV286(pass);
+  button.classList.add("pass-action-button-v286");
+  button.classList.toggle("pass-action-receive-v286", String(label).startsWith("Receive"));
+  button.classList.toggle("pass-action-listen-v286", String(label).startsWith("Listen"));
+  button.classList.toggle("pass-action-test-enabled-v2824", target && !active);
+  button.dataset.passActionKindV286 = String(label).toLowerCase();
+  button.dataset.passActiveV286 = active ? "1" : "0";
+  button.dataset.passActionTestEnabledV2824 = target ? "1" : "0";
+  if (!/^Stop/i.test(String(button.textContent || ""))) {
+    button.textContent = label;
+  }
+  button.disabled = !target;
+  button.title = target
+    ? (active
+      ? `${label} active for this pass.`
+      : `${label} enabled for backend testing. Pass state: ${state}.`)
+    : passActionInactiveTextV286(pass);
+  button.setAttribute("aria-disabled", button.disabled ? "true" : "false");
+  return target;
+}
+
+function configurePassRowActionButtonV286(button, pass, onSelect) {
+  if (!button) return;
+  applyPassActionButtonVisualsV286(button, pass);
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!passActionManualTestAvailableV2824(pass)) {
+      button.title = passActionInactiveTextV286(pass);
+      return;
+    }
+    if (typeof onSelect === "function") onSelect();
+    window.setTimeout(() => {
+      const primary = document.getElementById("analogAudioToggleButton");
+      if (primary) {
+        primary.disabled = false;
+        primary.removeAttribute("disabled");
+        primary.setAttribute("aria-disabled", "false");
+        primary.click();
+        return;
+      }
+      if (typeof startAnalogAudio === "function") {
+        const statusNode = document.getElementById("status") || { textContent: "" };
+        startAnalogAudio(pass, button, statusNode).catch((error) => {
+          const message = error && error.message ? error.message : String(error);
+          if (statusNode) statusNode.textContent = message;
+          button.title = message;
+        });
+      }
+    }, 80);
+  });
+}
+/* PASS_ROW_CLICK_ANYTIME_MAP_GUARD_V2_8_24_END */
+
     function renderPasses(payload) {
       const node = document.getElementById("passes");
       const passes = payload.passes || [];
@@ -3991,7 +4090,7 @@ function configurePassRowActionButtonV286(button, pass, onSelect) {
           <div></div>
           <div></div>
           <div class="pass-row-actions-v286">
-            <button class="pass-row-action-button-v286 pass-action-button-v286" type="button" disabled>Radio</button>
+            <button class="pass-row-action-button-v286 pass-action-button-v286" type="button">Radio</button>
             <button class="pass-detail-button" type="button">Details</button>
           </div>
         `;
