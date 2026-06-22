@@ -4178,6 +4178,123 @@ window.plutoRepairPassRowButtonsV2825 = repairPassRowButtonsV2825;
 window.setInterval(repairPassRowButtonsV2825, 1500);
 
 
+
+/* PASS_ROW_SELECTED_BUTTON_UNLOCK_V2_8_26
+ * Selected-pass backend-test unlock.
+ *
+ * v2.8.25 proved the pass-row action path can be enabled outside AOS/LOS,
+ * but selecting a pass can still re-apply the legacy selected-pass disabled
+ * state.  This patch does not change backend C or radio APIs.  It makes the
+ * row action state authoritative after any pass selection/detail render:
+ *   - pass-row action buttons are forced interactive after renderPassDetail()
+ *   - a MutationObserver removes late disabled/aria-disabled changes
+ *   - CSS pointer/opacity is overridden for selected rows
+ *   - a console helper is exposed for manual repair/debugging
+ */
+function passRowButtonLooksUsableV2826(button) {
+  return !!(button && button.closest && button.closest(".pass-row") && button.classList && button.classList.contains("pass-row-action-button-v286"));
+}
+
+function passRowUnlockButtonV2826(button) {
+  if (!passRowButtonLooksUsableV2826(button)) return false;
+  const row = button.closest(".pass-row");
+  const rowText = row ? String(row.innerText || "") : "";
+  const hasVisibleDownlink = /\b\d+(?:\.\d+)?\s*MHz\b/i.test(rowText);
+
+  button.disabled = !hasVisibleDownlink;
+  if (hasVisibleDownlink) {
+    button.removeAttribute("disabled");
+    button.setAttribute("aria-disabled", "false");
+    button.style.pointerEvents = "auto";
+    button.style.opacity = "1";
+    button.style.cursor = "pointer";
+    button.classList.add("pass-action-selected-unlocked-v2826");
+    if (!button.title || /inactive|disabled|unavailable|AOS|ended/i.test(button.title)) {
+      button.title = "Enabled for backend testing. Pass does not need to be active.";
+    }
+  } else {
+    button.setAttribute("aria-disabled", "true");
+    button.title = "Unavailable because this row does not show a downlink.";
+  }
+  return hasVisibleDownlink;
+}
+
+function unlockAllPassRowButtonsV2826() {
+  let count = 0;
+  document.querySelectorAll(".pass-row-action-button-v286").forEach((button) => {
+    if (passRowUnlockButtonV2826(button)) count += 1;
+  });
+  return count;
+}
+
+function schedulePassRowUnlockV2826() {
+  [0, 25, 100, 300, 800].forEach((delayMs) => {
+    window.setTimeout(unlockAllPassRowButtonsV2826, delayMs);
+  });
+}
+
+function installPassRowSelectedUnlockV2826() {
+  if (window.__passRowSelectedUnlockV2826) return;
+  window.__passRowSelectedUnlockV2826 = true;
+
+  try {
+    const style = document.createElement("style");
+    style.id = "passRowSelectedUnlockStyleV2826";
+    style.textContent = `
+      .pass-row .pass-row-action-button-v286.pass-action-selected-unlocked-v2826,
+      .pass-row.selected .pass-row-action-button-v286.pass-action-selected-unlocked-v2826 {
+        pointer-events: auto !important;
+        opacity: 1 !important;
+        cursor: pointer !important;
+        filter: none !important;
+      }
+    `;
+    document.head.appendChild(style);
+  } catch (_error) {
+  }
+
+  const originalRenderPassDetail = (typeof renderPassDetail === "function") ? renderPassDetail : null;
+  if (originalRenderPassDetail && !originalRenderPassDetail.__selectedUnlockWrappedV2826) {
+    const wrapped = function renderPassDetailSelectedUnlockV2826(...args) {
+      const result = originalRenderPassDetail.apply(this, args);
+      schedulePassRowUnlockV2826();
+      return result;
+    };
+    wrapped.__selectedUnlockWrappedV2826 = true;
+    renderPassDetail = wrapped;
+  }
+
+  document.addEventListener("click", (event) => {
+    if (event && event.target && event.target.closest && event.target.closest(".pass-row")) {
+      schedulePassRowUnlockV2826();
+    }
+  }, true);
+
+  window.setTimeout(() => {
+    const passes = document.getElementById("passes");
+    if (!passes || !window.MutationObserver) return;
+    try {
+      const observer = new MutationObserver(() => schedulePassRowUnlockV2826());
+      observer.observe(passes, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        attributeFilter: ["disabled", "aria-disabled", "class", "style"]
+      });
+      window.__passRowSelectedUnlockObserverV2826 = observer;
+    } catch (_error) {
+    }
+  }, 0);
+
+  window.plutoUnlockPassRowButtonsV2826 = unlockAllPassRowButtonsV2826;
+  window.plutoSchedulePassRowUnlockV2826 = schedulePassRowUnlockV2826;
+  window.setInterval(unlockAllPassRowButtonsV2826, 750);
+  schedulePassRowUnlockV2826();
+}
+installPassRowSelectedUnlockV2826();
+/* PASS_ROW_SELECTED_BUTTON_UNLOCK_V2_8_26_END */
+
+
     function renderPasses(payload) {
       const node = document.getElementById("passes");
       const passes = payload.passes || [];
