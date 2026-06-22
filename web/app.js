@@ -9908,3 +9908,305 @@ function passActionInactiveTextV286(pass) {
 })();
 /* AUDIO_LIVE_409_RETRY_V2_8_32_END */
 
+/* AUDIO_LIVE_409_ABORT_SAFE_V2_8_33
+ * Abort-safe recovery for backend live audio HTTP 409 during pass-row backend tests.
+ * v2.8.32 correctly detected stale live.wav sessions, but its recovery path could
+ * abort the active fetch controller and then retry through an already-aborted stream.
+ * This override keeps recovery inside startAnalogAudio(), stops/restarts backend DSP
+ * without calling stopAnalogAudio() during the retry, and always opens a fresh fetch
+ * controller for the next stream attempt. UI-only; backend C is unchanged.
+ */
+(function installAudioLive409AbortSafeV2833() {
+  if (window.__plutoAudioLive409AbortSafeV2833) return;
+  window.__plutoAudioLive409AbortSafeV2833 = true;
+
+  const MARKER = "AUDIO_LIVE_409_ABORT_SAFE_V2_8_33";
+  const delayV2833 = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+  function setAudioStatusV2833(statusNode, message, warn) {
+    const text = String(message || "");
+    if (statusNode && statusNode.isConnected) {
+      statusNode.textContent = text;
+      statusNode.classList.toggle("warn", !!warn);
+    }
+    const modalStatus = document.getElementById("passRowBackendTestStatusV2827") ||
+      document.getElementById("backendTestModalStatusV2827") ||
+      document.querySelector(".pass-row-backend-test-status-v2827, .backend-test-status-v2827");
+    if (modalStatus) {
+      modalStatus.textContent = text;
+      modalStatus.classList.toggle("warn", !!warn);
+    }
+    const globalStatus = document.getElementById("status");
+    if (globalStatus && warn) globalStatus.textContent = text;
+    try {
+      window.plutoLastAudioLiveStatusV2833 = {
+        marker: MARKER,
+        message: text,
+        warn: !!warn,
+        at: new Date().toISOString()
+      };
+    } catch (_error) {}
+  }
+
+  async function stopBackendAudioOnlyV2833(audioUrls, statusNode, reason) {
+    setAudioStatusV2833(statusNode, reason || "Stopping stale backend audio stream...", false);
+    try {
+      if (audioUrls && audioUrls.stopUrl && typeof postJson === "function") {
+        await postJson(audioUrls.stopUrl, {});
+      } else if (typeof fetch === "function") {
+        await fetch("/api/radio/audio/live/stop", { method: "POST", cache: "no-store" }).catch(() => {});
+      }
+    } catch (_error) {}
+    try {
+      if (typeof getJson === "function") await getJson("/api/radio/track/auto/stop");
+    } catch (_error) {}
+    await delayV2833(350);
+  }
+
+  async function startBackendAudioOnlyV2833(audioUrls, statusNode) {
+    setAudioStatusV2833(statusNode, "Starting backend audio DSP...", false);
+    if (typeof postJson === "function") {
+      await postJson(audioUrls.startUrl, {});
+    } else {
+      const response = await fetch(audioUrls.startUrl, { method: "POST", cache: "no-store" });
+      if (!response.ok) throw new Error(`${audioUrls.startUrl}: ${response.status}`);
+    }
+    await delayV2833(200);
+  }
+
+  async function resetBackendAudioFor409V2833(audioUrls, statusNode, attempt) {
+    setAudioStatusV2833(
+      statusNode,
+      `Resetting stale backend audio stream after HTTP 409 (attempt ${attempt}).`,
+      true
+    );
+    await stopBackendAudioOnlyV2833(audioUrls, statusNode, "Stopping stale backend audio session after HTTP 409...");
+    await startBackendAudioOnlyV2833(audioUrls, statusNode);
+  }
+
+  function ensureButtonIdleV2833(button, label) {
+    if (!button || !button.isConnected) return;
+    button.disabled = false;
+    button.removeAttribute("disabled");
+    button.setAttribute("aria-disabled", "false");
+    if (!/^Stop/i.test(String(button.textContent || ""))) button.textContent = label || button.textContent || "Listen";
+  }
+
+  if (typeof startAnalogAudio !== "function") return;
+
+  startAnalogAudio = async function startAnalogAudioAbortSafe409V2833(pass, button, statusNode) {
+    const audioUrls = typeof analogAudioUrl === "function" ? analogAudioUrl(pass) : null;
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    const sampleRate = 24000;
+    const targetChunkBytes = 4096 * 2;
+    if (!AudioCtx) throw new Error("Web Audio is not available in this browser.");
+    if (!audioUrls) throw new Error("No usable downlink is available for this pass.");
+
+    // Stop any previous browser/backend session before this new backend-test start.
+    // This is outside the 409 retry path, so aborting an old controller is safe here.
+    try {
+      if (typeof stopAnalogAudio === "function") await stopAnalogAudio("Resetting audio before backend test.");
+    } catch (_error) {}
+    await stopBackendAudioOnlyV2833(audioUrls, statusNode, "Resetting backend audio before starting test...");
+
+    setAudioStatusV2833(statusNode, "Planning backend tuning and Doppler tracking...", false);
+    try {
+      if (typeof getJson === "function") {
+        await getJson(`/api/radio/plan?${new URLSearchParams({
+          name: pass && pass.name ? pass.name : "",
+          norad: String(pass && pass.norad_id ? pass.norad_id : ""),
+          aos: pass && pass.aos_utc ? pass.aos_utc : "",
+          downlink: String(audioUrls.downlink),
+          mode: (pass && pass.radio && pass.radio.mode) || (pass && pass.modes && pass.modes[0]) || "",
+          description: (pass && pass.radio && pass.radio.description) || ""
+        }).toString()}`);
+      }
+    } catch (_error) {
+      // Continue: live/start can still tune directly by downlink_hz.
+    }
+
+    if (pass && pass.doppler_plan && (pass.doppler_plan.points || []).length) {
+      try {
+        if (typeof postJson === "function" && typeof dopplerTrackPayload === "function") {
+          await postJson("/api/radio/track/plan", dopplerTrackPayload(pass));
+          if (typeof getJson === "function") await getJson("/api/radio/track/auto/start");
+        }
+      } catch (_error) {
+        // Continue with fixed-frequency audio if auto tracking cannot start.
+      }
+    }
+
+    await startBackendAudioOnlyV2833(audioUrls, statusNode);
+
+    const context = new AudioCtx({ sampleRate });
+    await context.resume();
+
+    const session = {
+      button,
+      context,
+      controller: null,
+      nextTime: context.currentTime + 0.35,
+      passKey: typeof passKey === "function" ? passKey(pass) : `${audioUrls.downlink}`,
+      reconnectCount: 0,
+      retry409Count: 0,
+      reconnectTimer: 0,
+      sources: [],
+      statusNode,
+      stopUrl: audioUrls.stopUrl,
+      stopped: false,
+      totalBytes: 0,
+      totalBuffers: 0
+    };
+    analogAudioSession = session;
+
+    if (button && button.isConnected) {
+      button.disabled = false;
+      button.removeAttribute("disabled");
+      button.textContent = "Stop";
+      button.setAttribute("aria-disabled", "false");
+    }
+    setAudioStatusV2833(statusNode, "Opening backend decoded audio stream...", false);
+
+    const schedulePcmBytes = (pcmBytes) => {
+      if (session.stopped || !pcmBytes || !pcmBytes.length) return;
+      const evenLength = pcmBytes.length - (pcmBytes.length % 2);
+      if (evenLength <= 0) return;
+
+      const audioBuffer = pcm16ToAudioBuffer(context, pcmBytes.slice(0, evenLength), sampleRate);
+      const source = context.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(context.destination);
+      source.onended = () => {
+        const index = session.sources.indexOf(source);
+        if (index >= 0) session.sources.splice(index, 1);
+      };
+
+      const startAt = Math.max(context.currentTime + 0.05, session.nextTime);
+      source.start(startAt);
+      session.nextTime = startAt + audioBuffer.duration;
+      session.sources.push(source);
+      session.totalBuffers += 1;
+
+      const bufferedSeconds = Math.max(0, session.nextTime - context.currentTime);
+      setAudioStatusV2833(
+        statusNode,
+        `Playing backend decoded audio from Pluto (${bufferedSeconds.toFixed(1)}s buffered, reconnects ${session.reconnectCount}, 409 resets ${session.retry409Count}).`,
+        false
+      );
+    };
+
+    const readOneStreamSegment = async () => {
+      const controller = new AbortController();
+      session.controller = controller;
+      const streamUrl = `${audioUrls.streamUrl}&request=${Date.now()}&reconnect=${session.reconnectCount}`;
+      const response = await fetch(streamUrl, {
+        cache: "no-store",
+        signal: controller.signal
+      });
+
+      // Clear this controller reference as soon as the fetch returns headers; this
+      // prevents later backend reset code from aborting the controller used for a
+      // new retry attempt.
+      if (session.controller === controller) session.controller = null;
+
+      if (response.status === 409) {
+        if (session.retry409Count >= 2) {
+          throw new Error(`${streamUrl}: 409 after ${session.retry409Count} reset attempts`);
+        }
+        session.retry409Count += 1;
+        await resetBackendAudioFor409V2833(audioUrls, statusNode, session.retry409Count);
+        return { retry: true, bytes: 0 };
+      }
+
+      if (!response.ok) throw new Error(`${streamUrl}: ${response.status}`);
+      if (!response.body || !response.body.getReader) throw new Error("Browser streaming fetch is not available.");
+
+      const reader = response.body.getReader();
+      let pending = new Uint8Array();
+      let headerSkipped = false;
+      let segmentBytes = 0;
+
+      const processPending = (force = false) => {
+        if (!headerSkipped) {
+          if (pending.length < 44) return;
+          pending = pending.slice(44);
+          headerSkipped = true;
+        }
+        while (pending.length >= targetChunkBytes || (force && pending.length >= 2)) {
+          const take = force ? pending.length - (pending.length % 2) : targetChunkBytes;
+          const chunk = pending.slice(0, take);
+          pending = pending.slice(take);
+          schedulePcmBytes(chunk);
+        }
+      };
+
+      while (!session.stopped) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (!value || !value.length) continue;
+        segmentBytes += value.length;
+        session.totalBytes += value.length;
+        pending = concatUint8Arrays(pending, value);
+        processPending(false);
+        if (session.totalBuffers === 0) {
+          setAudioStatusV2833(statusNode, `Receiving backend audio stream (${session.totalBytes} bytes)...`, false);
+        }
+      }
+      processPending(true);
+      return { retry: false, bytes: segmentBytes };
+    };
+
+    const reconnectLoop = async () => {
+      while (!session.stopped && analogAudioSession === session) {
+        try {
+          const result = await readOneStreamSegment();
+          if (session.stopped || analogAudioSession !== session) return;
+          if (result && result.retry) {
+            // Retry immediately with a new AbortController and a freshly restarted backend.
+            continue;
+          }
+          session.reconnectCount += 1;
+          const bufferedSeconds = Math.max(0, session.nextTime - context.currentTime);
+          setAudioStatusV2833(
+            statusNode,
+            `Backend stream segment ended after ${result.bytes} bytes; reconnecting (${bufferedSeconds.toFixed(1)}s buffered).`,
+            false
+          );
+          const delayMs = bufferedSeconds > 0.8 ? 200 : 20;
+          await new Promise((resolve) => {
+            session.reconnectTimer = window.setTimeout(resolve, delayMs);
+          });
+          session.reconnectTimer = 0;
+        } catch (error) {
+          if (session.stopped || analogAudioSession !== session) return;
+          const rawMessage = error && error.message ? error.message : String(error || "Backend audio stream failed.");
+          const message = /aborted/i.test(rawMessage)
+            ? `Audio stream aborted during recovery; reset completed but stream did not reopen cleanly. ${rawMessage}`
+            : rawMessage;
+          setAudioStatusV2833(statusNode, message, true);
+          try {
+            if (typeof stopAnalogAudio === "function") await stopAnalogAudio(message);
+          } catch (_error) {}
+          ensureButtonIdleV2833(button, "Listen");
+          return;
+        }
+      }
+    };
+
+    reconnectLoop();
+  };
+
+  window.plutoAudioLive409RetryV2833 = {
+    marker: MARKER,
+    async reset(downlinkHz) {
+      const downlink = Number(downlinkHz || 0);
+      const params = downlink ? `?downlink_hz=${encodeURIComponent(String(Math.round(downlink)))}` : "";
+      await fetch("/api/radio/audio/live/stop", { method: "POST", cache: "no-store" }).catch(() => {});
+      await delayV2833(350);
+      if (downlink) await fetch(`/api/radio/audio/live/start${params}`, { method: "POST", cache: "no-store" });
+      return { ok: true, marker: MARKER, downlink_hz: downlink || null };
+    }
+  };
+})();
+/* AUDIO_LIVE_409_ABORT_SAFE_V2_8_33_END */
+
