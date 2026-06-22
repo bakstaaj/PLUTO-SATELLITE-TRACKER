@@ -4037,6 +4037,147 @@ function configurePassRowActionButtonV286(button, pass, onSelect) {
 }
 /* PASS_ROW_CLICK_ANYTIME_MAP_GUARD_V2_8_24_END */
 
+
+/* PASS_ROW_DIRECT_ACTION_HANDLER_V2_8_25
+ * Backend-test mode for pass-row action buttons.
+ *
+ * The previous enable patches still relied on the original button click path.
+ * If that path decides the pass is not actionable, the button can look enabled
+ * but still do nothing.  This override is intentionally direct:
+ *   - renderPasses still builds each row normally
+ *   - configurePassRowActionButtonV286 forces the row button interactive
+ *   - clicking the row button selects the pass, then starts the existing
+ *     backend-owned audio path through the primary analog button when present
+ *   - if the old primary button is hidden/absent, it calls startAnalogAudio()
+ *     directly with a small status node
+ *
+ * No backend C or radio API behavior is changed.
+ */
+function passRowActionStatusNodeV2825() {
+  let node = document.getElementById("passRowDirectActionStatusV2825");
+  if (!node) {
+    node = document.createElement("div");
+    node.id = "passRowDirectActionStatusV2825";
+    node.className = "muted pass-row-direct-action-status-v2825";
+    node.style.marginTop = "0.35rem";
+    const passes = document.getElementById("passes");
+    if (passes && passes.parentNode) {
+      passes.parentNode.insertBefore(node, passes.nextSibling);
+    } else if (document.body) {
+      document.body.appendChild(node);
+    }
+  }
+  return node;
+}
+
+function passRowDirectActionHasDownlinkV2825(pass) {
+  try {
+    return !!(passActionDownlinkHzV286(pass) || ((pass && pass.downlinks_hz) || [])[0]);
+  } catch (_error) {
+    return !!(((pass && pass.downlinks_hz) || [])[0]);
+  }
+}
+
+function passRowForceInteractiveV2825(button, pass) {
+  if (!button) return false;
+  const hasDownlink = passRowDirectActionHasDownlinkV2825(pass);
+  try {
+    if (typeof applyPassActionButtonVisualsV286 === "function") {
+      applyPassActionButtonVisualsV286(button, pass);
+    }
+  } catch (_error) {
+  }
+  button.classList.add("pass-action-button-v286", "pass-action-test-enabled-v2825");
+  if (!/^Stop/i.test(String(button.textContent || ""))) {
+    try {
+      button.textContent = typeof passActionLabelV286 === "function" ? passActionLabelV286(pass) : "Listen";
+    } catch (_error) {
+      button.textContent = "Listen";
+    }
+  }
+  button.disabled = !hasDownlink;
+  if (hasDownlink) button.removeAttribute("disabled");
+  button.setAttribute("aria-disabled", hasDownlink ? "false" : "true");
+  button.style.pointerEvents = hasDownlink ? "auto" : "";
+  button.style.opacity = hasDownlink ? "1" : "";
+  button.title = hasDownlink
+    ? "Enabled for backend testing. Pass does not need to be active."
+    : "Unavailable because this pass has no downlink.";
+  return hasDownlink;
+}
+
+function configurePassRowActionButtonV286(button, pass, onSelect) {
+  if (!button) return;
+  passRowForceInteractiveV2825(button, pass);
+  button.addEventListener("click", async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+
+    if (!passRowDirectActionHasDownlinkV2825(pass)) {
+      button.title = "Unavailable because this pass has no downlink.";
+      return;
+    }
+
+    passRowForceInteractiveV2825(button, pass);
+    const statusNode = passRowActionStatusNodeV2825();
+    statusNode.textContent = `Starting backend test action for ${pass && pass.name ? pass.name : "selected pass"}...`;
+
+    try {
+      if (typeof onSelect === "function") onSelect();
+    } catch (_error) {
+    }
+
+    window.setTimeout(async () => {
+      try {
+        const primary = document.getElementById("analogAudioToggleButton");
+        if (primary) {
+          primary.disabled = false;
+          primary.removeAttribute("disabled");
+          primary.setAttribute("aria-disabled", "false");
+          primary.style.pointerEvents = "auto";
+          primary.click();
+          return;
+        }
+        if (typeof startAnalogAudio === "function") {
+          if (/^Stop/i.test(String(button.textContent || "")) && typeof stopAnalogAudio === "function") {
+            await stopAnalogAudio("Pass-row backend test stopped.");
+          } else {
+            await startAnalogAudio(pass, button, statusNode);
+          }
+          return;
+        }
+        statusNode.textContent = "No audio action path is available in this UI build.";
+      } catch (error) {
+        const message = error && error.message ? error.message : String(error || "Pass-row action failed.");
+        statusNode.textContent = message;
+        const statusBar = document.getElementById("status");
+        if (statusBar) statusBar.textContent = message;
+        try { console.error("Pass-row direct action failed", error); } catch (_error) {}
+      } finally {
+        passRowForceInteractiveV2825(button, pass);
+      }
+    }, 100);
+  }, true);
+}
+
+function repairPassRowButtonsV2825() {
+  document.querySelectorAll(".pass-row-action-button-v286").forEach((button) => {
+    if (button.disabled && button.textContent && button.closest(".pass-row")) {
+      button.disabled = false;
+      button.removeAttribute("disabled");
+      button.setAttribute("aria-disabled", "false");
+      button.style.pointerEvents = "auto";
+      button.style.opacity = "1";
+      button.title = "Enabled for backend testing. Pass does not need to be active.";
+    }
+  });
+}
+
+window.plutoRepairPassRowButtonsV2825 = repairPassRowButtonsV2825;
+window.setInterval(repairPassRowButtonsV2825, 1500);
+
+
     function renderPasses(payload) {
       const node = document.getElementById("passes");
       const passes = payload.passes || [];
