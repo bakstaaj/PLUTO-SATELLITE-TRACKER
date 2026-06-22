@@ -2862,10 +2862,28 @@ setDl("radioStatus", entries);
     }
 
     async function startAnalogAudio(pass, button, statusNode) {
+      /* BACKEND_AUDIO_START_VERIFY_V2_8_38
+       * Deterministic and verified backend audio startup.
+       * The audit proved the backend works when driven in this order:
+       *   /live/stop cleanup, /live/start, then /live.wav.
+       * This implementation does not open live.wav unless /live/start returns OK.
+       * It also includes the mode in /live/start and surfaces the exact start/stream
+       * response body in the operator status instead of entering a reset/retry loop.
+       */
       const audioUrls = analogAudioUrl(pass);
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       const sampleRate = 24000;
       const targetChunkBytes = 4096 * 2;
+
+      const setStatus = (message) => {
+        const text = String(message || "");
+        if (statusNode && statusNode.isConnected) statusNode.textContent = text;
+        const statusBar = document.getElementById("status");
+        if (statusBar) statusBar.textContent = text;
+      };
+
+      const displayName = (pass && pass.name) || "selected pass";
+
       if (!AudioCtx) {
         throw new Error("Web Audio is not available in this browser.");
       }
@@ -2873,33 +2891,123 @@ setDl("radioStatus", entries);
         throw new Error("No usable downlink is available for this pass.");
       }
 
-      await stopAnalogAudio();
+      const compactBody = (text) => {
+        const value = String(text || "").replace(/\s+/g, " ").trim();
+        return value.length > 700 ? value.slice(0, 700) + " ..." : value;
+      };
 
-      statusNode.textContent = "Planning backend tuning and Doppler tracking...";
+      const modeForStart = () => {
+        const radio = (pass && pass.radio) || {};
+        const values = [
+          radio.mode,
+          Array.isArray(pass && pass.modes) ? pass.modes[0] : "",
+          radio.description
+        ].filter(Boolean).join(" ").toUpperCase();
+        if (/\b(NFM|FM|F3E|VOICE)\b/.test(values)) return "FM";
+        if (/\b(AM|A3E)\b/.test(values)) return "AM";
+        if (/\bUSB\b/.test(values)) return "USB";
+        if (/\bLSB\b/.test(values)) return "LSB";
+        return String(radio.mode || (Array.isArray(pass && pass.modes) ? pass.modes[0] : "") || "FM").trim() || "FM";
+      };
+
+      const urlWithMode = (url) => {
+        const parsed = new URL(url, window.location.origin);
+        if (!parsed.searchParams.get("mode")) parsed.searchParams.set("mode", modeForStart());
+        return `${parsed.pathname}?${parsed.searchParams.toString()}`;
+      };
+
+      const fetchTextWithTimeout = async (url, options = {}, timeoutMs = 4500) => {
+        const controller = new AbortController();
+        const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const response = await fetch(url, Object.assign({ cache: "no-store" }, options, { signal: controller.signal }));
+          const text = await response.text().catch(() => "");
+          return { response, text };
+        } catch (error) {
+          if (error && error.name === "AbortError") {
+            throw new Error(`${url}: timed out after ${timeoutMs} ms`);
+          }
+          throw error;
+        } finally {
+          window.clearTimeout(timer);
+        }
+      };
+
+      const postJsonVerified = async (url, timeoutMs, label, requiredOk = true) => {
+        const { response, text } = await fetchTextWithTimeout(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}"
+        }, timeoutMs);
+        let data = null;
+        try { data = text ? JSON.parse(text) : {}; } catch (_error) { data = null; }
+        if (!response.ok) {
+          throw new Error(`${label} failed: HTTP ${response.status}${text ? ` | ${compactBody(text)}` : ""}`);
+        }
+        if (requiredOk && data && data.ok === false) {
+          throw new Error(`${label} rejected: ${compactBody(text)}`);
+        }
+        return { data: data || {}, text, status: response.status };
+      };
+
+      const getJsonBestEffort = async (url, timeoutMs, label) => {
+        try {
+          const { response, text } = await fetchTextWithTimeout(url, { method: "GET" }, timeoutMs);
+          if (!response.ok) return null;
+          return text ? JSON.parse(text) : null;
+        } catch (error) {
+          console.warn(`[Pluto] ${label || "GET"} best-effort failed`, error);
+          return null;
+        }
+      };
+
+      const clearBrowserSessionOnly = async () => {
+        const session = analogAudioSession;
+        analogAudioSession = null;
+        if (!session) return;
+        session.stopped = true;
+        if (session.reconnectTimer) {
+          window.clearTimeout(session.reconnectTimer);
+          session.reconnectTimer = 0;
+        }
+        try { if (session.controller) session.controller.abort(); } catch (_error) {}
+        try {
+          for (const source of session.sources || []) {
+            try { source.stop(); } catch (_error) {}
+          }
+        } catch (_error) {}
+        try { if (session.context) await session.context.close(); } catch (_error) {}
+        if (session.button && session.button.isConnected) session.button.textContent = "Listen";
+      };
+
+      setStatus(`Preparing backend audio test for ${displayName}...`);
+      await clearBrowserSessionOnly();
+
+      setStatus("Sending bounded backend audio cleanup...");
       try {
-        await getJson(`/api/radio/plan?${new URLSearchParams({
+        await postJsonVerified(audioUrls.stopUrl, 1800, "live/stop cleanup", false);
+      } catch (error) {
+        setStatus(`Cleanup warning: ${error.message || error}. Continuing to live/start...`);
+        await new Promise((resolve) => window.setTimeout(resolve, 150));
+      }
+
+      setStatus("Planning backend radio target...");
+      try {
+        await getJsonBestEffort(`/api/radio/plan?${new URLSearchParams({
           name: pass.name || "",
           norad: String(pass.norad_id || ""),
           aos: pass.aos_utc || "",
           downlink: String(audioUrls.downlink),
-          mode: (pass.radio && pass.radio.mode) || (pass.modes || [])[0] || "",
+          mode: modeForStart(),
           description: (pass.radio && pass.radio.description) || ""
-        }).toString()}`);
+        }).toString()}`, 2200, "radio/plan");
       } catch (_error) {
-        // Continue: live/start can still tune directly by downlink_hz.
       }
 
-      if (pass.doppler_plan && (pass.doppler_plan.points || []).length) {
-        try {
-          await postJson("/api/radio/track/plan", dopplerTrackPayload(pass));
-          await getJson("/api/radio/track/auto/start");
-        } catch (_error) {
-          // Continue with fixed-frequency audio if auto tracking cannot start.
-        }
-      }
-
-      statusNode.textContent = `Starting backend audio DSP � ${new URL(audioUrls.startUrl, window.location.origin).searchParams.toString()}`;
-      await postJson(audioUrls.startUrl, {});
+      const startUrl = urlWithMode(audioUrls.startUrl);
+      setStatus(`Starting backend live audio: ${new URL(startUrl, window.location.origin).searchParams.toString()}`);
+      const startResult = await postJsonVerified(startUrl, 6500, "live/start", true);
+      setStatus(`live/start OK (${compactBody(startResult.text) || "HTTP 200"}). Opening WAV stream...`);
 
       const context = new AudioCtx({ sampleRate });
       await context.resume();
@@ -2920,15 +3028,12 @@ setDl("radioStatus", entries);
         totalBuffers: 0
       };
       analogAudioSession = session;
-
-      button.textContent = "Stop";
-      statusNode.textContent = "Opening backend decoded audio stream...";
+      if (button && button.isConnected) button.textContent = "Stop";
 
       const schedulePcmBytes = (pcmBytes) => {
         if (session.stopped || !pcmBytes.length) return;
         const evenLength = pcmBytes.length - (pcmBytes.length % 2);
         if (evenLength <= 0) return;
-
         const audioBuffer = pcm16ToAudioBuffer(context, pcmBytes.slice(0, evenLength), sampleRate);
         const source = context.createBufferSource();
         source.buffer = audioBuffer;
@@ -2937,107 +3042,69 @@ setDl("radioStatus", entries);
           const index = session.sources.indexOf(source);
           if (index >= 0) session.sources.splice(index, 1);
         };
-
         const startAt = Math.max(context.currentTime + 0.05, session.nextTime);
         source.start(startAt);
         session.nextTime = startAt + audioBuffer.duration;
         session.sources.push(source);
         session.totalBuffers += 1;
-
         const bufferedSeconds = Math.max(0, session.nextTime - context.currentTime);
-        if (statusNode?.isConnected) {
-          statusNode.textContent = `Playing backend decoded audio from Pluto (${bufferedSeconds.toFixed(1)}s buffered, reconnects ${session.reconnectCount}).`;
+        setStatus(`Playing backend audio from Pluto (${bufferedSeconds.toFixed(1)}s buffered, ${session.totalBytes} bytes).`);
+      };
+
+      const controller = new AbortController();
+      session.controller = controller;
+      const streamUrl = `${audioUrls.streamUrl}&request=${Date.now()}&reconnect=0`;
+      const response = await fetch(streamUrl, { cache: "no-store", signal: controller.signal });
+      if (!response.ok) {
+        const body = await response.text().catch(() => "");
+        throw new Error(`${streamUrl}: ${response.status}${body ? ` | ${compactBody(body)}` : ""}`);
+      }
+      if (!response.body || !response.body.getReader) {
+        throw new Error("Browser streaming fetch is not available.");
+      }
+
+      setStatus("WAV stream opened; receiving backend audio...");
+      const reader = response.body.getReader();
+      let pending = new Uint8Array();
+      let headerSkipped = false;
+
+      const processPending = (force = false) => {
+        if (!headerSkipped) {
+          if (pending.length < 44) return;
+          pending = pending.slice(44);
+          headerSkipped = true;
+        }
+        while (pending.length >= targetChunkBytes || (force && pending.length >= 2)) {
+          const take = force ? pending.length - (pending.length % 2) : targetChunkBytes;
+          const chunk = pending.slice(0, take);
+          pending = pending.slice(take);
+          schedulePcmBytes(chunk);
         }
       };
 
-      const readOneStreamSegment = async () => {
-        const controller = new AbortController();
-        session.controller = controller;
-        const streamUrl = `${audioUrls.streamUrl}&request=${Date.now()}&reconnect=${session.reconnectCount}`;
-        const response = await fetch(streamUrl, {
-          cache: "no-store",
-          signal: controller.signal
-        });
-
-        if (!response.ok) {
-          throw new Error(`${streamUrl}: ${response.status}`);
-        }
-        if (!response.body || !response.body.getReader) {
-          throw new Error("Browser streaming fetch is not available.");
-        }
-
-        const reader = response.body.getReader();
-        let pending = new Uint8Array();
-        let headerSkipped = false;
-        let segmentBytes = 0;
-
-        const processPending = (force = false) => {
-          if (!headerSkipped) {
-            if (pending.length < 44) return;
-            pending = pending.slice(44);
-            headerSkipped = true;
+      (async () => {
+        try {
+          while (!session.stopped && analogAudioSession === session) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            if (!value || !value.length) continue;
+            session.totalBytes += value.length;
+            pending = concatUint8Arrays(pending, value);
+            processPending(false);
+            if (session.totalBuffers === 0) setStatus(`Receiving backend audio stream (${session.totalBytes} bytes)...`);
           }
-
-          while (pending.length >= targetChunkBytes || (force && pending.length >= 2)) {
-            const take = force ? pending.length - (pending.length % 2) : targetChunkBytes;
-            const chunk = pending.slice(0, take);
-            pending = pending.slice(take);
-            schedulePcmBytes(chunk);
+          processPending(true);
+          if (!session.stopped && analogAudioSession === session) {
+            setStatus(`Backend WAV stream ended after ${session.totalBytes} bytes. Press Listen to restart.`);
+            await stopAnalogAudio(`Backend WAV stream ended after ${session.totalBytes} bytes.`);
           }
-        };
-
-        while (!session.stopped) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          if (!value || !value.length) continue;
-
-          segmentBytes += value.length;
-          session.totalBytes += value.length;
-          pending = concatUint8Arrays(pending, value);
-          processPending(false);
-
-          if (statusNode?.isConnected && session.totalBuffers === 0) {
-            statusNode.textContent = `Receiving backend audio stream (${session.totalBytes} bytes)...`;
-          }
+        } catch (error) {
+          if (session.stopped || analogAudioSession !== session) return;
+          const message = error && error.message ? error.message : "Backend audio stream failed.";
+          setStatus(message);
+          await stopAnalogAudio(message);
         }
-
-        processPending(true);
-        return segmentBytes;
-      };
-
-      /* NOAA_AUDIO_DIAGNOSTIC_RECONNECT_UNTIL_STOP_V6: reconnect NOAA stream segments until user clicks Stop. */
-      const reconnectLoop = async () => {
-        while (!session.stopped && analogAudioSession === session) {
-          try {
-            const segmentBytes = await readOneStreamSegment();
-            if (session.stopped || analogAudioSession !== session) return;
-
-            session.reconnectCount += 1;
-            const bufferedSeconds = Math.max(0, session.nextTime - context.currentTime);
-            if (statusNode?.isConnected) {
-              statusNode.textContent =
-                `Backend stream segment ended after ${segmentBytes} bytes; reconnecting (${bufferedSeconds.toFixed(1)}s buffered).`;
-            }
-
-            // Reconnect quickly. If the buffer is empty, reconnect immediately.
-            const delayMs = bufferedSeconds > 0.8 ? 200 : 20;
-            await new Promise((resolve) => {
-              session.reconnectTimer = window.setTimeout(resolve, delayMs);
-            });
-            session.reconnectTimer = 0;
-          } catch (error) {
-            if (session.stopped || analogAudioSession !== session) return;
-            const message = error && error.message ? error.message : "Backend audio stream failed.";
-            if (statusNode?.isConnected) statusNode.textContent = message;
-            const statusBar = document.getElementById("status");
-            if (statusBar) statusBar.textContent = message;
-            await stopAnalogAudio(message);
-            return;
-          }
-        }
-      };
-
-      reconnectLoop();
+      })();
     }
 
 
