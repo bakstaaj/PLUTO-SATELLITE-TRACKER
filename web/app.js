@@ -9753,3 +9753,158 @@ function passActionInactiveTextV286(pass) {
   console.info(`${MARKER} installed`);
 })();
 /* BACKEND_TEST_MODAL_FORCE_OPEN_V2_8_31_END */
+
+/* AUDIO_LIVE_409_RETRY_V2_8_32
+ * Browser-side recovery for backend live.wav HTTP 409 during pass-row backend
+ * tests.  A 409 means the backend audio stream endpoint rejected the open,
+ * usually because a stale session or half-started DSP pipeline still exists.
+ * This wrapper intercepts only /api/radio/audio/live.wav responses, stops any
+ * stale backend audio session, restarts live audio for the requested downlink,
+ * and retries the same stream request once before surfacing the error.  UI-only;
+ * backend C remains unchanged.
+ */
+(function installAudioLive409RetryV2832() {
+  const MARKER = "AUDIO_LIVE_409_RETRY_V2_8_32";
+  if (window.__plutoAudioLive409RetryV2832) return;
+  window.__plutoAudioLive409RetryV2832 = true;
+
+  const originalFetch = window.fetch.bind(window);
+  const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+  function asUrlText(input) {
+    if (typeof input === "string") return input;
+    if (input && input.url) return String(input.url);
+    return String(input || "");
+  }
+
+  function isLiveAudioStreamUrl(url) {
+    return String(url || "").includes("/api/radio/audio/live.wav");
+  }
+
+  function liveAudioStatusNodeV2832() {
+    return document.getElementById("passRowBackendTestStatusV2827") ||
+      document.getElementById("analogAudioStatus") ||
+      document.getElementById("status");
+  }
+
+  function setLiveAudioStatusV2832(message) {
+    const node = liveAudioStatusNodeV2832();
+    if (node) node.textContent = message;
+    try {
+      window.plutoLastAudio409RecoveryV2832 = {
+        marker: MARKER,
+        message,
+        at: new Date().toISOString()
+      };
+    } catch (_error) {}
+  }
+
+  function downlinkFromLiveUrlV2832(url) {
+    try {
+      const parsed = new URL(url, window.location.origin);
+      const downlink = parsed.searchParams.get("downlink_hz") || parsed.searchParams.get("downlink");
+      return downlink && /^\d+$/.test(String(downlink)) ? String(downlink) : "";
+    } catch (_error) {
+      return "";
+    }
+  }
+
+  async function readResponseSnippetV2832(response) {
+    try {
+      const text = await response.clone().text();
+      return String(text || "").slice(0, 900);
+    } catch (_error) {
+      return "";
+    }
+  }
+
+  async function postBackendJsonV2832(url) {
+    try {
+      await originalFetch(url, {
+        method: "POST",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: "{}"
+      });
+    } catch (_error) {
+    }
+  }
+
+  async function resetAndRestartLiveAudioV2832(streamUrl, response) {
+    const downlink = downlinkFromLiveUrlV2832(streamUrl);
+    const body = response ? await readResponseSnippetV2832(response) : "";
+    const baseMessage = `Audio stream returned HTTP 409${downlink ? ` for ${downlink} Hz` : ""}; resetting backend audio and retrying once.`;
+    setLiveAudioStatusV2832(body ? `${baseMessage} ${body}` : baseMessage);
+
+    await postBackendJsonV2832("/api/radio/audio/live/stop");
+    try {
+      if (typeof stopAnalogAudio === "function") {
+        await stopAnalogAudio("Resetting stale audio stream after HTTP 409.");
+      }
+    } catch (_error) {
+    }
+    await sleep(350);
+
+    if (downlink) {
+      const startParams = new URLSearchParams({ downlink_hz: downlink });
+      try {
+        if (typeof spectrumLiveAudioControlParamsV2615 === "function") {
+          const controlParams = spectrumLiveAudioControlParamsV2615();
+          Object.entries(controlParams || {}).forEach(([key, value]) => {
+            if (value !== undefined && value !== null && String(value) !== "") {
+              startParams.set(key, String(value));
+            }
+          });
+        }
+      } catch (_error) {
+      }
+      await postBackendJsonV2832(`/api/radio/audio/live/start?${startParams.toString()}`);
+    }
+
+    await sleep(500);
+  }
+
+  window.fetch = async function plutoFetchAudioLive409RetryV2832(input, init) {
+    const url = asUrlText(input);
+    const response = await originalFetch(input, init);
+    if (!isLiveAudioStreamUrl(url) || response.status !== 409) {
+      return response;
+    }
+
+    try {
+      await resetAndRestartLiveAudioV2832(url, response);
+      const retryUrl = (() => {
+        try {
+          const parsed = new URL(url, window.location.origin);
+          parsed.searchParams.set("retry409_v2832", String(Date.now()));
+          return parsed.pathname + parsed.search;
+        } catch (_error) {
+          return url;
+        }
+      })();
+      const retry = await originalFetch(retryUrl, Object.assign({}, init || {}, { cache: "no-store" }));
+      if (retry.status === 409) {
+        const snippet = await readResponseSnippetV2832(retry);
+        setLiveAudioStatusV2832(`Audio stream still returned HTTP 409 after retry. ${snippet || "Backend audio session is still busy."}`);
+      } else if (retry.ok) {
+        setLiveAudioStatusV2832("Audio stream recovered after HTTP 409 retry.");
+      }
+      return retry;
+    } catch (error) {
+      setLiveAudioStatusV2832(`Audio 409 recovery failed: ${error && error.message ? error.message : String(error)}`);
+      return response;
+    }
+  };
+
+  window.plutoAudioLive409RetryV2832 = {
+    marker: MARKER,
+    reset: async function resetAudioLive409V2832(downlinkHz) {
+      const hz = String(downlinkHz || "").replace(/[^0-9]/g, "");
+      await postBackendJsonV2832("/api/radio/audio/live/stop");
+      if (hz) await postBackendJsonV2832(`/api/radio/audio/live/start?downlink_hz=${encodeURIComponent(hz)}`);
+      return { ok: true, marker: MARKER, downlink_hz: hz || null };
+    }
+  };
+})();
+/* AUDIO_LIVE_409_RETRY_V2_8_32_END */
+
