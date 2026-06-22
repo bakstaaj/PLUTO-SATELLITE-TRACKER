@@ -10502,3 +10502,153 @@ function passActionInactiveTextV286(pass) {
 })();
 /* BACKEND_AUDIO_DIRECT_START_NO_LEGACY_STOP_V2_8_37_END */
 
+/* LIVE_WAV_VERIFIED_START_GATE_V2_8_39
+ * Central guard for every browser fetch of /api/radio/audio/live.wav.
+ * The backend audit proved the correct order is start -> stream.  This guard
+ * prevents old or duplicate UI handlers from opening live.wav before a verified
+ * /api/radio/audio/live/start call succeeds.  It does not add a blind reset loop.
+ */
+(function installLiveWavVerifiedStartGateV2839() {
+  if (window.__plutoLiveWavVerifiedStartGateV2839) return;
+  window.__plutoLiveWavVerifiedStartGateV2839 = true;
+
+  const marker = "LIVE_WAV_VERIFIED_START_GATE_V2_8_39";
+  const originalFetch = window.fetch.bind(window);
+  const activeStarts = new Map();
+  let lastEvent = { marker, state: "installed", at: new Date().toISOString() };
+
+  function asUrlV2839(input) {
+    const raw = typeof input === "string" ? input : ((input && input.url) || String(input || ""));
+    try { return new URL(raw, window.location.origin); } catch (_error) { return null; }
+  }
+
+  function nowIsoV2839() {
+    return new Date().toISOString();
+  }
+
+  function noteV2839(state, detail) {
+    lastEvent = { marker, state, at: nowIsoV2839(), ...(detail || {}) };
+    try { console.log("Pluto live WAV gate:", lastEvent); } catch (_error) {}
+    try {
+      const modalStatus = document.getElementById("passRowBackendTestStatusV2827") ||
+        document.getElementById("passRowBackendTestBodyV2827") ||
+        document.getElementById("analogAudioStatus") ||
+        document.getElementById("status");
+      if (modalStatus && detail && detail.message) modalStatus.textContent = detail.message;
+    } catch (_error) {}
+  }
+
+  function modeForStartV2839(url) {
+    const explicit = String(url.searchParams.get("mode") || "").trim();
+    if (explicit) return explicit;
+    try {
+      const pass = (typeof currentSelectedPass !== "undefined" && currentSelectedPass) ? currentSelectedPass : null;
+      const raw = String((pass && pass.radio && pass.radio.mode) || (pass && pass.modes && pass.modes[0]) || "").toUpperCase();
+      if (/^(N?FM|WFM|AM|USB|LSB|SSB)$/.test(raw)) return raw;
+    } catch (_error) {}
+    return "FM";
+  }
+
+  function startUrlForLiveWavV2839(liveUrl) {
+    const downlink = liveUrl.searchParams.get("downlink_hz") || liveUrl.searchParams.get("downlink") || "";
+    if (!downlink) throw new Error("Cannot start live audio: live.wav URL has no downlink_hz.");
+    const params = new URLSearchParams({ downlink_hz: String(downlink), mode: modeForStartV2839(liveUrl) });
+    try {
+      if (typeof spectrumLiveAudioControlParamsV2615 === "function") {
+        const controls = spectrumLiveAudioControlParamsV2615();
+        Object.entries(controls || {}).forEach(([key, value]) => {
+          if (value !== undefined && value !== null && String(value) !== "") params.set(key, String(value));
+        });
+      }
+    } catch (_error) {}
+    return { downlink, url: `/api/radio/audio/live/start?${params.toString()}` };
+  }
+
+  async function responseTextV2839(response) {
+    try { return await response.clone().text(); } catch (_error) { return ""; }
+  }
+
+  async function verifiedStartForLiveWavV2839(liveUrl, reason) {
+    const start = startUrlForLiveWavV2839(liveUrl);
+    const existing = activeStarts.get(start.downlink);
+    if (existing && existing.ok === true) {
+      return existing;
+    }
+
+    noteV2839("starting", {
+      downlink_hz: start.downlink,
+      start_url: start.url,
+      message: `Starting backend live audio before stream (${start.downlink} Hz)...`
+    });
+
+    const response = await originalFetch(start.url, {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: "{}"
+    });
+    const bodyText = await responseTextV2839(response);
+    let body = null;
+    try { body = bodyText ? JSON.parse(bodyText) : null; } catch (_error) {}
+
+    if (!response.ok || (body && body.ok === false)) {
+      activeStarts.delete(start.downlink);
+      const message = `Backend live/start failed (${response.status}): ${bodyText || response.statusText}`;
+      noteV2839("start_failed", { downlink_hz: start.downlink, status: response.status, body: bodyText, message });
+      throw new Error(message);
+    }
+
+    const record = { ok: true, downlink_hz: start.downlink, start_url: start.url, status: response.status, body, reason, at: Date.now() };
+    activeStarts.set(start.downlink, record);
+    noteV2839("start_ok", {
+      downlink_hz: start.downlink,
+      status: response.status,
+      message: `Backend live audio started; opening stream (${start.downlink} Hz)...`
+    });
+    return record;
+  }
+
+  window.fetch = async function plutoLiveWavVerifiedStartFetchV2839(input, init) {
+    const url = asUrlV2839(input);
+    if (url && url.pathname.includes("/api/radio/audio/live/stop")) {
+      activeStarts.clear();
+      noteV2839("stop_seen", { message: "Backend live audio stop requested." });
+      return originalFetch(input, init);
+    }
+
+    if (!url || !url.pathname.includes("/api/radio/audio/live.wav")) {
+      return originalFetch(input, init);
+    }
+
+    await verifiedStartForLiveWavV2839(url, "pre_stream_gate");
+    let response = await originalFetch(input, init);
+    if (response.ok || response.status !== 409) return response;
+
+    const bodyText = await responseTextV2839(response);
+    const downlink = url.searchParams.get("downlink_hz") || url.searchParams.get("downlink") || "";
+    noteV2839("stream_409", {
+      downlink_hz: downlink,
+      status: response.status,
+      body: bodyText,
+      message: `live.wav returned 409 after verified start: ${bodyText || response.statusText}`
+    });
+
+    if (/live analog audio is not running/i.test(bodyText || "")) {
+      activeStarts.delete(String(downlink));
+      await verifiedStartForLiveWavV2839(url, "post_409_not_running");
+      response = await originalFetch(input, init);
+    }
+    return response;
+  };
+
+  window.plutoLiveWavStartGateV2839 = {
+    marker,
+    status: () => ({ lastEvent, activeStarts: Array.from(activeStarts.entries()) }),
+    clear: () => { activeStarts.clear(); noteV2839("cleared", { message: "Live WAV start gate state cleared." }); },
+    startForUrl: (url) => verifiedStartForLiveWavV2839(new URL(url, window.location.origin), "manual")
+  };
+
+  noteV2839("installed", { message: "Live WAV verified-start gate installed." });
+})();
+/* LIVE_WAV_VERIFIED_START_GATE_V2_8_39_END */
+
