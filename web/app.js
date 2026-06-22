@@ -10084,3 +10084,94 @@ function passActionInactiveTextV286(pass) {
 })();
 /* BACKEND_AUDIO_DETERMINISTIC_SEQUENCE_V2_8_35_END */
 
+/* BACKEND_AUDIO_BOUNDED_STOP_V2_8_36
+ * Keep live-audio cleanup from blocking a new backend audio test.
+ * The backend audit proved the reliable sequence is stop -> start -> live.wav.
+ * This UI-only guard keeps stop idempotent and bounded: try to clear stale
+ * backend audio, but never let a hung stop request prevent live/start.
+ */
+(function installBackendAudioBoundedStopV2836() {
+  const MARKER = "BACKEND_AUDIO_BOUNDED_STOP_V2_8_36";
+  if (window.__plutoBackendAudioBoundedStopV2836) return;
+  window.__plutoBackendAudioBoundedStopV2836 = true;
+
+  const STOP_TIMEOUT_MS = 1800;
+  const previousPostJsonV2836 = (typeof postJson === "function") ? postJson : null;
+
+  function isLiveStopUrlV2836(url) {
+    return String(url || "").indexOf("/api/radio/audio/live/stop") >= 0;
+  }
+
+  function statusTextV2836(message) {
+    try {
+      const modalStatus = document.getElementById("backendTestStatusV2827") ||
+        document.getElementById("passRowBackendTestStatusV2827") ||
+        document.querySelector(".backend-test-status-v2827, .pass-row-backend-test-status-v2827");
+      if (modalStatus) modalStatus.textContent = message;
+      const statusBar = document.getElementById("status");
+      if (statusBar) statusBar.textContent = message;
+    } catch (_error) {}
+  }
+
+  async function boundedLiveStopV2836(url, payload, timeoutMs) {
+    const targetUrl = String(url || "/api/radio/audio/live/stop");
+    const ms = Number.isFinite(Number(timeoutMs)) ? Math.max(250, Number(timeoutMs)) : STOP_TIMEOUT_MS;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      try { controller.abort(); } catch (_error) {}
+    }, ms);
+
+    try {
+      const response = await fetch(targetUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload || {}),
+        cache: "no-store",
+        signal: controller.signal
+      });
+      const body = await response.text().catch(() => "");
+      let data = null;
+      try { data = body ? JSON.parse(body) : {}; } catch (_error) { data = { raw_body: body.slice(0, 1000) }; }
+      const result = Object.assign({}, data || {}, {
+        ok: response.ok && (!data || data.ok !== false),
+        http_ok: response.ok,
+        http_status: response.status,
+        marker: MARKER,
+        bounded_stop: true
+      });
+      if (!response.ok) {
+        statusTextV2836(`Backend audio stop returned HTTP ${response.status}; continuing with start.`);
+      }
+      return result;
+    } catch (error) {
+      const timedOut = error && (error.name === "AbortError" || /abort/i.test(String(error.message || error)));
+      const message = timedOut
+        ? `Backend audio stop timed out after ${ms} ms; continuing with start.`
+        : `Backend audio stop failed (${error && error.message ? error.message : String(error)}); continuing with start.`;
+      statusTextV2836(message);
+      return {
+        ok: false,
+        marker: MARKER,
+        bounded_stop: true,
+        timeout: !!timedOut,
+        error: error && error.message ? error.message : String(error),
+        message
+      };
+    } finally {
+      window.clearTimeout(timer);
+    }
+  }
+
+  if (previousPostJsonV2836) {
+    postJson = async function postJsonWithBoundedLiveStopV2836(url, payload) {
+      if (isLiveStopUrlV2836(url)) {
+        return boundedLiveStopV2836(url, payload, STOP_TIMEOUT_MS);
+      }
+      return previousPostJsonV2836.apply(this, arguments);
+    };
+  }
+
+  window.plutoBoundedLiveAudioStopV2836 = boundedLiveStopV2836;
+  window.plutoBackendAudioBoundedStopMarkerV2836 = MARKER;
+})();
+
