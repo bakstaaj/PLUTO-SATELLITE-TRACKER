@@ -8495,3 +8495,300 @@ function passActionInactiveTextV286(pass) {
   }
 })();
 
+
+/* PASS_ROW_BACKEND_TEST_MODAL_V2_8_27
+ * Row action test modal. Opens an explicit operator dialog for pass-row
+ * Listen/Receive backend tests. This avoids relying on the removed azimuth-map
+ * action controls and gives a visible Stop/Close/status surface even outside
+ * AOS/LOS. Web UI only; backend C is unchanged.
+ */
+(function installPassRowBackendTestModalV2827() {
+  if (window.__plutoPassRowBackendTestModalV2827) return;
+  window.__plutoPassRowBackendTestModalV2827 = true;
+  const MARKER = "PASS_ROW_BACKEND_TEST_MODAL_V2_8_27";
+
+  function modeTextV2827(pass) {
+    const radio = (pass && pass.radio) || {};
+    return String(radio.mode || ((pass && pass.modes) || [])[0] || "").trim();
+  }
+
+  function downlinkHzV2827(pass) {
+    const radio = (pass && pass.radio) || {};
+    return radio.downlink_hz || ((pass && pass.downlinks_hz) || [])[0] || "";
+  }
+
+  function formatHzV2827(hz) {
+    try {
+      if (typeof formatHz === "function") return formatHz(hz);
+    } catch (_error) {}
+    const value = Number(hz || 0);
+    return Number.isFinite(value) && value > 0 ? `${(value / 1000000).toFixed(3)} MHz` : "No downlink";
+  }
+
+  function passLabelV2827(pass) {
+    const mode = modeTextV2827(pass).toUpperCase();
+    if (/\b(FM|NFM|WFM|AM|USB|LSB|SSB)\b/.test(mode)) return "Listen";
+    return mode ? `Receive: ${modeTextV2827(pass)}` : "Radio";
+  }
+
+  function isReceiveModeV2827(pass) {
+    try {
+      if (typeof isDecodeReceiveModeV282 === "function" && isDecodeReceiveModeV282(pass)) return true;
+    } catch (_error) {}
+    const mode = modeTextV2827(pass).toUpperCase();
+    if (!mode) return false;
+    return !/\b(FM|NFM|WFM|AM|USB|LSB|SSB)\b/.test(mode);
+  }
+
+  function visiblePassesV2827() {
+    const passes = Array.isArray(window.__plutoLastRenderedPassesV2827) ? window.__plutoLastRenderedPassesV2827 : [];
+    try {
+      return passes.filter((pass) => {
+        const readiness = typeof passReadiness === "function" ? passReadiness(pass) : { state: "unknown", actionable: true };
+        if (typeof passFilter !== "undefined" && passFilter === "all") return true;
+        if (typeof passFilter !== "undefined" && passFilter === "ready") return !!readiness.actionable;
+        if (typeof passFilter !== "undefined" && passFilter === "active") return readiness.state === "active";
+        return readiness.state !== "stale";
+      }).slice(0, 12);
+    } catch (_error) {
+      return passes.slice(0, 12);
+    }
+  }
+
+  function passForRowV2827(row) {
+    const rows = Array.from(document.querySelectorAll("#passes .pass-row, .pass-list .pass-row"));
+    const index = rows.indexOf(row);
+    const visible = visiblePassesV2827();
+    if (index >= 0 && visible[index]) return visible[index];
+    try {
+      if (typeof currentSelectedPass !== "undefined" && currentSelectedPass) return currentSelectedPass;
+    } catch (_error) {}
+    return null;
+  }
+
+  function ensureStyleV2827() {
+    if (document.getElementById("passRowBackendTestModalStyleV2827")) return;
+    const style = document.createElement("style");
+    style.id = "passRowBackendTestModalStyleV2827";
+    style.textContent = `
+      #passRowBackendTestModalV2827[hidden]{display:none!important}
+      #passRowBackendTestModalV2827{position:fixed;inset:0;z-index:2147483400;display:flex;align-items:center;justify-content:center;background:rgba(15,23,42,.62);backdrop-filter:blur(2px)}
+      .pass-row-backend-test-card-v2827{width:min(760px,calc(100vw - 28px));max-height:calc(100vh - 34px);overflow:auto;border-radius:16px;background:#0f172a;color:#e5e7eb;border:1px solid rgba(148,163,184,.35);box-shadow:0 22px 70px rgba(0,0,0,.46);font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+      .pass-row-backend-test-header-v2827{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:16px 18px;border-bottom:1px solid rgba(148,163,184,.24)}
+      .pass-row-backend-test-header-v2827 h2{margin:0;font-size:18px;line-height:1.25;color:#f8fafc}
+      .pass-row-backend-test-header-v2827 .meta{margin:4px 0 0;color:#bfdbfe;font-size:13px}
+      .pass-row-backend-test-body-v2827{padding:16px 18px;display:grid;gap:12px}
+      .pass-row-backend-test-grid-v2827{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px}
+      .pass-row-backend-test-grid-v2827 div{border:1px solid rgba(148,163,184,.22);border-radius:10px;padding:9px;background:rgba(30,41,59,.55)}
+      .pass-row-backend-test-grid-v2827 strong{display:block;color:#93c5fd;font-size:11px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px}
+      #passRowBackendTestStatusV2827{white-space:pre-wrap;min-height:96px;max-height:300px;overflow:auto;background:#020617;color:#dbeafe;border:1px solid rgba(96,165,250,.28);border-radius:10px;padding:11px;font:12px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace}
+      .pass-row-backend-test-actions-v2827{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;padding:14px 18px;border-top:1px solid rgba(148,163,184,.24)}
+      .pass-row-backend-test-actions-v2827 button{border:1px solid rgba(96,165,250,.55);background:#1d4ed8;color:white;border-radius:999px;padding:8px 13px;font-weight:650;cursor:pointer}
+      .pass-row-backend-test-actions-v2827 button.secondary{background:#334155;border-color:rgba(148,163,184,.5)}
+      .pass-row-backend-test-actions-v2827 button.danger{background:#991b1b;border-color:#fca5a5}
+    `;
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  function ensureModalV2827() {
+    ensureStyleV2827();
+    let modal = document.getElementById("passRowBackendTestModalV2827");
+    if (modal) return modal;
+    modal = document.createElement("div");
+    modal.id = "passRowBackendTestModalV2827";
+    modal.hidden = true;
+    modal.innerHTML = `
+      <div class="pass-row-backend-test-card-v2827" role="dialog" aria-modal="true" aria-labelledby="passRowBackendTestTitleV2827">
+        <div class="pass-row-backend-test-header-v2827">
+          <div>
+            <h2 id="passRowBackendTestTitleV2827">Backend test action</h2>
+            <div id="passRowBackendTestSubtitleV2827" class="meta"></div>
+          </div>
+          <button id="passRowBackendTestCloseTopV2827" class="secondary" type="button">Close</button>
+        </div>
+        <div class="pass-row-backend-test-body-v2827">
+          <div id="passRowBackendTestGridV2827" class="pass-row-backend-test-grid-v2827"></div>
+          <pre id="passRowBackendTestStatusV2827"></pre>
+        </div>
+        <div class="pass-row-backend-test-actions-v2827">
+          <button id="passRowBackendTestOpenReceiveV2827" type="button">Open Receive dialog</button>
+          <button id="passRowBackendTestStopV2827" class="danger" type="button">Stop audio</button>
+          <button id="passRowBackendTestCopyV2827" class="secondary" type="button">Copy status</button>
+          <button id="passRowBackendTestCloseV2827" class="secondary" type="button">Close</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+
+    const close = () => { modal.hidden = true; };
+    modal.addEventListener("click", (event) => { if (event.target === modal) close(); });
+    document.getElementById("passRowBackendTestCloseTopV2827")?.addEventListener("click", close);
+    document.getElementById("passRowBackendTestCloseV2827")?.addEventListener("click", close);
+    document.getElementById("passRowBackendTestStopV2827")?.addEventListener("click", async () => {
+      const status = document.getElementById("passRowBackendTestStatusV2827");
+      try {
+        if (typeof stopAnalogAudio === "function") await stopAnalogAudio("Backend test audio stopped.");
+        if (status) status.textContent += "\nStopped audio session.";
+      } catch (error) {
+        if (status) status.textContent += `\nStop failed: ${error && error.message ? error.message : String(error)}`;
+      }
+    });
+    document.getElementById("passRowBackendTestCopyV2827")?.addEventListener("click", async () => {
+      const status = document.getElementById("passRowBackendTestStatusV2827");
+      const text = status ? status.textContent : "";
+      try { await navigator.clipboard.writeText(text); } catch (_error) {}
+    });
+    document.getElementById("passRowBackendTestOpenReceiveV2827")?.addEventListener("click", () => {
+      const pass = window.__plutoBackendTestPassV2827;
+      try {
+        if (pass && typeof openReceivePlaceholderModalV282 === "function") openReceivePlaceholderModalV282(pass);
+      } catch (error) {
+        const status = document.getElementById("passRowBackendTestStatusV2827");
+        if (status) status.textContent += `\nOpen Receive dialog failed: ${error && error.message ? error.message : String(error)}`;
+      }
+    });
+    return modal;
+  }
+
+  function setModalPassV2827(pass, statusText) {
+    const modal = ensureModalV2827();
+    window.__plutoBackendTestPassV2827 = pass || null;
+    const name = (pass && pass.name) || "Selected pass";
+    const mode = modeTextV2827(pass) || "unknown";
+    const downlink = downlinkHzV2827(pass);
+    const label = passLabelV2827(pass);
+    const title = document.getElementById("passRowBackendTestTitleV2827");
+    const subtitle = document.getElementById("passRowBackendTestSubtitleV2827");
+    const grid = document.getElementById("passRowBackendTestGridV2827");
+    const status = document.getElementById("passRowBackendTestStatusV2827");
+    const receiveButton = document.getElementById("passRowBackendTestOpenReceiveV2827");
+    if (title) title.textContent = `${label} backend test`;
+    if (subtitle) subtitle.textContent = name;
+    if (grid) {
+      const rows = [
+        ["Satellite", name],
+        ["Action", label],
+        ["Mode", mode],
+        ["Downlink", downlink ? formatHzV2827(downlink) : "No downlink"],
+        ["AOS", pass && pass.aos_utc ? (typeof formatTime === "function" ? formatTime(pass.aos_utc) : pass.aos_utc) : "-"],
+        ["LOS", pass && pass.los_utc ? (typeof formatTime === "function" ? formatTime(pass.los_utc) : pass.los_utc) : "-"]
+      ];
+      grid.innerHTML = rows.map(([k, v]) => `<div><strong>${String(k).replace(/[&<>]/g, "")}</strong><span>${String(v ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</span></div>`).join("");
+    }
+    if (status) status.textContent = statusText || `Ready. ${label} can be tested outside the pass window.`;
+    if (receiveButton) receiveButton.hidden = !isReceiveModeV2827(pass);
+    modal.hidden = false;
+    return { modal, status };
+  }
+
+  function noteStatusV2827(message) {
+    const status = document.getElementById("passRowBackendTestStatusV2827");
+    if (status) status.textContent = message;
+    const pill = document.getElementById("status");
+    if (pill) pill.textContent = message.split("\n")[0] || message;
+  }
+
+  async function runBackendTestV2827(pass, sourceButton) {
+    if (!pass) {
+      setModalPassV2827(null, "No pass object was available for this row.");
+      return;
+    }
+    const downlink = downlinkHzV2827(pass);
+    const label = passLabelV2827(pass);
+    const name = pass.name || "selected pass";
+    const { status } = setModalPassV2827(pass, `Starting backend test action for ${name}...`);
+
+    if (!downlink) {
+      noteStatusV2827(`Cannot start ${label}: no downlink is available for ${name}.`);
+      return;
+    }
+
+    try {
+      if (typeof renderPassDetail === "function") renderPassDetail(pass);
+    } catch (_error) {}
+
+    if (isReceiveModeV2827(pass)) {
+      try {
+        if (typeof openReceivePlaceholderModalV282 === "function") {
+          openReceivePlaceholderModalV282(pass);
+          noteStatusV2827(`Opened Receive dialog for ${name}.\nMode: ${modeTextV2827(pass) || "unknown"}\nDownlink: ${formatHzV2827(downlink)}\n\nThis dialog is separate from analog audio. Use it to verify the selected receive/decode target while backend decoder work is developed.`);
+          return;
+        }
+      } catch (error) {
+        noteStatusV2827(`Receive dialog failed: ${error && error.message ? error.message : String(error)}`);
+        return;
+      }
+      noteStatusV2827(`Receive target selected for ${name}.\nMode: ${modeTextV2827(pass) || "unknown"}\nDownlink: ${formatHzV2827(downlink)}\n\nNo Receive dialog function is installed in this UI build.`);
+      return;
+    }
+
+    try {
+      const testButton = document.getElementById("passRowBackendTestStopV2827") || sourceButton;
+      if (testButton) {
+        testButton.disabled = false;
+        testButton.textContent = "Stop audio";
+      }
+      if (typeof startAnalogAudio === "function") {
+        await startAnalogAudio(pass, testButton || sourceButton, status || document.getElementById("status"));
+        return;
+      }
+      noteStatusV2827(`Cannot start Listen for ${name}: startAnalogAudio() is not available in this UI build.`);
+    } catch (error) {
+      try { if (typeof stopAnalogAudio === "function") await stopAnalogAudio(); } catch (_stopError) {}
+      noteStatusV2827(`Listen backend test failed for ${name}: ${error && error.message ? error.message : String(error)}`);
+    }
+  }
+
+  function annotateRowsV2827() {
+    const rows = Array.from(document.querySelectorAll("#passes .pass-row, .pass-list .pass-row"));
+    rows.forEach((row, index) => {
+      row.dataset.passRowIndexV2827 = String(index);
+      const button = row.querySelector(".pass-row-action-button-v286");
+      if (!button) return;
+      button.disabled = false;
+      button.removeAttribute("disabled");
+      button.setAttribute("aria-disabled", "false");
+      button.style.pointerEvents = "auto";
+      button.style.opacity = "1";
+      const pass = visiblePassesV2827()[index];
+      if (pass) button.textContent = passLabelV2827(pass);
+      button.title = "Open backend test dialog for this pass row.";
+    });
+  }
+
+  if (typeof renderPasses === "function" && renderPasses.backendTestModalWrappedV2827 !== true) {
+    const previousRenderPassesV2827 = renderPasses;
+    renderPasses = function renderPassesBackendTestModalV2827(payload) {
+      try { window.__plutoLastRenderedPassesV2827 = (payload && payload.passes) || []; } catch (_error) {}
+      const result = previousRenderPassesV2827.apply(this, arguments);
+      try { annotateRowsV2827(); } catch (_error) {}
+      window.setTimeout(() => { try { annotateRowsV2827(); } catch (_error) {} }, 80);
+      window.setTimeout(() => { try { annotateRowsV2827(); } catch (_error) {} }, 300);
+      return result;
+    };
+    renderPasses.backendTestModalWrappedV2827 = true;
+  }
+
+  document.addEventListener("click", function passRowBackendTestClickV2827(event) {
+    const button = event.target && event.target.closest ? event.target.closest(".pass-row-action-button-v286") : null;
+    if (!button) return;
+    const row = button.closest(".pass-row");
+    if (!row) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
+    const pass = passForRowV2827(row);
+    runBackendTestV2827(pass, button);
+  }, true);
+
+  window.plutoOpenPassRowBackendTestModalV2827 = runBackendTestV2827;
+  window.plutoAnnotatePassRowsV2827 = annotateRowsV2827;
+  window.setInterval(() => { try { annotateRowsV2827(); } catch (_error) {} }, 2000);
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => { try { annotateRowsV2827(); } catch (_error) {} }, { once: true });
+  } else {
+    try { annotateRowsV2827(); } catch (_error) {}
+  }
+  console.info(`${MARKER} installed`);
+})();
+/* PASS_ROW_BACKEND_TEST_MODAL_V2_8_27_END */
+
