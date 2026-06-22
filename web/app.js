@@ -3857,6 +3857,87 @@ function configurePassRowActionButtonV286(button, pass, onSelect) {
 }
 /* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6_END */
 
+/* PASS_ACTION_ALWAYS_ENABLED_FOR_TEST_V2_8_22
+ * Backend-test mode: keep pass Listen/Receive action buttons enabled whenever
+ * the pass has a tunable downlink.  The button is no longer gated by AOS/LOS,
+ * so operators can test the audio/decode backend outside a live pass.  Missing
+ * or untunable downlinks still stay disabled because the backend has no valid
+ * RF target to tune.
+ */
+function passActionManualTestAvailableV2822(pass) {
+  if (!pass) return false;
+  if (!passActionDownlinkHzV286(pass)) return false;
+  try {
+    if (typeof isPassTunable === "function") return !!isPassTunable(pass);
+  } catch (_error) {
+  }
+  return true;
+}
+
+function passActionInactiveTextV286(pass) {
+  const label = passActionLabelV286(pass);
+  if (!pass) return `${label} is unavailable until a pass is selected.`;
+  if (!passActionDownlinkHzV286(pass)) return `${label} is unavailable because this pass has no downlink.`;
+  try {
+    if (typeof isPassTunable === "function" && !isPassTunable(pass)) {
+      return `${label} is unavailable because this downlink is outside the Pluto tuning range.`;
+    }
+  } catch (_error) {
+  }
+  return `${label} is enabled for backend testing outside pass time.`;
+}
+
+function applyPassActionButtonVisualsV286(button, pass) {
+  if (!button) return false;
+  const label = passActionLabelV286(pass);
+  const active = passActionIsActiveV286(pass);
+  const target = passActionManualTestAvailableV2822(pass);
+  const state = passActionTimingStateV286(pass);
+  button.classList.add("pass-action-button-v286");
+  button.classList.toggle("pass-action-receive-v286", String(label).startsWith("Receive"));
+  button.classList.toggle("pass-action-listen-v286", String(label).startsWith("Listen"));
+  button.classList.toggle("pass-action-test-enabled-v2822", target && !active);
+  button.dataset.passActionKindV286 = String(label).toLowerCase();
+  button.dataset.passActiveV286 = active ? "1" : "0";
+  button.dataset.passActionTestEnabledV2822 = target ? "1" : "0";
+  if (!/^Stop/i.test(String(button.textContent || ""))) {
+    button.textContent = label;
+  }
+  button.disabled = !target;
+  button.title = target
+    ? (active
+      ? `${label} active for this pass.`
+      : `${label} enabled for backend testing. Pass state: ${state}.`)
+    : passActionInactiveTextV286(pass);
+  button.setAttribute("aria-disabled", button.disabled ? "true" : "false");
+  return target;
+}
+
+function configurePassRowActionButtonV286(button, pass, onSelect) {
+  if (!button) return;
+  applyPassActionButtonVisualsV286(button, pass);
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!passActionManualTestAvailableV2822(pass)) {
+      button.title = passActionInactiveTextV286(pass);
+      return;
+    }
+    if (typeof onSelect === "function") onSelect();
+    window.setTimeout(() => {
+      const primary = document.getElementById("analogAudioToggleButton");
+      if (primary && !primary.disabled) {
+        primary.click();
+      } else if (primary) {
+        primary.disabled = false;
+        primary.click();
+      }
+    }, 80);
+  });
+}
+/* PASS_ACTION_ALWAYS_ENABLED_FOR_TEST_V2_8_22_END */
+
+
     function renderPasses(payload) {
       const node = document.getElementById("passes");
       const passes = payload.passes || [];
