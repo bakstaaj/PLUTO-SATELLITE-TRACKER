@@ -3938,6 +3938,90 @@ function configurePassRowActionButtonV286(button, pass, onSelect) {
 /* PASS_ACTION_ALWAYS_ENABLED_FOR_TEST_V2_8_22_END */
 
 
+    
+
+/* PASS_ROW_BUTTONS_CLICKABLE_ANYTIME_V2_8_23
+ * Backend-test mode repair.  v2.8.22 still called isPassTunable(), which kept
+ * pass-row buttons disabled for many rows.  For backend testing, the pass-row
+ * action button is enabled whenever the pass has a downlink.  The backend may
+ * still reject an impossible frequency, but the UI no longer blocks operator
+ * testing based on AOS/LOS or the broader tunable/readiness classifier.
+ */
+function passActionManualTestAvailableV2822(pass) {
+  return !!passActionDownlinkHzV286(pass);
+}
+
+function passActionInactiveTextV286(pass) {
+  const label = passActionLabelV286(pass);
+  if (!pass) return `${label} is unavailable until a pass is selected.`;
+  if (!passActionDownlinkHzV286(pass)) return `${label} is unavailable because this pass has no downlink.`;
+  return `${label} is enabled for backend testing outside pass time.`;
+}
+
+function applyPassActionButtonVisualsV286(button, pass) {
+  if (!button) return false;
+  const label = passActionLabelV286(pass);
+  const active = passActionIsActiveV286(pass);
+  const target = passActionManualTestAvailableV2822(pass);
+  const state = passActionTimingStateV286(pass);
+  button.classList.add("pass-action-button-v286");
+  button.classList.toggle("pass-action-receive-v286", String(label).startsWith("Receive"));
+  button.classList.toggle("pass-action-listen-v286", String(label).startsWith("Listen"));
+  button.classList.toggle("pass-action-test-enabled-v2822", target && !active);
+  button.classList.add("pass-action-test-anytime-v2823");
+  button.dataset.passActionKindV286 = String(label).toLowerCase();
+  button.dataset.passActiveV286 = active ? "1" : "0";
+  button.dataset.passActionTestEnabledV2822 = target ? "1" : "0";
+  button.dataset.passActionAnytimeV2823 = target ? "1" : "0";
+  if (!/^Stop/i.test(String(button.textContent || ""))) {
+    button.textContent = label;
+  }
+  button.disabled = !target;
+  if (target) {
+    button.removeAttribute("disabled");
+    button.setAttribute("aria-disabled", "false");
+    button.title = active
+      ? `${label} active for this pass.`
+      : `${label} enabled for backend testing. Pass state: ${state}.`;
+  } else {
+    button.setAttribute("disabled", "disabled");
+    button.setAttribute("aria-disabled", "true");
+    button.title = passActionInactiveTextV286(pass);
+  }
+  return target;
+}
+
+function configurePassRowActionButtonV286(button, pass, onSelect) {
+  if (!button) return;
+  applyPassActionButtonVisualsV286(button, pass);
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!passActionManualTestAvailableV2822(pass)) {
+      button.title = passActionInactiveTextV286(pass);
+      return;
+    }
+    if (typeof onSelect === "function") onSelect();
+    window.setTimeout(() => {
+      const primary = document.getElementById("analogAudioToggleButton");
+      if (primary) {
+        primary.disabled = false;
+        primary.removeAttribute("disabled");
+        primary.click();
+      } else if (typeof startAnalogAudio === "function") {
+        const statusNode = document.getElementById("status") || document.body;
+        startAnalogAudio(pass, button, statusNode).catch((error) => {
+          const message = error && error.message ? error.message : String(error);
+          if (statusNode) statusNode.textContent = message;
+          button.textContent = "Failed";
+          window.setTimeout(() => applyPassActionButtonVisualsV286(button, pass), 1200);
+        });
+      }
+    }, 80);
+  });
+}
+/* PASS_ROW_BUTTONS_CLICKABLE_ANYTIME_V2_8_23_END */
+
     function renderPasses(payload) {
       const node = document.getElementById("passes");
       const passes = payload.passes || [];
@@ -3991,7 +4075,7 @@ function configurePassRowActionButtonV286(button, pass, onSelect) {
           <div></div>
           <div></div>
           <div class="pass-row-actions-v286">
-            <button class="pass-row-action-button-v286 pass-action-button-v286" type="button" disabled>Radio</button>
+            <button class="pass-row-action-button-v286 pass-action-button-v286" type="button">Radio</button>
             <button class="pass-detail-button" type="button">Details</button>
           </div>
         `;
