@@ -8951,3 +8951,134 @@ function passActionInactiveTextV286(pass) {
 })();
 /* PASS_ROW_SINGLE_MODAL_FIX_V2_8_28_END */
 
+
+/* RETIRE_LEGACY_RECEIVE_PLACEHOLDER_MODAL_V2_8_29
+ * The pass-row backend-test modal is now the only dialog opened by pass-row
+ * Listen/Receive actions.  The older Receive Decode placeholder modal can be
+ * opened by legacy event listeners and causes duplicate white-on-white dialogs.
+ * Retire that legacy modal globally, keep it hidden if an older listener opens
+ * it, and suppress its old button binding.  UI-only; backend C untouched.
+ */
+(function retireLegacyReceivePlaceholderModalV2829() {
+  const MARKER = "RETIRE_LEGACY_RECEIVE_PLACEHOLDER_MODAL_V2_8_29";
+  if (window.__plutoRetireLegacyReceivePlaceholderV2829) return;
+  window.__plutoRetireLegacyReceivePlaceholderV2829 = true;
+
+  function installStyleV2829() {
+    let style = document.getElementById("retireLegacyReceivePlaceholderStyleV2829");
+    if (style) return style;
+    style = document.createElement("style");
+    style.id = "retireLegacyReceivePlaceholderStyleV2829";
+    style.textContent = `
+      #receivePlaceholderModalV282 {
+        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        opacity: 0 !important;
+      }
+      #receiveDecodePlaceholderButtonV282 {
+        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+      }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+    return style;
+  }
+
+  function hideLegacyReceivePlaceholderV2829() {
+    const modal = document.getElementById("receivePlaceholderModalV282");
+    if (modal) {
+      modal.hidden = true;
+      modal.setAttribute("aria-hidden", "true");
+      modal.style.display = "none";
+      modal.style.visibility = "hidden";
+      modal.style.pointerEvents = "none";
+      modal.style.opacity = "0";
+    }
+    document.querySelectorAll("#receiveDecodePlaceholderButtonV282").forEach((button) => {
+      button.hidden = true;
+      button.disabled = true;
+      button.setAttribute("aria-hidden", "true");
+      button.style.display = "none";
+      button.style.pointerEvents = "none";
+    });
+  }
+
+  function legacyReceiveNoopV2829(pass) {
+    hideLegacyReceivePlaceholderV2829();
+    const status = document.getElementById("status");
+    if (status) {
+      const name = pass && pass.name ? String(pass.name) : "selected pass";
+      status.textContent = `Legacy Receive Decode placeholder suppressed for ${name}; use the Backend Test modal.`;
+    }
+    return null;
+  }
+
+  function installOverridesV2829() {
+    installStyleV2829();
+    hideLegacyReceivePlaceholderV2829();
+
+    try {
+      openReceivePlaceholderModalV282 = legacyReceiveNoopV2829;
+      window.openReceivePlaceholderModalV282 = legacyReceiveNoopV2829;
+    } catch (_error) {
+      window.openReceivePlaceholderModalV282 = legacyReceiveNoopV2829;
+    }
+
+    try {
+      if (typeof bindReceiveDecodePlaceholderV282 === "function" && !bindReceiveDecodePlaceholderV282.retiredByV2829) {
+        bindReceiveDecodePlaceholderV282 = function bindReceiveDecodePlaceholderRetiredV2829(_pass, node) {
+          const button = node && node.querySelector ? node.querySelector("#receiveDecodePlaceholderButtonV282") : null;
+          const status = node && node.querySelector ? node.querySelector("#receiveDecodeStatusV282") : null;
+          if (button) {
+            button.hidden = true;
+            button.disabled = true;
+            button.setAttribute("aria-hidden", "true");
+            button.style.display = "none";
+            button.style.pointerEvents = "none";
+          }
+          if (status) {
+            status.hidden = true;
+            status.textContent = "";
+          }
+          hideLegacyReceivePlaceholderV2829();
+        };
+        bindReceiveDecodePlaceholderV282.retiredByV2829 = true;
+      }
+    } catch (_error) {}
+  }
+
+  document.addEventListener("click", (event) => {
+    const target = event.target && event.target.closest
+      ? event.target.closest("#receivePlaceholderModalV282, #receiveDecodePlaceholderButtonV282")
+      : null;
+    if (!target) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
+    hideLegacyReceivePlaceholderV2829();
+  }, true);
+
+  function startV2829() {
+    installOverridesV2829();
+    const observer = new MutationObserver(() => hideLegacyReceivePlaceholderV2829());
+    if (document.body) observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["hidden", "style", "class", "aria-hidden"]
+    });
+    window.setInterval(hideLegacyReceivePlaceholderV2829, 500);
+  }
+
+  window.plutoHideLegacyReceivePlaceholderV2829 = hideLegacyReceivePlaceholderV2829;
+  window.plutoRetireLegacyReceivePlaceholderV2829 = installOverridesV2829;
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", startV2829, { once: true });
+  } else {
+    startV2829();
+  }
+})();
+/* RETIRE_LEGACY_RECEIVE_PLACEHOLDER_MODAL_V2_8_29_END */
