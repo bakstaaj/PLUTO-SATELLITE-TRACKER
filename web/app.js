@@ -8792,3 +8792,162 @@ function passActionInactiveTextV286(pass) {
 })();
 /* PASS_ROW_BACKEND_TEST_MODAL_V2_8_27_END */
 
+/* PASS_ROW_SINGLE_MODAL_FIX_V2_8_28
+ * Keep pass-row backend testing to a single operator modal. v2.8.27 opened
+ * the new backend-test modal and the older Receive placeholder at the same
+ * time for data rows.  This patch suppresses the legacy Receive placeholder
+ * during pass-row backend-test clicks and styles it safely if opened elsewhere.
+ * UI-only; backend C and radio endpoints are unchanged.
+ */
+(function installSinglePassRowActionModalFixV2828() {
+  const MARKER = "PASS_ROW_SINGLE_MODAL_FIX_V2_8_28";
+  if (window.__plutoSinglePassRowActionModalFixV2828) return;
+  window.__plutoSinglePassRowActionModalFixV2828 = true;
+
+  function injectStyleV2828() {
+    if (document.getElementById("passRowSingleModalFixStyleV2828")) return;
+    const style = document.createElement("style");
+    style.id = "passRowSingleModalFixStyleV2828";
+    style.textContent = `
+      #receivePlaceholderModalV282.receive-placeholder-modal-v282,
+      #receivePlaceholderModalV282 {
+        background: rgba(2, 6, 23, 0.72) !important;
+        color: #e5e7eb !important;
+      }
+      #receivePlaceholderModalV282 .receive-placeholder-card-v282,
+      #receivePlaceholderModalV282 [role="dialog"] {
+        background: #0f172a !important;
+        color: #e5e7eb !important;
+        border: 1px solid rgba(148, 163, 184, 0.35) !important;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55) !important;
+      }
+      #receivePlaceholderModalV282 h1,
+      #receivePlaceholderModalV282 h2,
+      #receivePlaceholderModalV282 h3,
+      #receivePlaceholderModalV282 strong,
+      #receivePlaceholderModalV282 dt {
+        color: #f8fafc !important;
+      }
+      #receivePlaceholderModalV282 p,
+      #receivePlaceholderModalV282 div,
+      #receivePlaceholderModalV282 span,
+      #receivePlaceholderModalV282 dd,
+      #receivePlaceholderModalV282 .meta,
+      #receivePlaceholderModalV282 .help-note {
+        color: #dbeafe !important;
+      }
+      #receivePlaceholderModalV282 button {
+        color: #e0f2fe !important;
+        background: #1d4ed8 !important;
+        border: 1px solid rgba(147, 197, 253, 0.65) !important;
+      }
+      .pass-row-backend-test-modal-v2827 ~ #receivePlaceholderModalV282:not([hidden]),
+      .backend-test-modal-v2827 ~ #receivePlaceholderModalV282:not([hidden]) {
+        display: none !important;
+      }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  function nowV2828() {
+    return Date.now ? Date.now() : new Date().getTime();
+  }
+
+  function suppressLegacyReceivePlaceholderV2828(ms) {
+    window.__plutoSuppressReceivePlaceholderUntilV2828 = nowV2828() + (ms || 2500);
+  }
+
+  function receivePlaceholderSuppressedV2828() {
+    return nowV2828() < Number(window.__plutoSuppressReceivePlaceholderUntilV2828 || 0);
+  }
+
+  function hideLegacyReceivePlaceholderV2828() {
+    const modal = document.getElementById("receivePlaceholderModalV282");
+    if (!modal) return false;
+    if (!receivePlaceholderSuppressedV2828()) return false;
+    modal.hidden = true;
+    modal.setAttribute("aria-hidden", "true");
+    modal.style.display = "none";
+    return true;
+  }
+
+  function restoreLegacyReceivePlaceholderDisplayV2828() {
+    const modal = document.getElementById("receivePlaceholderModalV282");
+    if (!modal) return;
+    if (receivePlaceholderSuppressedV2828()) return;
+    if (modal.hidden) modal.style.display = "";
+  }
+
+  function isPassRowActionButtonV2828(target) {
+    return !!(target && target.closest && target.closest(".pass-row-action-button-v286"));
+  }
+
+  function installClickSuppressionV2828() {
+    document.addEventListener("click", (event) => {
+      if (!isPassRowActionButtonV2828(event.target)) return;
+      suppressLegacyReceivePlaceholderV2828(3500);
+      window.setTimeout(hideLegacyReceivePlaceholderV2828, 0);
+      window.setTimeout(hideLegacyReceivePlaceholderV2828, 50);
+      window.setTimeout(hideLegacyReceivePlaceholderV2828, 150);
+      window.setTimeout(hideLegacyReceivePlaceholderV2828, 400);
+      window.setTimeout(restoreLegacyReceivePlaceholderDisplayV2828, 3600);
+    }, true);
+  }
+
+  function wrapReceivePlaceholderOpenV2828() {
+    try {
+      if (typeof openReceivePlaceholderModalV282 !== "function") return;
+      if (openReceivePlaceholderModalV282.singleModalWrappedV2828) return;
+      const previousOpen = openReceivePlaceholderModalV282;
+      openReceivePlaceholderModalV282 = function openReceivePlaceholderModalSingleModalGuardV2828() {
+        if (receivePlaceholderSuppressedV2828()) {
+          window.setTimeout(hideLegacyReceivePlaceholderV2828, 0);
+          return null;
+        }
+        const result = previousOpen.apply(this, arguments);
+        injectStyleV2828();
+        return result;
+      };
+      openReceivePlaceholderModalV282.singleModalWrappedV2828 = true;
+    } catch (_error) {
+    }
+  }
+
+  function installReceivePlaceholderObserverV2828() {
+    const root = document.body || document.documentElement;
+    if (!root || window.__plutoReceivePlaceholderObserverV2828) return;
+    window.__plutoReceivePlaceholderObserverV2828 = new MutationObserver(() => {
+      injectStyleV2828();
+      hideLegacyReceivePlaceholderV2828();
+    });
+    window.__plutoReceivePlaceholderObserverV2828.observe(root, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["hidden", "style", "class"]
+    });
+  }
+
+  function initV2828() {
+    injectStyleV2828();
+    wrapReceivePlaceholderOpenV2828();
+    installClickSuppressionV2828();
+    installReceivePlaceholderObserverV2828();
+    window.setInterval(() => {
+      injectStyleV2828();
+      wrapReceivePlaceholderOpenV2828();
+      hideLegacyReceivePlaceholderV2828();
+    }, 1000);
+    window.plutoHideLegacyReceivePlaceholderV2828 = hideLegacyReceivePlaceholderV2828;
+    window.plutoSuppressLegacyReceivePlaceholderV2828 = suppressLegacyReceivePlaceholderV2828;
+    console.info(`[Pluto] ${MARKER} installed`);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initV2828, { once: true });
+  } else {
+    initV2828();
+  }
+})();
+/* PASS_ROW_SINGLE_MODAL_FIX_V2_8_28_END */
+
