@@ -1354,7 +1354,6 @@ static int stream_fm_audio(FILE *pipe, int fd, struct fm_demod_state *state)
 {
     unsigned char iq_bytes[AUDIO_IIO_BUFFER_SAMPLES * 4];
     short pcm[AUDIO_PCM_CHUNK_SAMPLES];
-    char debug_line[128];
     size_t pcm_count = 0;
 
     while (g_running) {
@@ -1373,9 +1372,6 @@ static int stream_fm_audio(FILE *pipe, int fd, struct fm_demod_state *state)
             }
             continue;
         }
-
-        snprintf(debug_line, sizeof(debug_line), "stream_fm_audio got=%lu", (unsigned long)got);
-        append_audio_debug(debug_line);
 
         sample_pairs = got / 4;
         for (sample_index = 0; sample_index < sample_pairs; sample_index++) {
@@ -1415,7 +1411,6 @@ static int stream_fm_audio(FILE *pipe, int fd, struct fm_demod_state *state)
                 state->acc_count = 0;
 
                 if (pcm_count >= AUDIO_PCM_CHUNK_SAMPLES) {
-                    append_audio_debug("stream_fm_audio send_chunk pcm=960");
                     if (send_chunk(fd, pcm, pcm_count * sizeof(short)) != 0) {
                         append_audio_debug("stream_fm_audio send_chunk failed");
                         return -1;
@@ -1427,8 +1422,6 @@ static int stream_fm_audio(FILE *pipe, int fd, struct fm_demod_state *state)
     }
 
     if (pcm_count > 0) {
-        snprintf(debug_line, sizeof(debug_line), "stream_fm_audio flush pcm=%lu", (unsigned long)pcm_count);
-        append_audio_debug(debug_line);
         if (send_chunk(fd, pcm, pcm_count * sizeof(short)) != 0) {
             append_audio_debug("stream_fm_audio flush failed");
             return -1;
