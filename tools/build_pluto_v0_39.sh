@@ -3,13 +3,21 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+docker_path() {
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -w "$1" | sed 's#\\#/#g'
+  else
+    printf '%s\n' "$1"
+  fi
+}
+
 if [[ -f "$ROOT_DIR/.pluto.env" ]]; then
   # shellcheck disable=SC1091
   source "$ROOT_DIR/.pluto.env"
 fi
 
 IMAGE="${PLUTO_CROSS_IMAGE:-pluto-adsb-tracker-cross:v0.39}"
-HOST_ROOT="$(cygpath -w "$ROOT_DIR" | sed 's#\\#/#g')"
+HOST_ROOT="$(docker_path "$ROOT_DIR")"
 
 DOCKER="${DOCKER:-docker}"
 if ! command -v "$DOCKER" >/dev/null 2>&1; then
