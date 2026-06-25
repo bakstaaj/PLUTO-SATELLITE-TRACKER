@@ -23,9 +23,7 @@
 #include <stdint.h>
 #include <pthread.h>
 
-#define APP_VERSION "0.1.0"
-/* BACKEND_STREAMING_AUDIO_STREAM_ROUTE_V1C */
-/* BACKEND_STREAMING_AUDIO_ROUTE_FIX_V1B */
+#define APP_VERSION "2.9.2-dev"
 #define DEFAULT_BIND_ADDR "127.0.0.1"
 #define DEFAULT_NET_BIND_ADDR "0.0.0.0"
 #define DEFAULT_PORT 8080
@@ -1440,13 +1438,6 @@ static int stream_fm_audio(FILE *pipe, int fd, struct fm_demod_state *state)
     return 0;
 }
 
-static int stream_fm_audio_to_file(FILE *pipe, FILE *output, struct fm_demod_state *state)
-{
-    (void)pipe;
-    (void)output;
-    (void)state;
-    return -1;
-}
 
 static int capture_fm_audio_buffer(FILE *pipe, short *pcm_out, size_t pcm_capacity, size_t *pcm_written, struct fm_demod_state *state)
 {
@@ -1669,11 +1660,6 @@ static int refresh_live_audio_process_locked(void)
     return 0;
 }
 
-static void *live_audio_worker(void *arg)
-{
-    (void)arg;
-    return NULL;
-}
 
 static int stop_live_audio_session(void)
 {
@@ -2019,10 +2005,6 @@ static int send_audio_chunk_json(int fd, const struct app_config *cfg, const cha
 
 
 
-/* BACKEND_STREAMING_AUDIO_ROUTE_RECOVERY_V1F
- * Backend-owned continuous audio streaming.
- * The browser should only attach an <audio> element to the returned WAV stream.
- */
 static int query_param_is_true(const char *query, const char *name)
 {
     char value[32] = "";
@@ -2074,10 +2056,6 @@ static void send_live_audio_stop(int fd)
 }
 
 
-/* BACKEND_AUDIO_EXISTING_LIVE_WAV_STREAM_V1E
- * Continuous backend-owned WAV stream over the existing /api/radio/audio/live.wav route.
- * Browser usage: <audio src="/api/radio/audio/live.wav?stream=1">.
- */
 /* BACKEND_AUDIO_TAIL_STREAM_V1H
  * Continuous browser audio stream mode.
  *
@@ -2167,10 +2145,6 @@ static void send_live_audio_stream(int fd, const char *query)
 }
 
 
-/* BACKEND_STREAMING_AUDIO_TAIL_STREAM_V1I
- * Continuous backend-owned browser stream for the existing live.wav endpoint.
- * The browser receives one WAV stream; Pluto owns tuning, DSP, buffering, and pacing.
- */
 
 
 
@@ -2269,7 +2243,6 @@ static void send_live_audio_block(int fd, const char *query)
 }
 
 
-/* BACKEND_STREAMING_AUDIO_V1: continuous backend decoded WAV stream for browser playback. */
 
 static int contains_nocase(const char *haystack, const char *needle)
 {
@@ -3229,7 +3202,6 @@ static void handle_request(
 {
     char file_path[PATH_BUF_SIZE];
 
-    /* BACKEND_STREAMING_AUDIO_STREAM_ROUTE_V1D_EARLY_GUARD: keep continuous browser audio out of fragile router branches. */
     if (strcmp(path, "/api/radio/audio/live/stream.wav") == 0) {
         send_live_audio_stream(fd, query);
         return;
