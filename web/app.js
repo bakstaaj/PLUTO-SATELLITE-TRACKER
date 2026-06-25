@@ -142,7 +142,6 @@
     }
 
     function installCollapsibleDrawerSectionsV248() {
-      // ROTATOR_MODAL_DIALOG_V2_4_8
       document.querySelectorAll("#appDrawer .drawer-section").forEach((section, index) => {
         if (section.dataset.collapsibleV248 === "1") return;
 
@@ -287,7 +286,6 @@
       }
     }
 
-        /* MAP_FINAL_POLISH_V2 */
     function passTimingState(pass) {
       if (!pass) return "unknown";
       const now = Date.now();
@@ -475,8 +473,6 @@
       renderMapPanel(currentSelectedPass, currentObserverConfig);
     }
 
-        /* MAP_PICK_CONTROL_SKY_LABELS_V1 */
-        /* MAP_PICK_BUTTON_CONNECTED_ICON_V2 */
     function setMapLocationPickEnabled(enabled) {
       mapLocationPickEnabled = Boolean(enabled);
 
@@ -537,8 +533,6 @@
       return bestIndex;
     }
 
-        /* MAP_NULL_PASS_STARTUP_FIX_V1 */
-        /* MAP_FINAL_POLISH_V2 */
     function liveLookPointForPass(pass, activeTrackPoint, focusPoint) {
       if (activeTrackPoint) return activeTrackPoint;
       if (!pass) return null;
@@ -571,7 +565,6 @@
       return `${Number(value).toFixed(1)} deg`;
     }
 
-    /* MAP_LIVE_SATELLITE_FIT_ICON_V3 */
     function satelliteLiveIconV3() {
       if (!window.L) return null;
       return L.divIcon({
@@ -633,7 +626,6 @@
     }
 
 
-    /* MAP_PICK_CONTROL_SKY_LABELS_V1 */
     function addLeafletMapPickControlV1(map) {
       if (!map || !window.L) return;
 
@@ -866,7 +858,6 @@
     }
 
 
-    /* SKY_PLOT_LEGEND_COLORS_SAT_ICON_V1 */
     function renderSkySatelliteIcon(point) {
       if (!point) return "";
       const x = Number(point.x || 0).toFixed(1);
@@ -883,7 +874,6 @@
     }
 
 
-    /* SKY_PLOT_AOS_TCA_LOS_COLORS_V1 */
     function skySpecialMarkerClassForPoint(pass, point, index, total) {
       if (!point || !pass) return "";
       const pointTime = point.time_utc || "";
@@ -927,7 +917,6 @@
       return "";
     }
 
-    /* ROTATOR_SELECTED_PASS_PLAN_V2_4_5 */
     let selectedRotatorTrackPlanKeyV245 = "";
 
     async function publishSelectedPassRotatorPlanV245(pass) {
@@ -964,7 +953,6 @@
     }
 
     function bindRotatorModalOpenButtonsV248() {
-      // ROTATOR_MODAL_OPEN_BRIDGE_V2_4_9
       const button = document.getElementById("openRotatorFromListenButton");
       if (!button) return;
 
@@ -983,17 +971,14 @@
       };
     }
 
-    /* SPECTRUM_WATERFALL_UI_V2_5_0 */
     let spectrumWaterfallTimerV250 = 0;
     let spectrumWaterfallRowsV250 = [];
     let spectrumWaterfallFrameV250 = 0;
     let spectrumWaterfallCenterHzV254 = 0; /* SPECTRUM_CENTER_FREQ_LABEL_V2_5_4 */
 
-    /* SPECTRUM_TUNING_CONTROLS_V2_6_5 */
     const SPECTRUM_SAMPLE_RATE_HZ_V265 = 2400000;
     let spectrumWaterfallLastBinsV265 = [];
     let spectrumSquelchUserAdjustedV265 = false;
-    /* SPECTRUM_DECODER_BW_CORRECTION_V2_6_6 */
     let spectrumWaterfallSettingsV265 = {
       bandwidthHz: 200000,       // AD9361 / RF front-end filter bandwidth.
       decoderBandwidthHz: 8000,  // Narrow FM decoder/channel bandwidth.
@@ -1228,7 +1213,6 @@
       return data;
     }
 
-    /* SPECTRUM_CENTER_FREQ_LABEL_V2_5_4 */
     function spectrumWaterfallFormatCenterMHzV254(freqHz) {
       const hz = Number(freqHz || 0);
       if (!Number.isFinite(hz) || hz <= 0) return "";
@@ -1293,7 +1277,6 @@
       ctx.restore();
     }
 
-    /* SPECTRUM_RENDER_GUARD_V2_6_9
      * Safety fallback: draw a basic spectrum/waterfall even if optional tuning overlays throw.
      */
     function drawSpectrumFallbackV269(canvas, bins) {
@@ -1530,7 +1513,6 @@
       return `rgb(${r},${g},${b})`;
     }
 
-        /* SMOOTH_WATERFALL_RENDER_V2_5_6 */
     function waterfallClampV256(value, min, max) {
       return Math.max(min, Math.min(max, value));
     }
@@ -1583,7 +1565,6 @@
       return waterfallLerpV256(av, bv, frac);
     }
 
-    /* PRO_WATERFALL_SCROLL_V2_6_1
      * Render the waterfall like a traditional SDR display:
      * - new snapshots are inserted as one fine row at the top,
      * - older rows move downward,
@@ -1713,7 +1694,6 @@
       ctx.fillText("+1.2 MHz", w - padR - 56 * scale, h - 7 * scale);
     }
 
-    /* SPECTRUM_SELECTED_FREQ_PARAM_V2_5_3 */
     function spectrumWaterfallFrequencyHzV253(pass) {
       if (!pass) return 0;
 
@@ -1780,7 +1760,6 @@
       if (freqHz > 0) {
         params.set("freq_hz", String(freqHz));
       }
-      /* SPECTRUM_SNAPSHOT_NO_TUNING_PARAMS_V2_6_10A */
       ["bandwidth_hz", "decoder_bandwidth_hz", "decoder_bw_hz", "gain_db", "squelch_db"].forEach((key) => params.delete(key));
 
       return {
@@ -1791,7 +1770,6 @@
 
 
 
-    /* SPECTRUM_PAUSE_DURING_AUDIO_V2_6_13
      * The Pluto cannot reliably run live audio DSP and repeated spectrum
      * iio_readdev snapshots at the same time.  When Listen is active, keep
      * the modal open but do not poll the spectrum endpoint, so audio is not
@@ -2299,7 +2277,6 @@ setDl("radioStatus", entries);
       }
     }
 
-    /* DENSE_DOPPLER_RADIO_PLAN_V1 */
     const RADIO_DOPPLER_STEP_SECONDS_V1 = 5;
 
     function interpolateNumberDopplerV1(a, b, ratio) {
@@ -2560,7 +2537,6 @@ setDl("radioStatus", entries);
         }, 1200);
       }
     }
-    /* UI_BACKEND_AUDIO_PLAYER_V1
      * Backend-owned audio streaming.
      *
      * The old player pulled short WAV blocks and scheduled them with WebAudio.
@@ -2570,7 +2546,6 @@ setDl("radioStatus", entries);
      *   selected pass -> backend DSP start -> browser <audio> streams live.wav?stream=1
      * The backend owns tuning/DSP/buffering. The browser only plays a single stream.
      */
-        /* UI_STREAMING_PCM_PLAYER_V2
      * Backend-owned streaming audio with browser PCM playback.
      *
      * Native <audio> rejects some endless WAV streams. This player fetches the
@@ -2579,7 +2554,6 @@ setDl("radioStatus", entries);
      * WebAudio. The browser does not tune, demodulate, or poll blocks; it only
      * plays the backend decoded stream.
      */
-        /* UI_STREAMING_PCM_RECONNECT_V3
      * Backend-owned streaming audio with browser PCM playback and reconnect.
      *
      * Some backend WAV streams close after a short segment. While the session is
@@ -2588,7 +2562,6 @@ setDl("radioStatus", entries);
      * the browser only plays decoded PCM.
      */
 
-    /* LIVE_AUDIO_SPECTRUM_CONTROL_PARAMS_V2_6_8
      * Reuse the compact Spectrum modal tuning controls when starting live audio.
      * These fields are optional; if the controls are not present, backend defaults apply.
      */
@@ -2630,7 +2603,6 @@ setDl("radioStatus", entries);
     }
 
 
-    /* LIVE_AUDIO_SQUELCH_APPLY_V2_6_14 */
     function spectrumLiveAudioControlParamsV2614() {
       const readNumber = (ids, fallback) => {
         for (const id of ids) {
@@ -2670,7 +2642,6 @@ setDl("radioStatus", entries);
       };
     }
 
-    /* LIVE_AUDIO_SQUELCH_CALIBRATION_V2_6_15
      * Persist and reuse the Spectrum tuning controls for live audio.
      * The Listen button may be outside the Spectrum modal, so relying only on DOM slider nodes
      * can silently fall back to defaults.  This keeps a canonical browser-side state.
@@ -3041,7 +3012,6 @@ setDl("radioStatus", entries);
     }
 
 
-    /* NOAA_AUDIO_DIAGNOSTIC_V3
      * Fixed-frequency audio path test. This intentionally bypasses Doppler
      * planning/tracking but uses the same backend live audio start/stream/stop
      * endpoints and the same browser PCM scheduling model as satellite Listen.
@@ -3275,7 +3245,6 @@ setDl("radioStatus", entries);
 
 
 
-    /* MODE_AWARE_RECEIVE_UI_PHASE1_V2_8_2
      * Phase 1 separates analog voice listening from future decoder receive work.
      * FM/AM voice modes keep using the proven Listen audio path. CW, packet,
      * APRS, AFSK, FSK, telemetry, and other data-like modes expose a Receive
@@ -3386,7 +3355,6 @@ setDl("radioStatus", entries);
 
 
 
-    /* RECEIVE_CAPABILITY_GUIDANCE_V2_8_3
      * Adds operator-facing decode guidance to the Receive placeholder without
      * touching backend DSP.  This makes the next decoder phases explicit while
      * preserving the proven Listen path for analog voice passes.
@@ -3463,7 +3431,6 @@ setDl("radioStatus", entries);
       modal.hidden = false;
     }
 
-/* SPECTRUM_BUTTON_ROW_CLEANUP_V2_5_1 */
 function bindAnalogAudio(pass, node) {
       const button = node.querySelector("#analogAudioToggleButton");
       const status = node.querySelector("#analogAudioStatus");
@@ -3515,9 +3482,7 @@ function bindAnalogAudio(pass, node) {
     }
 
 
-        /* PASS_DETAIL_MODAL_LISTEN_V1B */
 
-    /* PASS_DETAIL_MODAL_LISTEN_V1B */
     function openPassDetailModal(pass) {
       renderPassDetail(pass);
       const modal = document.getElementById("passDetailModal");
@@ -3531,7 +3496,6 @@ function bindAnalogAudio(pass, node) {
 
     function renderPassDetail(pass) {
       const node = document.getElementById("passDetail");
-      /* NOAA_AUDIO_DIAGNOSTIC_KEEP_RUNNING_V6
 
        * Do not let normal pass-detail refreshes stop the fixed-frequency
 
@@ -3644,7 +3608,6 @@ function bindAnalogAudio(pass, node) {
       const preview = node.querySelector("#dopplerPreview");
       if (preview) preview.innerHTML = renderDopplerRows(pass.doppler_plan);
     }
-    /* PASS_LOADING_WATCH_V2 */
     function passPayloadNeedsQuickLoadV2(payload) {
       const passes = (payload && payload.passes) || [];
       if (!passes.length) return true;
@@ -3676,7 +3639,6 @@ function bindAnalogAudio(pass, node) {
     }
 
 
-    /* PASS_LOADING_FILE_WATCH_V3 */
     function passPayloadTimestampV3(payload) {
       return String((payload && payload.generated_utc) || "");
     }
@@ -3760,9 +3722,7 @@ function bindAnalogAudio(pass, node) {
     }
 
 
-        /* PASS_DETAIL_MODAL_LISTEN_V1B */
 
-/* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6_BEGIN
  * Make pass-list capability badges into operator action buttons, use the same
  * light-blue action style under the sky/azimuth chart, and keep Listen/Receive
  * disabled until the selected pass is actively overhead.
@@ -3860,9 +3820,7 @@ function configurePassRowActionButtonV286(button, pass, onSelect) {
     }, 80);
   });
 }
-/* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6_END */
 
-/* PASS_ACTION_ALWAYS_ENABLED_FOR_TEST_V2_8_22
  * Backend-test mode: keep pass Listen/Receive action buttons enabled whenever
  * the pass has a tunable downlink.  The button is no longer gated by AOS/LOS,
  * so operators can test the audio/decode backend outside a live pass.  Missing
@@ -3940,12 +3898,10 @@ function configurePassRowActionButtonV286(button, pass, onSelect) {
     }, 80);
   });
 }
-/* PASS_ACTION_ALWAYS_ENABLED_FOR_TEST_V2_8_22_END */
 
 
     
 
-/* PASS_ROW_CLICK_ANYTIME_MAP_GUARD_V2_8_24
  * Backend-test mode final override.  Pass-row action buttons are clickable
  * whenever a pass has any usable downlink value, independent of AOS/LOS and
  * independent of broader pass readiness/tunability helpers.  This is meant for
@@ -4035,10 +3991,8 @@ function configurePassRowActionButtonV286(button, pass, onSelect) {
     }, 80);
   });
 }
-/* PASS_ROW_CLICK_ANYTIME_MAP_GUARD_V2_8_24_END */
 
 
-/* PASS_ROW_DIRECT_ACTION_HANDLER_V2_8_25
  * Backend-test mode for pass-row action buttons.
  *
  * The previous enable patches still relied on the original button click path.
@@ -4179,7 +4133,6 @@ window.setInterval(repairPassRowButtonsV2825, 1500);
 
 
 
-/* PASS_ROW_SELECTED_BUTTON_UNLOCK_V2_8_26
  * Selected-pass backend-test unlock.
  *
  * v2.8.25 proved the pass-row action path can be enabled outside AOS/LOS,
@@ -4292,7 +4245,6 @@ function installPassRowSelectedUnlockV2826() {
   schedulePassRowUnlockV2826();
 }
 installPassRowSelectedUnlockV2826();
-/* PASS_ROW_SELECTED_BUTTON_UNLOCK_V2_8_26_END */
 
 
     function renderPasses(payload) {
@@ -4315,7 +4267,6 @@ installPassRowSelectedUnlockV2826();
         return readiness.state !== "stale";
       });
       const visiblePasses = filteredPasses.slice(0, 12);
-      /* PASS_FILTER_BUTTONS_REMOVED_V2_8_6F
        * The pass list intentionally uses the default useful pass set without
        * the Upcoming/Ready/Active/All filter button row.
        */
@@ -4623,7 +4574,6 @@ const tbody = document.getElementById("satellites");
       }
     })();
 
-    // UI_BROWSER_TIME_QUICK_FULL_REFRESH_V3_APPEND
     // Browser-owned startup recovery for standalone Pluto operation.
     // The browser is the time source: sync Pluto UTC, publish a quick pass
     // preview, and let the full 24-hour pass rebuild complete in the background.
@@ -4665,7 +4615,6 @@ const tbody = document.getElementById("satellites");
       }
 
 
-      /* PASS_LOADING_SPINNER_V1 */
       function showPassLoadingFeedbackV2(title, detail) {
         const passesNode = document.getElementById("passes");
         if (!passesNode) return;
@@ -4831,7 +4780,6 @@ const tbody = document.getElementById("satellites");
     })();
 
 
-/* ROTATOR_UI_CONTROLS_V2_4_0C */
 (function () {
   "use strict";
 
@@ -4851,7 +4799,6 @@ const tbody = document.getElementById("satellites");
   }
 
   function rotatorSuggestedHostV2410() {
-    // ROTATOR_LAN_HOST_ERROR_SOURCE_V2_4_11
     const host = window.location && window.location.hostname ? String(window.location.hostname) : "";
     if (host && host !== "localhost" && host !== "127.0.0.1" && host !== "0.0.0.0") {
       return host;
@@ -4861,7 +4808,6 @@ const tbody = document.getElementById("satellites");
   }
 
   function updateRotatorDirtyNoticeV2410() {
-    // ROTATOR_APPLY_SAVE_HOST_UX_V2_4_10
     const notice = document.getElementById("rotatorUnsavedNotice");
     const saveButton = document.getElementById("rotatorSaveConfigBtn");
     const headerSaveButton = document.getElementById("rotatorHeaderSaveConfigBtn");
@@ -5087,7 +5033,6 @@ const tbody = document.getElementById("satellites");
   }
 
 
-// ROTATOR_UI_LIVE_TARGET_V2_4_2
 let rotatorLiveTargetTimerV242 = null;
 
 function rotatorLiveTargetValueV242(data, keys) {
@@ -5105,8 +5050,6 @@ function rotatorLiveTargetFormatV242(value) {
 }
 
 function rotatorTargetSourceLabelV246(data) {
-  // ROTATOR_SOURCE_READOUT_V2_4_6
-  // ROTATOR_UI_SUCCESS_STATE_V2_4_13
   const raw = [
     data && data.source,
     data && data.message,
@@ -5172,7 +5115,6 @@ function rotatorTargetSourceLabelV246(data) {
 }
 
 function updateRotatorLiveTargetV242(data) {
-  // ROTATOR_UI_LIVE_TARGET_WAITING_FIX_V2_4_2B
   const box = document.getElementById("rotatorLiveTarget");
   if (!box) {
     return;
@@ -5249,7 +5191,6 @@ async function loadRotatorState() {
     return rotatorPost("/api/rotator/track/start", "Rotator tracking started.", "Rotator tracking start failed.");
   }
 
-  // ROTATOR_UI_PROTOCOL_PREVIEW_V2_4_4
   async function previewRotatorProtocolCommandV244() {
     const type = textValue("rotatorType", "simulation");
     const az = numberValue("rotatorTestAz", 180);
@@ -5437,7 +5378,6 @@ async function loadRotatorState() {
 
 
 
-/* UI_VERSION_BADGE_V2_6_18 */
 (function () {
   const uiVersion = "v2.6.25";
   function setVersionBadge(text, className) {
@@ -5468,7 +5408,6 @@ async function loadRotatorState() {
 })();
 
 
-/* RECEIVE_MODE_UI_FOUNDATION_V2_6_21 */
 (function receiveModeFoundationV261(){
   "use strict";
   const digitalPattern = /\b(CW|MORSE|AX\.?25|APRS|PACKET|FSK|GMSK|BPSK|QPSK|PSK|TELEMETRY|DIGITAL|DATA)\b/i;
@@ -5665,11 +5604,9 @@ async function loadRotatorState() {
 })();
 
 
-/* DECODE_MODAL_LIVE_POLL_V2_6_25 */
 window.decodeModalLivePollV2625 = true;
 
 
-/* RECEIVE_BUTTON_DECODE_OVERRIDE_V2_6_26AA
  * Override the pass-detail Listen binding so CW/digital selected passes use the
  * receive/decode endpoints instead of starting speaker audio. FM/voice passes
  * intentionally keep the original analog audio path.
@@ -5923,7 +5860,6 @@ try {
   }
 } catch (_) {}
 
-/* RECEIVE_BUTTON_FM_PRIORITY_V2_6_26D
  * Final receive button override: explicit FM/voice modes must stay on the
  * existing analog Listen path. CW/digital modes route to the decode modal only
  * when those keywords are explicit in the pass metadata.
@@ -6157,7 +6093,6 @@ try {
 })();
 
 
-/* RECEIVE_BUTTON_BPSK_PRIORITY_V2_6_26E
  * Final receive button override: explicit current transmitter mode is the
  * strongest classifier. BPSK/PSK/FSK/GMSK/AX.25/APRS/packet modes are digital,
  * not CW, even if another metadata field mentions beacon/CW historically.
@@ -6412,7 +6347,6 @@ try {
   };
 })();
 
-/* PERIODIC_PASS_REFRESH_V2_6_29
  * Keep the near-term pass queue fresh while the browser UI is open.
  * This intentionally queues the existing backend pass refresh endpoint rather
  * than adding a separate scheduler process. It is guarded against overlapping
@@ -6494,7 +6428,6 @@ try {
   }
 })();
 
-/* LINEAR_TRANSPONDER_CW_OVERRIDE_V2_6_32
  * USB/LSB/SSB linear transponders are analog listen targets by default.
  * They may carry user CW inside the passband, so add a secondary manual
  * Decode CW button without changing the primary Listen behavior.
@@ -6733,7 +6666,6 @@ try {
 })();
 
 
-// DECODE_MODAL_WAITING_COPY_V2_6_33
 (function installDecodeModalWaitingCopyV2633() {
   if (window.__decodeModalWaitingCopyV2633Installed) return;
   window.__decodeModalWaitingCopyV2633Installed = true;
@@ -6834,7 +6766,6 @@ try {
   window.plutoScrubDecodeCopyV2633 = refreshDecodeCopyV2633;
 })();
 
-// PLUTO_UI_BADGE_PASS_REFRESH_RESCUE_V2_7_2_BEGIN
 (function () {
   "use strict";
   const UI_VERSION = "v2.7.2";
@@ -6979,9 +6910,7 @@ try {
     window.plutoRefreshVersionBadgeV272 = refreshVersionBadge;
   });
 })();
-// PLUTO_UI_BADGE_PASS_REFRESH_RESCUE_V2_7_2_END
 
-// PASS_REFRESH_IDLE_FORCE_V2_7_3 START
 (function () {
   "use strict";
 
@@ -7105,9 +7034,7 @@ try {
     startRefreshRescueV273();
   }
 })();
-// PASS_REFRESH_IDLE_FORCE_V2_7_3 END
 
-// VERSION_BADGE_PASS_REPAIR_V2_7_4
 (function () {
   const UI_VERSION = "2.9.2-dev";
   const REFRESH_COOLDOWN_MS = 12 * 60 * 1000;
@@ -7211,7 +7138,6 @@ try {
   }
 })();
 
-/* RECEIVE_DIAGNOSTICS_PANEL_V2_8_4
  * UI-only selected-pass receive/decode readiness panel.  This does not start
  * hardware, touch backend C, or change the existing Listen audio path.
  */
@@ -7339,7 +7265,6 @@ function bindReceiveDiagnosticsPanelV284() {
 
 
 
-/* PASS_LIST_RECEIVE_BADGES_V2_8_5
  * Adds lightweight Listen/Receive capability badges to pass-list style rows.
  * This is UI-only: it does not tune, start audio, or call decoder endpoints.
  */
@@ -7429,7 +7354,6 @@ function bindReceiveDiagnosticsPanelV284() {
 })();
 
 
-/* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6_BEGIN */
 (function installActivePassActionButtonPolicyV286() {
   if (window.__plutoActivePassActionButtonPolicyV286) return;
   window.__plutoActivePassActionButtonPolicyV286 = true;
@@ -7487,11 +7411,9 @@ function bindReceiveDiagnosticsPanelV284() {
   }
   window.setInterval(cleanupOldPassiveBadgesV286, 2500);
 })();
-/* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6_END */
 
 
 
-/* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6D_PROTOCOL_LABEL_FIX
  * Correct active-pass action labels so the compact buttons use the same
  * protocol-aware language as the pass-list badges.  Also remove the redundant
  * secondary Decode CW button under the sky plot; the primary action button now
@@ -7576,9 +7498,7 @@ function passActionInactiveTextV286(pass) {
   }
   window.setInterval(cleanupV286D, 1200);
 })();
-/* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6D_PROTOCOL_LABEL_FIX_END */
 
-/* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6E_BEGIN
  * Polish v2.8.6 pass action controls: protocol-aware compact blue buttons,
  * Details button shape alignment, and no redundant Listen/Receive control under
  * the sky/azimuth plot.  UI-only; backend C remains unchanged.
@@ -7782,9 +7702,7 @@ function passActionInactiveTextV286(pass) {
   if (document.body) observer.observe(document.body, { childList: true, subtree: true });
   window.setInterval(polishAllV286E, 2000);
 })();
-/* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6E_END */
 
-/* GMSK_SIGNAL_DIAGNOSTICS_V2_8_7
  * Phase 1 GMSK/9k6 receive diagnostics display.
  * This does not claim bit/HDLC/text decode. It replaces generic AFSK tone
  * copy in the live decode modal with GMSK-specific clock/slicer readiness
@@ -7979,7 +7897,6 @@ function passActionInactiveTextV286(pass) {
 })();
 
 
-/* PASS_ROW_BACKEND_TEST_MODAL_V2_8_27
  * Row action test modal. Opens an explicit operator dialog for pass-row
  * Listen/Receive backend tests. This avoids relying on the removed azimuth-map
  * action controls and gives a visible Stop/Close/status surface even outside
@@ -8273,9 +8190,7 @@ function passActionInactiveTextV286(pass) {
   }
   console.info(`${MARKER} installed`);
 })();
-/* PASS_ROW_BACKEND_TEST_MODAL_V2_8_27_END */
 
-/* PASS_ROW_SINGLE_MODAL_FIX_V2_8_28
  * Keep pass-row backend testing to a single operator modal. v2.8.27 opened
  * the new backend-test modal and the older Receive placeholder at the same
  * time for data rows.  This patch suppresses the legacy Receive placeholder
@@ -8432,10 +8347,8 @@ function passActionInactiveTextV286(pass) {
     initV2828();
   }
 })();
-/* PASS_ROW_SINGLE_MODAL_FIX_V2_8_28_END */
 
 
-/* RETIRE_LEGACY_RECEIVE_PLACEHOLDER_MODAL_V2_8_29
  * The pass-row backend-test modal is now the only dialog opened by pass-row
  * Listen/Receive actions.  The older Receive Decode placeholder modal can be
  * opened by legacy event listeners and causes duplicate white-on-white dialogs.
@@ -8564,9 +8477,7 @@ function passActionInactiveTextV286(pass) {
     startV2829();
   }
 })();
-/* RETIRE_LEGACY_RECEIVE_PLACEHOLDER_MODAL_V2_8_29_END */
 
-/* SINGLE_BACKEND_TEST_MODAL_V2_8_30
  * Keep pass-row Listen/Receive backend tests on one dialog.  v2.8.27 added a
  * modal but still exposed an Open Receive dialog button, and v2.8.29 retired
  * that legacy Receive placeholder.  This patch intercepts pass-row action
@@ -8862,9 +8773,7 @@ function passActionInactiveTextV286(pass) {
   }
   console.info(`${MARKER} installed`);
 })();
-/* SINGLE_BACKEND_TEST_MODAL_V2_8_30_END */
 
-/* BACKEND_TEST_MODAL_FORCE_OPEN_V2_8_31
  * Field repair for the pass-row Backend Test modal.  v2.8.30 started the audio
  * path but the operator modal could fail to appear, leaving only a console/URL
  * 409.  This patch force-creates and force-opens the modal before any backend
@@ -9235,9 +9144,7 @@ function passActionInactiveTextV286(pass) {
   }
   console.info(`${MARKER} installed`);
 })();
-/* BACKEND_TEST_MODAL_FORCE_OPEN_V2_8_31_END */
 
-/* AUDIO_UI_EXPERIMENT_ROLLBACK_V2_8_40C_BEGIN
  * Clean rollback of browser-side audio experiment blocks.
  * This branch restores the backend-test modal force-open UI baseline and leaves
  * audio start/stop behavior to the pre-experiment path for backend repair work.
@@ -9246,4 +9153,3 @@ function passActionInactiveTextV286(pass) {
 (function installAudioUiExperimentRollbackV2840C() {
   window.__plutoAudioUiExperimentRollbackV2840C = true;
 })();
-/* AUDIO_UI_EXPERIMENT_ROLLBACK_V2_8_40C_END */

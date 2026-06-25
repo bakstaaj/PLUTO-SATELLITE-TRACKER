@@ -2049,7 +2049,6 @@ static void send_live_audio_stop(int fd)
 }
 
 
-/* BACKEND_AUDIO_TAIL_STREAM_V1H
  * Continuous browser audio stream mode.
  *
  * The old /api/radio/audio/live.wav endpoint is a block/cursor endpoint and may

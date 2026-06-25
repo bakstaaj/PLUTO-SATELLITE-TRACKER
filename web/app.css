@@ -666,7 +666,6 @@
     }
 
 
-    /* MAP_UI_CONTROLS_V1 */
     .map-pick-enabled {
       background: var(--warn);
       border-color: var(--warn);
@@ -691,7 +690,6 @@
     }
 
 
-    /* PASS_LOADING_SPINNER_V1 */
     .pass-loading {
       display: flex;
       align-items: center;
@@ -737,7 +735,6 @@
     }
 
 
-    /* MAP_LIVE_SATELLITE_FIT_ICON_V3 */
     .satellite-live-icon {
       width: 28px !important;
       height: 28px !important;
@@ -754,7 +751,6 @@
     }
 
 
-    /* MAP_PICK_CONTROL_SKY_LABELS_V1 */
     .map-pick-leaflet-control {
       margin-top: 6px !important;
     }
@@ -811,7 +807,6 @@
     }
 
 
-    /* MAP_PICK_ICON_CONTRAST_V1 */
     .leaflet-control .map-pick-map-button {
       background: #ffffff !important;
       color: #1e495f !important;
@@ -846,7 +841,6 @@
     }
 
 
-    /* MAP_PICK_BUTTON_CONNECTED_ICON_V2 */
     .leaflet-top .leaflet-control.map-pick-leaflet-control {
       margin-top: 0 !important;
     }
@@ -906,7 +900,6 @@
     }
 
 
-    /* COMPACT_MAP_LAYOUT_CLEANUP_V1 */
     .pass-list {
       gap: 4px;
     }
@@ -998,11 +991,7 @@
       font-size: 10.5px;
     }
 
-    /* COMPACT_MAP_LAYOUT_CLEANUP_V1B */
-    /* COMPACT_MAP_LAYOUT_CLEANUP_V1C */
-    /* REMOVE_MAP_NOTE_V1 */
 
-    /* PASS_DETAIL_MODAL_LISTEN_V1B */
     .pass-row {
       grid-template-columns: minmax(0, 1.05fr) minmax(76px, 0.58fr) minmax(92px, 0.75fr) auto;
       align-items: center;
@@ -1142,9 +1131,7 @@
       text-overflow: ellipsis;
     }
 
-    /* PASS_DETAIL_MODAL_LISTEN_V1C */
 
-    /* NEXT_PASSES_SCROLL_PANEL_V1 */
     #passes.pass-list,
     #passes.pass-loading,
     #passes.empty {
@@ -1187,9 +1174,7 @@
       background: var(--muted);
     }
 
-    /* RENAME_SUBSAT_GROUND_POINT_V1 */
 
-    /* SKY_PLOT_LEGEND_COLORS_SAT_ICON_V1 */
     .sky-pass-path {
       stroke: #c4471c;
     }
@@ -1231,7 +1216,6 @@
     }
 
 
-    /* SKY_PLOT_AOS_TCA_LOS_COLORS_V1 */
     .sky-aos-dot {
       fill: #1a7f37 !important;
       stroke: #ffffff !important;
@@ -1251,9 +1235,6 @@
       r: 5.2;
     }
 
-    /* DYNAMIC_MAP_INFO_REMOVE_SKY_READOUT_V1B */
-    /* REMOVE_STALE_CURRENT_LOOK_ANGLE_V1C */
-    /* UI_NO_MOUSE_WHEEL_ZOOM_V1 */
     @media (max-width: 760px) {
       main {
         grid-template-columns: 1fr;
@@ -1287,7 +1268,6 @@
     }
 
 
-/* ROTATOR_UI_CONTROLS_V2_4_0C */
 .rotator-card {
   margin: 1rem 0;
   padding: 1rem;
@@ -1390,7 +1370,6 @@
   color: #fecaca;
 }
 
-/* ROTATOR_UI_LIVE_TARGET_V2_4_2 */
 .rotator-live-target {
   margin: 0.35rem 0 0.75rem 0;
   padding: 0.4rem 0.55rem;
@@ -1404,7 +1383,6 @@
   font-weight: 600;
 }
 
-/* ROTATOR_MODAL_COLLAPSIBLE_MENU_V2_4_8 */
 .drawer-section-details {
   display: block;
 }
@@ -1479,7 +1457,6 @@
   }
 }
 
-/* ROTATOR_APPLY_SAVE_HOST_UX_CSS_V2_4_10 */
 .rotator-unsaved-notice {
   margin: 0.8rem 0;
   padding: 0.65rem 0.8rem;
@@ -1501,7 +1478,6 @@
   box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.22);
 }
 
-/* SPECTRUM_WATERFALL_UI_V2_5_0 */
 .spectrum-open-button {
   min-width: 78px;
 }
@@ -1616,7 +1592,6 @@ body.spectrum-waterfall-modal-open {
   }
 }
 
-/* SPECTRUM_BUTTON_ROW_CLEANUP_V2_5_1 */
 .listen-panel .listen-panel-status-hidden {
   display: none !important;
 }
@@ -1625,14 +1600,11 @@ body.spectrum-waterfall-modal-open {
   flex-wrap: wrap;
 }
 
-/* REAL_SPECTRUM_SNAPSHOT_V2_5_2 */
 .spectrum-waterfall-status {
   white-space: normal;
 }
 
 
-/* SPECTRUM_TUNING_CONTROLS_V2_6_5 */
-/* SPECTRUM_DECODER_BW_CORRECTION_V2_6_6 */
 .spectrum-tuning-controls {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1689,7 +1661,6 @@ body.spectrum-waterfall-modal-open {
 }
 
 
-/* SPECTRUM_COMPACT_TUNING_CONTROLS_V2_6_7
  * Compact spectrum controls. The backend wiring remains the same as v2.6.5/v2.6.6:
  * RF bandwidth and gain are sent to spectrum snapshots; decoder BW and squelch are display/assist controls.
  */
@@ -1771,7 +1742,6 @@ body.spectrum-waterfall-modal-open {
 }
 
 
-/* SPECTRUM_CANVAS_SIZE_GUARD_V2_6_9 */
 #spectrumCanvasV250,
 #waterfallCanvasV250 {
   display: block;
@@ -1789,7 +1759,6 @@ body.spectrum-waterfall-modal-open {
 }
 
 
-/* SPECTRUM_SQUELCH_NOWRAP_V2_6_11
  * Keep the compact squelch Auto button on the same line.  The first three
  * controls are intentionally narrower; the squelch control gets the extra
  * room because it has both a slider and a button.
@@ -1863,7 +1832,6 @@ body.spectrum-waterfall-modal-open {
 }
 
 
-/* UI_VERSION_BADGE_V2_6_18 */
 .app-version-badge {
   position: fixed;
   right: 10px;
@@ -1902,7 +1870,6 @@ body.spectrum-waterfall-modal-open {
 }
 
 
-/* RECEIVE_MODE_UI_CSS_V2_6_21 */
 .receive-decode-modal-v261 {
   position: fixed;
   inset: 0;
@@ -1976,10 +1943,8 @@ body.spectrum-waterfall-modal-open {
 }
 
 
-/* DECODE_MODAL_LIVE_POLL_V2_6_25 */
 .receive-decode-console-v261 { min-height: 340px; }
 
-/* RECEIVE_BUTTON_FM_PRIORITY_CSS_V2_6_26D */
 .receive-decode-backdrop {
   position: fixed;
   inset: 0;
@@ -2024,7 +1989,6 @@ body.spectrum-waterfall-modal-open {
 }
 
 
-/* LINEAR_TRANSPONDER_CW_OVERRIDE_CSS_V2_6_32 */
 .linear-cw-override-button-v2632 {
   margin-left: 0.45rem;
   white-space: nowrap;
@@ -2033,7 +1997,6 @@ body.spectrum-waterfall-modal-open {
   z-index: 1210;
 }
 
-/* MODE_AWARE_RECEIVE_UI_PHASE1_V2_8_2 */
 .receive-open-button {
   border-color: rgba(23, 96, 145, 0.35);
 }
@@ -2095,7 +2058,6 @@ body.spectrum-waterfall-modal-open {
 }
 
 
-/* RECEIVE_CAPABILITY_GUIDANCE_V2_8_3 */
 .receive-guidance-hero-v283 {
   border: 1px solid rgba(148, 163, 184, 0.28);
   border-radius: 14px;
@@ -2179,7 +2141,6 @@ body.spectrum-waterfall-modal-open {
   color: #475569;
 }
 
-/* RECEIVE_DIAGNOSTICS_PANEL_V2_8_4 */
 #receiveDiagnosticsPanelV284 dl dd {
   overflow-wrap: anywhere;
 }
@@ -2189,7 +2150,6 @@ body.spectrum-waterfall-modal-open {
 
 
 
-/* PASS_LIST_RECEIVE_BADGES_V2_8_5 */
 .receive-capability-badge-v285 {
   display: inline-flex;
   align-items: center;
@@ -2216,7 +2176,6 @@ body.spectrum-waterfall-modal-open {
   color: #6b21a8;
 }
 
-/* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6_BEGIN */
 .pass-action-panel-v286,
 .pass-row-actions-v286 {
   display: flex;
@@ -2282,10 +2241,8 @@ body.spectrum-waterfall-modal-open {
 .pass-row > div:first-child > .receive-capability-badge-v285 {
   display: none !important;
 }
-/* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6_END */
 
 
-/* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6D_PROTOCOL_LABEL_FIX */
 .pass-row > div.radio-ok,
 .pass-row > div.radio-warn {
   display: none !important;
@@ -2339,9 +2296,7 @@ body.spectrum-waterfall-modal-open {
   opacity: 0.64 !important;
   cursor: not-allowed !important;
 }
-/* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6D_PROTOCOL_LABEL_FIX_END */
 
-/* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6E_BEGIN */
 .pass-row-actions-v286 {
   gap: 0.24rem !important;
   align-items: center !important;
@@ -2415,10 +2370,8 @@ body.spectrum-waterfall-modal-open {
 .listen-panel {
   gap: 0.35rem !important;
 }
-/* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6E_END */
 
 
-/* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6G_ROTATOR_SPECTRUM_COLORS_BEGIN */
 /* Keep Rotator and Spectrum visually aligned with the compact active-pass
  * action buttons.  This is CSS-only; button behavior and disabled state remain
  * controlled by the existing JavaScript.
@@ -2467,9 +2420,7 @@ body.spectrum-waterfall-modal-open {
   opacity: 0.72 !important;
   cursor: not-allowed !important;
 }
-/* ACTIVE_PASS_ACTION_BUTTONS_V2_8_6G_ROTATOR_SPECTRUM_COLORS_END */
 
-/* SPECTRUM_DISABLED_COLOR_MATCH_V2_8_6H START */
 .listen-panel #openRotatorFromListenButton.rotator-open-button,
 .listen-panel #openSpectrumWaterfallButton.spectrum-open-button {
   appearance: none !important;
@@ -2512,4 +2463,3 @@ body.spectrum-waterfall-modal-open {
   cursor: not-allowed !important;
   box-shadow: none !important;
 }
-/* SPECTRUM_DISABLED_COLOR_MATCH_V2_8_6H END */
