@@ -480,9 +480,6 @@
         if (!button) return;
 
         /*
-         * Do not set textContent on the Leaflet map button. That button is an
-         * SVG-only control, and textContent="" deletes the crosshair markup.
-         */
         if (button.id === "mapPickLocationButton") {
           button.textContent = mapLocationPickEnabled ? "Map Pick: On" : "Map Pick: Off";
         }
@@ -549,9 +546,6 @@
       }
 
       /*
-       * Upcoming/unknown passes should not show an AOS-to-TCA progress line or
-       * a misleading "Now" marker. The full visible pass path still auto-fits.
-       */
       return null;
     }
     function pathThroughPoint(points, point) {
@@ -891,10 +885,6 @@
       }
 
       /*
-       * High-resolution sample generation can mean the exact TCA timestamp is
-       * not one of the sample times. In that case, make the sample nearest TCA
-       * carry the TCA color.
-       */
       const target = Date.parse(pass.tca_utc || "");
       if (Number.isFinite(target)) {
         const points = (pass.ground_track || []);
@@ -1277,8 +1267,6 @@
       ctx.restore();
     }
 
-     * Safety fallback: draw a basic spectrum/waterfall even if optional tuning overlays throw.
-     */
     function drawSpectrumFallbackV269(canvas, bins) {
       const ctx = canvas && canvas.getContext ? canvas.getContext("2d") : null;
       const values = (bins || []).map((db) => Number(db)).filter((db) => Number.isFinite(db));
@@ -1565,12 +1553,6 @@
       return waterfallLerpV256(av, bv, frac);
     }
 
-     * Render the waterfall like a traditional SDR display:
-     * - new snapshots are inserted as one fine row at the top,
-     * - older rows move downward,
-     * - unused history remains blank until enough snapshots accumulate,
-     * - rows are not stretched to fill the whole waterfall.
-     */
     function waterfallBackgroundColorV261(y, height) {
       const t = waterfallClampV256(y / Math.max(1, height - 1), 0, 1);
       return [
@@ -1770,11 +1752,6 @@
 
 
 
-     * The Pluto cannot reliably run live audio DSP and repeated spectrum
-     * iio_readdev snapshots at the same time.  When Listen is active, keep
-     * the modal open but do not poll the spectrum endpoint, so audio is not
-     * starved or killed by competing IIO access.
-     */
     function spectrumWaterfallLiveAudioActiveV2613() {
       try {
         return Boolean(
@@ -2537,34 +2514,7 @@ setDl("radioStatus", entries);
         }, 1200);
       }
     }
-     * Backend-owned audio streaming.
-     *
-     * The old player pulled short WAV blocks and scheduled them with WebAudio.
-     * That caused staccato playback when network/browser timing drifted.
-     *
-     * New model:
-     *   selected pass -> backend DSP start -> browser <audio> streams live.wav?stream=1
-     * The backend owns tuning/DSP/buffering. The browser only plays a single stream.
-     */
-     * Backend-owned streaming audio with browser PCM playback.
-     *
-     * Native <audio> rejects some endless WAV streams. This player fetches the
-     * single backend live.wav?stream=1 stream, skips the WAV header, converts
-     * signed 16-bit little-endian PCM to Float32, and schedules it through
-     * WebAudio. The browser does not tune, demodulate, or poll blocks; it only
-     * plays the backend decoded stream.
-     */
-     * Backend-owned streaming audio with browser PCM playback and reconnect.
-     *
-     * Some backend WAV streams close after a short segment. While the session is
-     * active, the browser reopens /api/radio/audio/live.wav?stream=1 instead of
-     * stopping playback. The backend still owns tuning, DSP, and PCM generation;
-     * the browser only plays decoded PCM.
-     */
 
-     * Reuse the compact Spectrum modal tuning controls when starting live audio.
-     * These fields are optional; if the controls are not present, backend defaults apply.
-     */
     function spectrumLiveAudioParamsV268() {
       const params = {};
       const readNumber = (ids, fallback = null) => {
@@ -2642,10 +2592,6 @@ setDl("radioStatus", entries);
       };
     }
 
-     * Persist and reuse the Spectrum tuning controls for live audio.
-     * The Listen button may be outside the Spectrum modal, so relying only on DOM slider nodes
-     * can silently fall back to defaults.  This keeps a canonical browser-side state.
-     */
     const LIVE_AUDIO_CONTROL_STORAGE_KEY_V2615 = "plutoLiveAudioControlsV2615";
 
     function spectrumLiveAudioDefaultControlsV2615() {
@@ -3012,10 +2958,6 @@ setDl("radioStatus", entries);
     }
 
 
-     * Fixed-frequency audio path test. This intentionally bypasses Doppler
-     * planning/tracking but uses the same backend live audio start/stream/stop
-     * endpoints and the same browser PCM scheduling model as satellite Listen.
-     */
     function noaaDiagnosticFrequencyHz() {
       const select = document.getElementById("noaaDiagnosticFrequencySelect");
       const value = Number(select ? select.value : 0);
@@ -3245,12 +3187,6 @@ setDl("radioStatus", entries);
 
 
 
-     * Phase 1 separates analog voice listening from future decoder receive work.
-     * FM/AM voice modes keep using the proven Listen audio path. CW, packet,
-     * APRS, AFSK, FSK, telemetry, and other data-like modes expose a Receive
-     * button that explains the planned decoder path without starting unsupported
-     * DSP yet.
-     */
     function passModeTextV282(pass) {
       const values = [];
       const radio = pass && pass.radio ? pass.radio : {};
@@ -3355,10 +3291,6 @@ setDl("radioStatus", entries);
 
 
 
-     * Adds operator-facing decode guidance to the Receive placeholder without
-     * touching backend DSP.  This makes the next decoder phases explicit while
-     * preserving the proven Listen path for analog voice passes.
-     */
     function receiveModeFamilyV283(pass) {
       const text = passModeTextV282(pass);
       if (/APRS/.test(text)) return { label: "APRS", detail: "APRS packet frames over AX.25." };
@@ -3497,15 +3429,6 @@ function bindAnalogAudio(pass, node) {
     function renderPassDetail(pass) {
       const node = document.getElementById("passDetail");
 
-       * Do not let normal pass-detail refreshes stop the fixed-frequency
-
-       * NOAA audio diagnostic. NOAA uses a noaa:<hz> session key and
-
-       * should run until the user clicks Stop. Satellite Listen sessions
-
-       * still stop when the selected pass changes.
-
-       */
 
       if (analogAudioSession &&
 
@@ -3691,10 +3614,6 @@ function bindAnalogAudio(pass, node) {
       if (!watch.active) return true;
 
       /*
-       * During a manual or startup refresh, do not render the old pass list
-       * simply because it has some rows. Wait for generated_utc to change.
-       * If no previous stamp is known, current-enough rows are acceptable.
-       */
       if (watch.previousGeneratedUtc && generated && generated === watch.previousGeneratedUtc) {
         return false;
       }
@@ -3711,9 +3630,6 @@ function bindAnalogAudio(pass, node) {
       }
 
       /*
-       * Keep watching for up to 2 minutes. If the backend never publishes a new
-       * file, let the normal error/empty state appear instead of spinning forever.
-       */
       if (Date.now() - Number(watch.startedAt || 0) > (2 * 60 * 1000)) {
         window.__plutoPassFileWatchV3.active = false;
         return false;
@@ -3723,10 +3639,6 @@ function bindAnalogAudio(pass, node) {
 
 
 
- * Make pass-list capability badges into operator action buttons, use the same
- * light-blue action style under the sky/azimuth chart, and keep Listen/Receive
- * disabled until the selected pass is actively overhead.
- */
 function passActionTimingStateV286(pass) {
   try {
     if (typeof passTimingState === "function") return passTimingState(pass);
@@ -3821,12 +3733,6 @@ function configurePassRowActionButtonV286(button, pass, onSelect) {
   });
 }
 
- * Backend-test mode: keep pass Listen/Receive action buttons enabled whenever
- * the pass has a tunable downlink.  The button is no longer gated by AOS/LOS,
- * so operators can test the audio/decode backend outside a live pass.  Missing
- * or untunable downlinks still stay disabled because the backend has no valid
- * RF target to tune.
- */
 function passActionManualTestAvailableV2822(pass) {
   if (!pass) return false;
   if (!passActionDownlinkHzV286(pass)) return false;
@@ -3902,12 +3808,6 @@ function configurePassRowActionButtonV286(button, pass, onSelect) {
 
     
 
- * Backend-test mode final override.  Pass-row action buttons are clickable
- * whenever a pass has any usable downlink value, independent of AOS/LOS and
- * independent of broader pass readiness/tunability helpers.  This is meant for
- * manual backend audio/decode testing from the pass list.  No-downlink rows stay
- * disabled because there is no RF target.
- */
 function passActionBackendTestDownlinkHzV2824(pass) {
   const radio = (pass && pass.radio) || {};
   const downlinks = (pass && Array.isArray(pass.downlinks_hz)) ? pass.downlinks_hz : [];
@@ -3993,20 +3893,6 @@ function configurePassRowActionButtonV286(button, pass, onSelect) {
 }
 
 
- * Backend-test mode for pass-row action buttons.
- *
- * The previous enable patches still relied on the original button click path.
- * If that path decides the pass is not actionable, the button can look enabled
- * but still do nothing.  This override is intentionally direct:
- *   - renderPasses still builds each row normally
- *   - configurePassRowActionButtonV286 forces the row button interactive
- *   - clicking the row button selects the pass, then starts the existing
- *     backend-owned audio path through the primary analog button when present
- *   - if the old primary button is hidden/absent, it calls startAnalogAudio()
- *     directly with a small status node
- *
- * No backend C or radio API behavior is changed.
- */
 function passRowActionStatusNodeV2825() {
   let node = document.getElementById("passRowDirectActionStatusV2825");
   if (!node) {
@@ -4133,17 +4019,6 @@ window.setInterval(repairPassRowButtonsV2825, 1500);
 
 
 
- * Selected-pass backend-test unlock.
- *
- * v2.8.25 proved the pass-row action path can be enabled outside AOS/LOS,
- * but selecting a pass can still re-apply the legacy selected-pass disabled
- * state.  This patch does not change backend C or radio APIs.  It makes the
- * row action state authoritative after any pass selection/detail render:
- *   - pass-row action buttons are forced interactive after renderPassDetail()
- *   - a MutationObserver removes late disabled/aria-disabled changes
- *   - CSS pointer/opacity is overridden for selected rows
- *   - a console helper is exposed for manual repair/debugging
- */
 function passRowButtonLooksUsableV2826(button) {
   return !!(button && button.closest && button.closest(".pass-row") && button.classList && button.classList.contains("pass-row-action-button-v286"));
 }
@@ -4267,9 +4142,6 @@ installPassRowSelectedUnlockV2826();
         return readiness.state !== "stale";
       });
       const visiblePasses = filteredPasses.slice(0, 12);
-       * The pass list intentionally uses the default useful pass set without
-       * the Upcoming/Ready/Active/All filter button row.
-       */
       if (!visiblePasses.length) {
         const empty = document.createElement("div");
         empty.className = "empty";
@@ -5607,10 +5479,6 @@ async function loadRotatorState() {
 window.decodeModalLivePollV2625 = true;
 
 
- * Override the pass-detail Listen binding so CW/digital selected passes use the
- * receive/decode endpoints instead of starting speaker audio. FM/voice passes
- * intentionally keep the original analog audio path.
- */
 let receiveDecodeSessionV2626 = null;
 let receiveDecodePollTimerV2626 = 0;
 
@@ -5860,10 +5728,6 @@ try {
   }
 } catch (_) {}
 
- * Final receive button override: explicit FM/voice modes must stay on the
- * existing analog Listen path. CW/digital modes route to the decode modal only
- * when those keywords are explicit in the pass metadata.
- */
 (function installReceiveButtonFmPriorityV2626D() {
   if (window.__plutoReceiveButtonFmPriorityV2626D) return;
   window.__plutoReceiveButtonFmPriorityV2626D = true;
@@ -6093,10 +5957,6 @@ try {
 })();
 
 
- * Final receive button override: explicit current transmitter mode is the
- * strongest classifier. BPSK/PSK/FSK/GMSK/AX.25/APRS/packet modes are digital,
- * not CW, even if another metadata field mentions beacon/CW historically.
- */
 (function installReceiveButtonBpskPriorityV2626E() {
   if (window.__plutoReceiveButtonBpskPriorityV2626E) return;
   window.__plutoReceiveButtonBpskPriorityV2626E = true;
@@ -6347,11 +6207,6 @@ try {
   };
 })();
 
- * Keep the near-term pass queue fresh while the browser UI is open.
- * This intentionally queues the existing backend pass refresh endpoint rather
- * than adding a separate scheduler process. It is guarded against overlapping
- * refreshes and backs off if the backend already reports a running refresh.
- */
 (function installPeriodicPassRefreshV2629() {
   if (window.__plutoPeriodicPassRefreshV2629) return;
   window.__plutoPeriodicPassRefreshV2629 = true;
@@ -6428,10 +6283,6 @@ try {
   }
 })();
 
- * USB/LSB/SSB linear transponders are analog listen targets by default.
- * They may carry user CW inside the passband, so add a secondary manual
- * Decode CW button without changing the primary Listen behavior.
- */
 (function installLinearTransponderCwOverrideV2632() {
   if (window.__plutoLinearTransponderCwOverrideV2632) return;
   window.__plutoLinearTransponderCwOverrideV2632 = true;
@@ -7138,9 +6989,6 @@ try {
   }
 })();
 
- * UI-only selected-pass receive/decode readiness panel.  This does not start
- * hardware, touch backend C, or change the existing Listen audio path.
- */
 function receiveDiagnosticsModeTextV284(pass) {
   const radio = pass && pass.radio ? pass.radio : {};
   const modes = Array.isArray(pass && pass.modes) ? pass.modes : [];
@@ -7265,9 +7113,6 @@ function bindReceiveDiagnosticsPanelV284() {
 
 
 
- * Adds lightweight Listen/Receive capability badges to pass-list style rows.
- * This is UI-only: it does not tune, start audio, or call decoder endpoints.
- */
 (function installPassListReceiveBadgesV285() {
   const badgeClass = "receive-capability-badge-v285";
 
@@ -7414,11 +7259,6 @@ function bindReceiveDiagnosticsPanelV284() {
 
 
 
- * Correct active-pass action labels so the compact buttons use the same
- * protocol-aware language as the pass-list badges.  Also remove the redundant
- * secondary Decode CW button under the sky plot; the primary action button now
- * carries the correct protocol label and remains inactive until AOS.
- */
 function passActionTextV286D(value) {
   if (value === undefined || value === null) return "";
   if (Array.isArray(value)) return value.map(passActionTextV286D).join(" ");
@@ -7499,10 +7339,6 @@ function passActionInactiveTextV286(pass) {
   window.setInterval(cleanupV286D, 1200);
 })();
 
- * Polish v2.8.6 pass action controls: protocol-aware compact blue buttons,
- * Details button shape alignment, and no redundant Listen/Receive control under
- * the sky/azimuth plot.  UI-only; backend C remains unchanged.
- */
 (function installActivePassActionButtonPolishV286E() {
   if (window.__plutoActivePassActionButtonPolishV286E) return;
   window.__plutoActivePassActionButtonPolishV286E = true;
@@ -7703,11 +7539,6 @@ function passActionInactiveTextV286(pass) {
   window.setInterval(polishAllV286E, 2000);
 })();
 
- * Phase 1 GMSK/9k6 receive diagnostics display.
- * This does not claim bit/HDLC/text decode. It replaces generic AFSK tone
- * copy in the live decode modal with GMSK-specific clock/slicer readiness
- * information derived from the existing signal diagnostic output.
- */
 (function installGmskSignalDiagnosticsV287() {
   const MARKER = "GMSK_SIGNAL_DIAGNOSTICS_V2_8_7";
   if (window.__plutoGmskSignalDiagnosticsV287) return;
@@ -7897,11 +7728,6 @@ function passActionInactiveTextV286(pass) {
 })();
 
 
- * Row action test modal. Opens an explicit operator dialog for pass-row
- * Listen/Receive backend tests. This avoids relying on the removed azimuth-map
- * action controls and gives a visible Stop/Close/status surface even outside
- * AOS/LOS. Web UI only; backend C is unchanged.
- */
 (function installPassRowBackendTestModalV2827() {
   if (window.__plutoPassRowBackendTestModalV2827) return;
   window.__plutoPassRowBackendTestModalV2827 = true;
@@ -8191,12 +8017,6 @@ function passActionInactiveTextV286(pass) {
   console.info(`${MARKER} installed`);
 })();
 
- * Keep pass-row backend testing to a single operator modal. v2.8.27 opened
- * the new backend-test modal and the older Receive placeholder at the same
- * time for data rows.  This patch suppresses the legacy Receive placeholder
- * during pass-row backend-test clicks and styles it safely if opened elsewhere.
- * UI-only; backend C and radio endpoints are unchanged.
- */
 (function installSinglePassRowActionModalFixV2828() {
   const MARKER = "PASS_ROW_SINGLE_MODAL_FIX_V2_8_28";
   if (window.__plutoSinglePassRowActionModalFixV2828) return;
@@ -8349,12 +8169,6 @@ function passActionInactiveTextV286(pass) {
 })();
 
 
- * The pass-row backend-test modal is now the only dialog opened by pass-row
- * Listen/Receive actions.  The older Receive Decode placeholder modal can be
- * opened by legacy event listeners and causes duplicate white-on-white dialogs.
- * Retire that legacy modal globally, keep it hidden if an older listener opens
- * it, and suppress its old button binding.  UI-only; backend C untouched.
- */
 (function retireLegacyReceivePlaceholderModalV2829() {
   const MARKER = "RETIRE_LEGACY_RECEIVE_PLACEHOLDER_MODAL_V2_8_29";
   if (window.__plutoRetireLegacyReceivePlaceholderV2829) return;
@@ -8478,12 +8292,6 @@ function passActionInactiveTextV286(pass) {
   }
 })();
 
- * Keep pass-row Listen/Receive backend tests on one dialog.  v2.8.27 added a
- * modal but still exposed an Open Receive dialog button, and v2.8.29 retired
- * that legacy Receive placeholder.  This patch intercepts pass-row action
- * clicks before older handlers, opens/updates only the Backend Test modal, and
- * hides the obsolete Open Receive dialog button.  UI-only; backend C untouched.
- */
 (function installSingleBackendTestModalV2830() {
   const MARKER = "SINGLE_BACKEND_TEST_MODAL_V2_8_30";
   if (window.__plutoSingleBackendTestModalV2830) return;
@@ -8774,13 +8582,6 @@ function passActionInactiveTextV286(pass) {
   console.info(`${MARKER} installed`);
 })();
 
- * Field repair for the pass-row Backend Test modal.  v2.8.30 started the audio
- * path but the operator modal could fail to appear, leaving only a console/URL
- * 409.  This patch force-creates and force-opens the modal before any backend
- * audio start, captures start/stream failures in the modal, resets stale audio
- * sessions before testing, and intercepts pass-row clicks at capture phase.
- * UI-only; backend C untouched.
- */
 (function installBackendTestModalForceOpenV2831() {
   const MARKER = "BACKEND_TEST_MODAL_FORCE_OPEN_V2_8_31";
   if (window.__plutoBackendTestModalForceOpenV2831) return;
@@ -9145,11 +8946,6 @@ function passActionInactiveTextV286(pass) {
   console.info(`${MARKER} installed`);
 })();
 
- * Clean rollback of browser-side audio experiment blocks.
- * This branch restores the backend-test modal force-open UI baseline and leaves
- * audio start/stop behavior to the pre-experiment path for backend repair work.
- * Backend C is unchanged.
- */
 (function installAudioUiExperimentRollbackV2840C() {
   window.__plutoAudioUiExperimentRollbackV2840C = true;
 })();
