@@ -2024,50 +2024,6 @@ body.spectrum-waterfall-modal-open {
 }
 
 
-/* RECEIVE_BUTTON_BPSK_PRIORITY_CSS_V2_6_26E */
-.receive-decode-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1200;
-  background: rgba(2, 6, 23, 0.72);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-}
-.receive-decode-backdrop[hidden] { display: none; }
-.receive-decode-modal {
-  width: min(880px, 96vw);
-  max-height: 88vh;
-  overflow: auto;
-  border-radius: 14px;
-  background: #0f172a;
-  color: #e2e8f0;
-  border: 1px solid rgba(148, 163, 184, 0.35);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
-  padding: 1rem;
-}
-.receive-decode-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 0.75rem;
-}
-.receive-decode-header h2 { margin: 0; }
-.receive-decode-subtitle { color: #94a3b8; font-size: 0.92rem; margin-top: 0.2rem; }
-.receive-decode-output {
-  margin: 0;
-  min-height: 260px;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  background: #020617;
-  color: #dbeafe;
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  border-radius: 10px;
-  padding: 0.9rem;
-}
-
 /* LINEAR_TRANSPONDER_CW_OVERRIDE_CSS_V2_6_32 */
 .linear-cw-override-button-v2632 {
   margin-left: 0.45rem;
