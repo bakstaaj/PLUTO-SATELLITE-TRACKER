@@ -9753,3 +9753,14 @@ function passActionInactiveTextV286(pass) {
   console.info(`${MARKER} installed`);
 })();
 /* BACKEND_TEST_MODAL_FORCE_OPEN_V2_8_31_END */
+
+/* AUDIO_UI_EXPERIMENT_ROLLBACK_V2_8_40C_BEGIN
+ * Clean rollback of browser-side audio experiment blocks.
+ * This branch restores the backend-test modal force-open UI baseline and leaves
+ * audio start/stop behavior to the pre-experiment path for backend repair work.
+ * Backend C is unchanged.
+ */
+(function installAudioUiExperimentRollbackV2840C() {
+  window.__plutoAudioUiExperimentRollbackV2840C = true;
+})();
+/* AUDIO_UI_EXPERIMENT_ROLLBACK_V2_8_40C_END */
