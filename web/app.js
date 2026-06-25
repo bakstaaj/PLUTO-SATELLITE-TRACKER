@@ -6948,12 +6948,10 @@ try {
       });
       if (resp.ok) {
         setLastRescueMs(now);
-        console.info("[Pluto] Queued pass refresh rescue:", reason);
         refreshVersionBadge();
         return true;
       }
     } catch (err) {
-      console.warn("[Pluto] Pass refresh rescue failed:", err);
     }
     return false;
   }
@@ -7173,10 +7171,8 @@ try {
         cache: "no-store"
       });
       const data = await res.json().catch(() => ({}));
-      console.log("Pass refresh rescue queued", reason, data);
       return data;
     } catch (err) {
-      console.warn("Pass refresh rescue failed", err);
       return { ok: false, error: String(err) };
     }
   }
@@ -8271,7 +8267,6 @@ function passActionInactiveTextV286(pass) {
   } else {
     try { annotateRowsV2827(); } catch (_error) {}
   }
-  console.info(`${MARKER} installed`);
 })();
 /* PASS_ROW_BACKEND_TEST_MODAL_V2_8_27_END */
 
@@ -8423,7 +8418,6 @@ function passActionInactiveTextV286(pass) {
     }, 1000);
     window.plutoHideLegacyReceivePlaceholderV2828 = hideLegacyReceivePlaceholderV2828;
     window.plutoSuppressLegacyReceivePlaceholderV2828 = suppressLegacyReceivePlaceholderV2828;
-    console.info(`[Pluto] ${MARKER} installed`);
   }
 
   if (document.readyState === "loading") {
@@ -8860,7 +8854,6 @@ function passActionInactiveTextV286(pass) {
   } else {
     startV2830();
   }
-  console.info(`${MARKER} installed`);
 })();
 /* SINGLE_BACKEND_TEST_MODAL_V2_8_30_END */
 
@@ -9233,7 +9226,6 @@ function passActionInactiveTextV286(pass) {
   } else {
     startV2831();
   }
-  console.info(`${MARKER} installed`);
 })();
 /* BACKEND_TEST_MODAL_FORCE_OPEN_V2_8_31_END */
 
