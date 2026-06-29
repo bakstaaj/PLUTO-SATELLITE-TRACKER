@@ -558,11 +558,10 @@
         return trackPoints[trackPoints.length - 1] || null;
       }
 
-      /*
-       * Upcoming/unknown passes should not show an AOS-to-TCA progress line or
-       * a misleading "Now" marker. The full visible pass path still auto-fits.
-       */
-      return null;
+      /* Upcoming passes: show the satellite at the AOS position so the icon
+       * is always visible and moves to the real position once the pass starts.
+       * No progress line is drawn (pathThroughPoint returns empty for index 0). */
+      return trackPoints[0] || null;
     }
     function pathThroughPoint(points, point) {
       const index = trackPointIndexForPoint(points, point);
@@ -9380,4 +9379,3 @@ function passActionInactiveTextV286(pass) {
   }, 20000);
 })();
 /* STALE_PASS_CHECKER_V2_9_9_END */
-
