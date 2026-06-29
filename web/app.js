@@ -4322,6 +4322,7 @@ installPassRowSelectedUnlockV2826();
 
 
     function renderPasses(payload) {
+      window.__plutoLastPassesPayload = payload; /* stale-pass checker uses this */
       const node = document.getElementById("passes");
       const passes = payload.passes || [];
       if (!passes.length) {
@@ -9340,4 +9341,31 @@ function passActionInactiveTextV286(pass) {
       window.setInterval(tick, LIVE_MAP_INTERVAL_MS);
     }, { once: true });
   } else {
-    window.setInterval(tick, LIVE_MAP_IN
+    window.setInterval(tick, LIVE_MAP_INTERVAL_MS);
+  }
+})();
+/* LIVE_MAP_UPDATE_TIMER_V2_9_7_END */
+
+/* STALE_PASS_CHECKER_V2_9_9
+ * Runs every 20 seconds. If any pass in the last-known payload has become
+ * stale (Date.now() > los_utc), calls renderPasses to filter it off the list.
+ * This works even while shouldKeepPassFileSpinnerV3 is blocking the normal
+ * refresh() -> renderPasses path during a 15-minute background file watch.
+ */
+(function installStalePassCheckerV299() {
+  "use strict";
+  window.setInterval(function checkStalePassesV299() {
+    try {
+      var payload = window.__plutoLastPassesPayload;
+      if (!payload || !Array.isArray(payload.passes)) return;
+      var now = Date.now();
+      var hasNewlyStale = payload.passes.some(function (p) {
+        var los = Date.parse(p.los_utc || "");
+        return Number.isFinite(los) && now > los;
+      });
+      if (!hasNewlyStale) return;
+      if (typeof renderPasses === "function") renderPasses(payload);
+    } catch (_e) {}
+  }, 20000);
+})();
+/* STALE_PASS_CHECKER_V2_9_9_END */
