@@ -9425,62 +9425,69 @@ function passActionInactiveTextV286(pass) {
 /* STALE_PASS_CHECKER_V2_9_9_END */
 
 /* MAP_LIVE_DIAGNOSTIC_V2_9_14
- * Wraps the live-map hook to show a visible badge in the map panel:
- *   "Map tick #N  HH:MM:SS  state: <timing>  pass: <name>"
- * Remove this block once the timer/render chain is confirmed working.
+ * Two-counter badge: rawTick (own 5s interval) vs hookTick (__plutoRenderMapLiveV297 calls).
+ * Also shows selected-pass timing from passes payload.
+ * Remove once confirmed working.
  */
 (function installMapLiveDiagnosticV2914() {
   "use strict";
-  var tickCount = 0;
+  var rawTick = 0;
+  var hookTick = 0;
 
-  function pad2(n) { return n < 10 ? "0" + n : String(n); }
+  function pad2(n) { return n < 10 ? '0' + n : String(n); }
   function nowHMS() {
-    var d = new Date();
-    return pad2(d.getHours()) + ":" + pad2(d.getMinutes()) + ":" + pad2(d.getSeconds());
+    var d = new Date(); return pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
   }
 
-  function updateBadge(msg) {
-    var badge = document.getElementById("mapLiveDiagBadgeV2914");
+  function getTimingState() {
+    try {
+      var payload = window.__plutoLastPassesPayload;
+      if (!payload || !Array.isArray(payload.passes) || !payload.passes.length) return 'no-payload';
+      var selRow = document.querySelector('.pass-row.selected strong');
+      var selName = selRow ? selRow.textContent.trim() : '';
+      var pass = payload.passes.find(function(p) { return (p.name || '') === selName; }) || payload.passes[0];
+      var now = Date.now();
+      var aos = Date.parse(pass.aos_utc || '');
+      var los = Date.parse(pass.los_utc || '');
+      var name = pass.name || '?';
+      if (Number.isFinite(los) && now > los) return 'STALE:' + name;
+      if (Number.isFinite(aos) && now < aos) return 'upcoming:' + name;
+      if (Number.isFinite(los) && now <= los) return 'ACTIVE:' + name;
+      return 'unknown:' + name;
+    } catch (e) { return 'err'; }
+  }
+
+  function updateBadge() {
+    var badge = document.getElementById('mapLiveDiagBadgeV2914');
     if (!badge) {
-      badge = document.createElement("div");
-      badge.id = "mapLiveDiagBadgeV2914";
-      badge.style.cssText = [
-        "position:fixed", "bottom:8px", "right:8px", "z-index:9999",
-        "background:rgba(0,0,0,0.78)", "color:#0ff", "font:11px/1.5 monospace",
-        "padding:4px 8px", "border-radius:4px", "pointer-events:none",
-        "max-width:320px", "word-break:break-all"
-      ].join(";");
+      badge = document.createElement('div');
+      badge.id = 'mapLiveDiagBadgeV2914';
+      badge.style.cssText = 'position:fixed;bottom:8px;right:8px;z-index:9999;'
+        + 'background:rgba(0,0,0,0.82);color:#0ff;font:11px/1.6 monospace;'
+        + 'padding:4px 8px;border-radius:4px;pointer-events:none;max-width:340px;white-space:pre';
       document.body && document.body.appendChild(badge);
     }
-    badge.textContent = msg;
+    badge.textContent = nowHMS() + '  raw:' + rawTick + '  hook:' + hookTick + '\n' + getTimingState();
   }
 
-  /* Wrap the hook once it's available (it's set synchronously at page load) */
+  /* Independent 5s raw ticker */
+  window.setInterval(function rawTickV2914() { rawTick++; updateBadge(); }, 5000);
+
   function wrapHook() {
     var orig = window.__plutoRenderMapLiveV297;
-    if (typeof orig !== "function") {
-      updateBadge("MAP DIAG: hook not set yet");
-      return;
-    }
-    window.__plutoRenderMapLiveV297 = function mapLiveDiagV2914() {
-      tickCount++;
-      var selRow = document.querySelector(".pass-row.selected");
-      var passName = selRow ? selRow.querySelector("strong") && selRow.querySelector("strong").textContent : "none selected";
-
-      try {
-        orig.apply(this, arguments);
-        updateBadge("tick #" + tickCount + "  " + nowHMS() + "\npass: " + (passName || "?") + "\nhook: OK");
-      } catch (err) {
-        updateBadge("tick #" + tickCount + "  " + nowHMS() + "\nERROR: " + String(err));
-      }
+    if (typeof orig !== 'function') { updateBadge(); return; }
+    window.__plutoRenderMapLiveV297 = function diagHookV2914() {
+      hookTick++;
+      updateBadge();
+      try { orig.apply(this, arguments); } catch (_e) {}
     };
-    updateBadge("MAP DIAG installed \u2014 waiting for tick");
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", wrapHook, { once: true });
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', wrapHook, { once: true });
   } else {
     wrapHook();
   }
+  setTimeout(updateBadge, 800);
 })();
 /* MAP_LIVE_DIAGNOSTIC_V2_9_14_END */
