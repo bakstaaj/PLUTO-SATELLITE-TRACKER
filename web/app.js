@@ -15,6 +15,8 @@
     let currentLeafletMap = null;
     let currentLeafletPassKey = "";
     let currentLeafletView = null;
+    let currentLeafletOverlayGroup = null;
+    let currentMapShellPassKey = "";
     let refreshTimerId = 0;
     let refreshInFlight = false;
     let analogAudioSession = null;
@@ -472,6 +474,7 @@
 
     function resetMapView() {
       currentLeafletView = null;
+      currentMapShellPassKey = ""; /* force full map rebuild */
       renderMapPanel(currentSelectedPass, currentObserverConfig);
     }
 
@@ -674,66 +677,15 @@
       window.setTimeout(() => setMapLocationPickEnabled(mapLocationPickEnabled), 0);
     }
 
-    function renderLeafletMap(pass, config, focusPoint, activeTrackPoint) {
-      const mapNode = document.getElementById("trackerLeafletMap");
-      if (!mapNode) return;
-      if (!window.L) {
-        mapNode.textContent = "Basemap library did not load. Check browser internet access and reload the page.";
-        return;
-      }
-
-      if (currentLeafletMap) {
-        currentLeafletMap.remove();
-        currentLeafletMap = null;
-      }
-
-      const passKeyValue = passKey(pass);
+    function buildLeafletOverlays(pass, config, focusPoint, activeTrackPoint, target) {
+      /* Add all dynamic overlays (track, progress, labels, satellite, look line)
+       * to `target` (a Leaflet Map or LayerGroup). Returns overlayBounds array. */
       const observerLatLng = [Number(config.latitude_deg || 0), normalizeLongitude(config.longitude_deg)];
       const overlayBounds = [observerLatLng];
-      currentLeafletMap = L.map(mapNode, {
-        zoomControl: false,
-        scrollWheelZoom: false,
-        doubleClickZoom: false,
-        worldCopyJump: true
-      });
-
-      currentLeafletMap.scrollWheelZoom.disable();
-      currentLeafletMap.doubleClickZoom.disable();
-
-      L.control.zoom({ position: "topright" }).addTo(currentLeafletMap);
-      addLeafletMapPickControlV1(currentLeafletMap);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        minZoom: 2,
-        maxZoom: 19,
-        attribution: "&copy; OpenStreetMap contributors"
-      }).addTo(currentLeafletMap);
-
-      L.circleMarker(observerLatLng, {
-        radius: 7,
-        color: "#ffffff",
-        weight: 2,
-        fillColor: "#006f9f",
-        fillOpacity: 1,
-        bubblingMouseEvents: false
-      }).addTo(currentLeafletMap)
-        .bindPopup(`<div class="map-popup"><strong>${escapeHtml(config.name || "Observer")}</strong><br>${escapeHtml(`${Number(config.latitude_deg).toFixed(5)} deg, ${Number(config.longitude_deg).toFixed(5)} deg`)}</div>`);
-
-      if (pendingMapLocation) {
-        L.circleMarker([pendingMapLocation.latitude_deg, normalizeLongitude(pendingMapLocation.longitude_deg)], {
-          radius: 8,
-          color: "#006f9f",
-          weight: 2,
-          dashArray: "4 3",
-          fillColor: "#006f9f",
-          fillOpacity: 0.35,
-          bubblingMouseEvents: false
-        }).addTo(currentLeafletMap)
-          .bindPopup(`<div class="map-popup"><strong>Pending observer location</strong><br>${escapeHtml(`${pendingMapLocation.latitude_deg.toFixed(5)} deg, ${pendingMapLocation.longitude_deg.toFixed(5)} deg`)}</div>`);
-      }
-
       const trackPoints = (pass && pass.ground_track) || [];
       const livePoint = liveLookPointForPass(pass, activeTrackPoint, focusPoint);
       const progressPoints = pathThroughPoint(trackPoints, livePoint);
+
       const segments = splitTrackSegments(trackPoints);
       segments.forEach((segment) => {
         const latLngs = segment.map((point) => {
@@ -742,12 +694,7 @@
           return latLng;
         });
         if (latLngs.length > 1) {
-          L.polyline(latLngs, {
-            color: "#c4471c",
-            weight: 4,
-            opacity: 0.9,
-            bubblingMouseEvents: false
-          }).addTo(currentLeafletMap);
+          L.polyline(latLngs, { color: "#c4471c", weight: 4, opacity: 0.9, bubblingMouseEvents: false }).addTo(target);
         }
       });
 
@@ -755,15 +702,7 @@
       progressSegments.forEach((segment) => {
         const latLngs = segment.map((point) => [Number(point.latitude_deg || 0), normalizeLongitude(point.longitude_deg)]);
         if (latLngs.length > 1) {
-          L.polyline(latLngs, {
-            color: "#00a7c7",
-            weight: 5,
-            opacity: 0.95,
-            dashArray: "8 6",
-            lineCap: "round",
-            lineJoin: "round",
-            bubblingMouseEvents: false
-          }).addTo(currentLeafletMap);
+          L.polyline(latLngs, { color: "#00a7c7", weight: 5, opacity: 0.95, dashArray: "8 6", lineCap: "round", lineJoin: "round", bubblingMouseEvents: false }).addTo(target);
         }
       });
 
@@ -771,22 +710,12 @@
         const latLng = [Number(point.latitude_deg || 0), normalizeLongitude(point.longitude_deg)];
         const isFocus = focusPoint && point.time_utc === focusPoint.time_utc;
         L.circleMarker(latLng, {
-          radius: isFocus ? 7 : 4,
-          color: "#ffffff",
-          weight: isFocus ? 2 : 1,
-          fillColor: isFocus ? "#102030" : "#c4471c",
-          fillOpacity: 1,
-          bubblingMouseEvents: false
-        }).addTo(currentLeafletMap)
+          radius: isFocus ? 7 : 4, color: "#ffffff", weight: isFocus ? 2 : 1,
+          fillColor: isFocus ? "#102030" : "#c4471c", fillOpacity: 1, bubblingMouseEvents: false
+        }).addTo(target)
           .bindPopup(formatMapPopup(point, isFocus ? "Focus" : "Pass sample"))
-          .on("mouseover", () => {
-            currentMapFocusTime = point.time_utc || "";
-            renderMapPanel(currentSelectedPass, currentObserverConfig);
-          })
-          .on("click", () => {
-            currentMapFocusTime = point.time_utc || "";
-            renderMapPanel(currentSelectedPass, currentObserverConfig);
-          });
+          .on("mouseover", () => { currentMapFocusTime = point.time_utc || ""; renderMapPanel(currentSelectedPass, currentObserverConfig); })
+          .on("click",     () => { currentMapFocusTime = point.time_utc || ""; renderMapPanel(currentSelectedPass, currentObserverConfig); });
       });
 
       [
@@ -796,48 +725,87 @@
       ].forEach(({ point, label, color }) => {
         if (!point) return;
         const latLng = [Number(point.latitude_deg || 0), normalizeLongitude(point.longitude_deg)];
-        L.circleMarker(latLng, {
-          radius: 7,
-          color: "#ffffff",
-          weight: 2,
-          fillColor: color,
-          fillOpacity: 1,
-          bubblingMouseEvents: false
-        }).addTo(currentLeafletMap).bindPopup(formatMapPopup(point, label));
+        L.circleMarker(latLng, { radius: 7, color: "#ffffff", weight: 2, fillColor: color, fillOpacity: 1, bubblingMouseEvents: false })
+          .addTo(target).bindPopup(formatMapPopup(point, label));
       });
 
       if (livePoint) {
         const liveLatLng = [Number(livePoint.latitude_deg || 0), normalizeLongitude(livePoint.longitude_deg)];
         const liveIcon = satelliteLiveIconV3();
         if (liveIcon) {
-          L.marker(liveLatLng, {
-            icon: liveIcon,
-            zIndexOffset: 1000,
-            bubblingMouseEvents: false,
-            title: "Satellite position"
-          }).addTo(currentLeafletMap).bindPopup(formatMapPopup(livePoint, "Satellite position"));
+          L.marker(liveLatLng, { icon: liveIcon, zIndexOffset: 1000, bubblingMouseEvents: false, title: "Satellite position" })
+            .addTo(target).bindPopup(formatMapPopup(livePoint, "Satellite position"));
         } else {
-          L.circleMarker(liveLatLng, {
-            radius: 8,
-            color: "#ffffff",
-            weight: 2,
-            fillColor: "#00a7c7",
-            fillOpacity: 1,
-            bubblingMouseEvents: false
-          }).addTo(currentLeafletMap).bindPopup(formatMapPopup(livePoint, "Satellite position"));
+          L.circleMarker(liveLatLng, { radius: 8, color: "#ffffff", weight: 2, fillColor: "#00a7c7", fillOpacity: 1, bubblingMouseEvents: false })
+            .addTo(target).bindPopup(formatMapPopup(livePoint, "Satellite position"));
         }
+        L.polyline([observerLatLng, liveLatLng], { color: "#3e6b85", weight: 2, opacity: 0.85, dashArray: "6 5", bubblingMouseEvents: false })
+          .addTo(target);
       }
 
-      if (livePoint) {
-        const focusLatLng = [Number(livePoint.latitude_deg || 0), normalizeLongitude(livePoint.longitude_deg)];
-        L.polyline([observerLatLng, focusLatLng], {
-          color: "#3e6b85",
-          weight: 2,
-          opacity: 0.85,
-          dashArray: "6 5",
-          bubblingMouseEvents: false
-        }).addTo(currentLeafletMap);
+      return overlayBounds;
+    }
+
+    function renderLeafletMap(pass, config, focusPoint, activeTrackPoint) {
+      const mapNode = document.getElementById("trackerLeafletMap");
+      if (!mapNode) return;
+      if (!window.L) {
+        mapNode.textContent = "Basemap library did not load. Check browser internet access and reload the page.";
+        return;
       }
+
+      const passKeyValue = passKey(pass);
+      const observerLatLng = [Number(config.latitude_deg || 0), normalizeLongitude(config.longitude_deg)];
+
+      /* Reuse the existing Leaflet map when the pass hasn't changed and the
+       * map container is still in the document. Only clear and rebuild the
+       * overlay layer group — tiles stay loaded, no flicker. */
+      if (currentLeafletMap &&
+          currentLeafletPassKey === passKeyValue &&
+          currentLeafletMap._container &&
+          document.body.contains(currentLeafletMap._container)) {
+        if (!currentLeafletOverlayGroup) {
+          currentLeafletOverlayGroup = L.layerGroup().addTo(currentLeafletMap);
+        }
+        currentLeafletOverlayGroup.clearLayers();
+        buildLeafletOverlays(pass, config, focusPoint, activeTrackPoint, currentLeafletOverlayGroup);
+        return;
+      }
+
+      /* Full rebuild — new pass, or map was destroyed. */
+      if (currentLeafletMap) {
+        currentLeafletMap.remove();
+        currentLeafletMap = null;
+      }
+      currentLeafletOverlayGroup = null;
+
+      currentLeafletMap = L.map(mapNode, {
+        zoomControl: false, scrollWheelZoom: false, doubleClickZoom: false, worldCopyJump: true
+      });
+      currentLeafletMap.scrollWheelZoom.disable();
+      currentLeafletMap.doubleClickZoom.disable();
+
+      L.control.zoom({ position: "topright" }).addTo(currentLeafletMap);
+      addLeafletMapPickControlV1(currentLeafletMap);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        minZoom: 2, maxZoom: 19, attribution: "&copy; OpenStreetMap contributors"
+      }).addTo(currentLeafletMap);
+
+      /* Base static markers (observer, pending location) */
+      L.circleMarker(observerLatLng, { radius: 7, color: "#ffffff", weight: 2, fillColor: "#006f9f", fillOpacity: 1, bubblingMouseEvents: false })
+        .addTo(currentLeafletMap)
+        .bindPopup(`<div class="map-popup"><strong>${escapeHtml(config.name || "Observer")}</strong><br>${escapeHtml(`${Number(config.latitude_deg).toFixed(5)} deg, ${Number(config.longitude_deg).toFixed(5)} deg`)}</div>`);
+
+      if (pendingMapLocation) {
+        L.circleMarker([pendingMapLocation.latitude_deg, normalizeLongitude(pendingMapLocation.longitude_deg)], {
+          radius: 8, color: "#006f9f", weight: 2, dashArray: "4 3", fillColor: "#006f9f", fillOpacity: 0.35, bubblingMouseEvents: false
+        }).addTo(currentLeafletMap)
+          .bindPopup(`<div class="map-popup"><strong>Pending observer location</strong><br>${escapeHtml(`${pendingMapLocation.latitude_deg.toFixed(5)} deg, ${pendingMapLocation.longitude_deg.toFixed(5)} deg`)}</div>`);
+      }
+
+      /* Overlay group for everything that changes on each refresh tick */
+      currentLeafletOverlayGroup = L.layerGroup().addTo(currentLeafletMap);
+      const overlayBounds = buildLeafletOverlays(pass, config, focusPoint, activeTrackPoint, currentLeafletOverlayGroup);
 
       currentLeafletMap.on("click", (event) => {
         if (!mapLocationPickEnabled) {
@@ -845,15 +813,8 @@
           if (status) status.textContent = "Map Pick is off. Toggle Map Pick On before clicking the map to change receiver location.";
           return;
         }
-
-        pendingMapLocation = {
-          latitude_deg: event.latlng.lat,
-          longitude_deg: event.latlng.lng
-        };
-        updatePendingObserverDraft({
-          latitude_deg: event.latlng.lat.toFixed(5),
-          longitude_deg: event.latlng.lng.toFixed(5)
-        });
+        pendingMapLocation = { latitude_deg: event.latlng.lat, longitude_deg: event.latlng.lng };
+        updatePendingObserverDraft({ latitude_deg: event.latlng.lat.toFixed(5), longitude_deg: event.latlng.lng.toFixed(5) });
         applyObserverInputs(pendingObserverDraft);
         setMapLocationPickEnabled(false);
         renderMapPanel(currentSelectedPass, currentObserverConfig);
@@ -1979,6 +1940,7 @@
       if (!config) {
         node.className = "empty";
         node.textContent = "Map unavailable until observer config loads.";
+        currentMapShellPassKey = "";
         return;
       }
 
@@ -2017,6 +1979,70 @@
         ? `${pass.name || "Selected pass"} visible ground track`
         : `${config.name || "Observer"} location`;
 
+      /* Fast-path: same pass already rendered — update only the dynamic sky
+       * elements in-place so the Leaflet tile layer is never torn down. */
+      const shellPassKey = pass ? passKey(pass) : "";
+      if (shellPassKey && shellPassKey === currentMapShellPassKey && node.querySelector(".map-shell")) {
+        const svg = node.querySelector(".sky-frame svg");
+        if (svg) {
+          /* Sky progress path */
+          let prog = svg.querySelector(".sky-pass-progress");
+          if (skyProgressPath) {
+            if (!prog) {
+              prog = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+              prog.setAttribute("class", "sky-pass-progress");
+              prog.setAttribute("fill", "none");
+              prog.setAttribute("stroke", "#00a7c7");
+              prog.setAttribute("stroke-width", "4");
+              prog.setAttribute("stroke-linecap", "round");
+              prog.setAttribute("stroke-linejoin", "round");
+              prog.setAttribute("stroke-dasharray", "8 6");
+              svg.appendChild(prog);
+            }
+            prog.setAttribute("points", skyProgressPath);
+          } else if (prog) {
+            prog.remove();
+          }
+          /* Look line */
+          let lookLine = svg.querySelector(".sky-look-line");
+          if (liveSky) {
+            if (!lookLine) {
+              lookLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+              lookLine.setAttribute("class", "sky-look-line");
+              lookLine.setAttribute("stroke", "#3e6b85");
+              lookLine.setAttribute("stroke-width", "2");
+              lookLine.setAttribute("stroke-dasharray", "5 4");
+              svg.appendChild(lookLine);
+            }
+            lookLine.setAttribute("x1", String(skyCenter));
+            lookLine.setAttribute("y1", String(skyCenter));
+            lookLine.setAttribute("x2", liveSky.x.toFixed(1));
+            lookLine.setAttribute("y2", liveSky.y.toFixed(1));
+          } else if (lookLine) {
+            lookLine.remove();
+          }
+          /* Sample dots (focus highlight changes) */
+          const dynGroup = svg.querySelector(".sky-dynamic-group");
+          if (dynGroup) dynGroup.innerHTML = skyTrackDots + (focusSky ? `<circle class="sky-focus-dot" cx="${focusSky.x.toFixed(1)}" cy="${focusSky.y.toFixed(1)}" r="6" fill="#102030" stroke="#fff" stroke-width="2" />` : "") + renderSkySatelliteIcon(liveSky);
+        }
+        /* Live look-angle label */
+        const labelEl = node.querySelector(".map-live-label");
+        if (labelEl) labelEl.textContent = liveLabel;
+        /* Live data rows */
+        const infoEl = node.querySelector(".map-info");
+        if (livePoint && infoEl) {
+          infoEl.innerHTML = `
+            <div><strong>Sample</strong>${escapeHtml(formatDateTime(livePoint.time_utc))}</div>
+            <div><strong>Ground Point</strong>${escapeHtml(`${livePoint.latitude_deg.toFixed(3)} deg, ${livePoint.longitude_deg.toFixed(3)} deg`)}</div>
+            <div><strong>Look Angles</strong>${escapeHtml(`Az ${livePoint.azimuth_deg} deg, El ${livePoint.elevation_deg} deg`)}</div>
+            <div><strong>Altitude</strong>${escapeHtml(`${livePoint.altitude_km} km`)}</div>
+          `;
+        }
+        /* Update Leaflet overlays without rebuilding the map */
+        renderLeafletMap(pass, config, focusPoint, activeTrackPoint);
+        return;
+      }
+
       node.className = "";
       node.innerHTML = `
         <div class="map-shell">
@@ -2053,9 +2079,7 @@
                 ${trackPoints.length ? `<polyline class="sky-pass-path" fill="none" stroke="#c4471c" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="${skyPath}" />` : ""}
                 ${skyProgressPath ? `<polyline class="sky-pass-progress" fill="none" stroke="#00a7c7" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="8 6" points="${skyProgressPath}" />` : ""}
                 ${liveSky ? `<line class="sky-look-line" x1="${skyCenter}" y1="${skyCenter}" x2="${liveSky.x.toFixed(1)}" y2="${liveSky.y.toFixed(1)}" stroke="#3e6b85" stroke-width="2" stroke-dasharray="5 4" />` : ""}
-                ${skyTrackDots}
-                ${focusSky ? `<circle class="sky-focus-dot" cx="${focusSky.x.toFixed(1)}" cy="${focusSky.y.toFixed(1)}" r="6" fill="#102030" stroke="#fff" stroke-width="2" />` : ""}
-                ${renderSkySatelliteIcon(liveSky)}
+                <g class="sky-dynamic-group">${skyTrackDots}${focusSky ? `<circle class="sky-focus-dot" cx="${focusSky.x.toFixed(1)}" cy="${focusSky.y.toFixed(1)}" r="6" fill="#102030" stroke="#fff" stroke-width="2" />` : ""}${renderSkySatelliteIcon(liveSky)}</g>
               </svg>
               <div class="listen-panel pass-action-panel-v286">
                 <button id="analogAudioToggleButton" class="pass-action-button-v286 pass-primary-action-button-v286" type="button" disabled>Listen</button>
@@ -2077,6 +2101,7 @@
         </div>
       `;
 
+      currentMapShellPassKey = shellPassKey;
       renderLeafletMap(pass, config, focusPoint, activeTrackPoint);
       bindAnalogAudio(pass, node);
       bindReceiveDecodePlaceholderV282(pass, node);
@@ -9149,98 +9174,4 @@ function passActionInactiveTextV286(pass) {
 
     if (!isListenActionV2831(pass, button)) {
       const msg = [
-        `${label} backend target selected for ${name}.`,
-        `Mode: ${modeTextV2831(pass) || "unknown"}`,
-        `Downlink: ${fmtHzV2831(downlink)}`,
-        "",
-        "This modal is the single pass-row receive test surface.",
-        "Decoder-specific capture/decode wiring should attach here next."
-      ].join("\n");
-      if (status) status.textContent = msg;
-      setPageStatusV2831(`${label} backend target selected for ${name}.`);
-      return;
-    }
-
-    await resetAudioV2831(status);
-    try {
-      const stopButton = document.getElementById("passRowBackendTestStopV2827") || button;
-      if (stopButton) {
-        stopButton.hidden = false;
-        stopButton.disabled = false;
-        stopButton.textContent = "Stop audio";
-      }
-      if (status) status.textContent += `\nStarting existing backend audio path for ${fmtHzV2831(downlink)}...`;
-      if (typeof startAnalogAudio !== "function") throw new Error("startAnalogAudio() is not available in this UI build.");
-      await startAnalogAudio(pass, stopButton || button, status || document.getElementById("status"));
-      if (status) status.textContent += "\nBackend audio stream opened.";
-      setPageStatusV2831(`Listen backend test running for ${name}.`);
-      showModalV2831(pass, button, status ? status.textContent : `Listen backend test running for ${name}.`);
-    } catch (error) {
-      try { if (typeof stopAnalogAudio === "function") await stopAnalogAudio(); } catch (_stopError) {}
-      const msg = [
-        `Listen backend test failed for ${name}.`,
-        `Downlink: ${fmtHzV2831(downlink)}`,
-        `Error: ${error && error.message ? error.message : String(error)}`,
-        "",
-        "If this is a 409, the backend rejected the live.wav stream as busy/not-ready after live/start.",
-        "The modal is now open so the full error can be copied."
-      ].join("\n");
-      if (status) status.textContent = msg;
-      setPageStatusV2831(`Listen backend test failed for ${name}.`);
-      showModalV2831(pass, button, msg);
-    }
-  }
-
-  function interceptClickV2831(event) {
-    const button = event.target && event.target.closest ? event.target.closest(".pass-row-action-button-v286") : null;
-    if (!button) return;
-    const row = button.closest(".pass-row");
-    if (!row) return;
-    event.preventDefault();
-    event.stopPropagation();
-    if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
-    button.disabled = false;
-    button.removeAttribute("disabled");
-    button.setAttribute("aria-disabled", "false");
-    const pass = passForButtonV2831(button);
-    showModalV2831(pass, button, `Opening ${actionLabelV2831(pass, button)} backend test...`);
-    window.setTimeout(() => runBackendTestV2831(pass, button), 0);
-  }
-
-  function annotateV2831() {
-    ensureStyleV2831();
-    document.querySelectorAll(".pass-row-action-button-v286").forEach((button) => {
-      button.disabled = false;
-      button.removeAttribute("disabled");
-      button.setAttribute("aria-disabled", "false");
-      button.style.pointerEvents = "auto";
-      button.style.opacity = "1";
-      button.title = "Open Backend Test modal for this pass row.";
-    });
-  }
-
-  try {
-    if (typeof renderPasses === "function" && renderPasses.backendTestPassCacheWrappedV2831 !== true) {
-      const previousRenderPassesV2831 = renderPasses;
-      renderPasses = function renderPassesBackendTestPassCacheV2831(payload) {
-        try { window.__plutoBackendTestPassesV2831 = (payload && payload.passes) || []; } catch (_error) {}
-        const result = previousRenderPassesV2831.apply(this, arguments);
-        try { annotateV2831(); } catch (_error) {}
-        return result;
-      };
-      renderPasses.backendTestPassCacheWrappedV2831 = true;
-    }
-  } catch (_error) {}
-
-  try {
-    configurePassRowActionButtonV286 = function configurePassRowActionButtonForceModalV2831(button, pass, onSelect) {
-      if (!button) return;
-      button.disabled = false;
-      button.removeAttribute("disabled");
-      button.setAttribute("aria-disabled", "false");
-      button.style.pointerEvents = "auto";
-      button.style.opacity = "1";
-      button.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        if (typeof event.stopImmediatePr
+ 
