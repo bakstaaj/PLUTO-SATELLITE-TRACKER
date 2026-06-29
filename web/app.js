@@ -6276,49 +6276,56 @@ try {
   function closeDecodeModalV2626E() {
     const session = window.__plutoDecodeSessionV2626E || {};
     if (session.timer) window.clearInterval(session.timer);
-    window.__plutoDecodeSessionV2626E = { timer: 0 };
+    window.__plutoDecodeSessionV2626E = { timer: 0, lastSeq: 0 };
     const modal = document.getElementById("receiveDecodeModalV2626E");
     if (modal) {
       modal.hidden = true;
       modal.classList.remove("open");
     }
-    fetch("/api/radio/receive/stop", { method: "POST", cache: "no-store" }).catch(() => {});
+    fetch("/api/radio/decode/stop", { method: "POST", cache: "no-store" }).catch(() => {});
   }
 
-  function formatDecodePayloadV2626E(payload) {
-    if (!payload) return "No decoder payload.";
-    const lines = [];
-    lines.push(`State: ${payload.state || "unknown"}`);
-    if (payload.decoder_state) lines.push(`Decoder: ${payload.decoder_state}`);
-    if (payload.receive_kind) lines.push(`Kind: ${payload.receive_kind}`);
-    if (payload.mode) lines.push(`Mode: ${payload.mode}`);
-    if (payload.sample_count !== undefined) lines.push(`Samples: ${payload.sample_count}`);
-    if (payload.pcm_bytes !== undefined) lines.push(`PCM bytes: ${payload.pcm_bytes}`);
-    if (payload.rms !== undefined) lines.push(`RMS: ${payload.rms}`);
-    if (payload.peak !== undefined) lines.push(`Peak: ${payload.peak}`);
-    if (payload.estimated_tone_hz !== undefined) lines.push(`Tone estimate: ${payload.estimated_tone_hz} Hz`);
-    if (payload.key_duty_percent !== undefined) lines.push(`Key duty: ${payload.key_duty_percent}%`);
-    if (payload.morse) lines.push(`Morse: ${payload.morse}`);
-    if (payload.decoded_text) lines.push(`Decoded: ${payload.decoded_text}`);
-    if (payload.info) lines.push(`Info: ${payload.info}`);
-    if (payload.error) lines.push(`Error: ${payload.error}`);
-    if (Array.isArray(payload.lines)) {
-      lines.push("");
-      payload.lines.forEach((line) => lines.push(String(line)));
+  function formatDecodeFrameV2626E(frame) {
+    const t = frame.time_utc || "";
+    const ts = t ? `[${t.slice(11, 19)}] ` : "";
+    if (frame.type === "aprs") {
+      let line = `${ts}APRS ${frame.from || "?"} → ${frame.to || "?"}`;
+      if (frame.path && frame.path.length) line += ` via ${frame.path.join(",")}`;
+      if (frame.info) line += `\n      ${frame.info}`;
+      if (frame.lat != null && frame.lon != null) line += `\n      Pos: ${Number(frame.lat).toFixed(4)}, ${Number(frame.lon).toFixed(4)}`;
+      return line;
     }
-    return lines.join("\n") || JSON.stringify(payload, null, 2);
+    if (frame.type === "cw") {
+      return `${ts}CW ${frame.text || ""}`;
+    }
+    return `${ts}${JSON.stringify(frame)}`;
   }
 
-  async function pollDecodeOutputV2626E(kind, mode) {
+  async function pollDecodeOutputV2626E() {
     const output = document.getElementById("receiveDecodeOutputV2626E");
     const subtitle = document.getElementById("receiveDecodeSubtitleV2626E");
-    const params = new URLSearchParams({ mode: mode || (kind === "cw" ? "CW" : "digital"), request: String(Date.now()) });
+    const session = window.__plutoDecodeSessionV2626E || {};
+    const since = session.lastSeq || 0;
     try {
-      const payload = await getJson(`/api/radio/decode/output?${params.toString()}`);
-      if (output) output.textContent = formatDecodePayloadV2626E(payload);
-      if (subtitle) subtitle.textContent = `${kind === "cw" ? "CW" : "Digital"} decode output updating live.`;
+      const payload = await getJson(`/api/radio/decode/frames?since=${since}`);
+      if (!payload) return;
+      const frames = Array.isArray(payload.frames) ? payload.frames : [];
+      if (frames.length > 0 && output) {
+        const newLines = frames.map(formatDecodeFrameV2626E).join("\n");
+        const wasAtBottom = output.scrollHeight - output.scrollTop <= output.clientHeight + 10;
+        output.textContent = (output.textContent === "Waiting for decoder output..." ? "" : output.textContent) +
+          (output.textContent && output.textContent !== "Waiting for decoder output..." ? "\n" : "") + newLines;
+        if (wasAtBottom) output.scrollTop = output.scrollHeight;
+        const maxSeq = Math.max(...frames.map(f => f.seq || 0));
+        if (session) session.lastSeq = Math.max(since, maxSeq);
+      }
+      if (subtitle) {
+        const state = payload.running ? "Decoder running" : "Decoder idle";
+        const total = (since + frames.length);
+        subtitle.textContent = `${state} | ${payload.mode || session.kind || "?"} | ${total} frame${total !== 1 ? "s" : ""} received`;
+      }
     } catch (error) {
-      if (output) output.textContent = error.message || "Decode output failed.";
+      if (subtitle) subtitle.textContent = `Poll error: ${error.message}`;
     }
   }
 
@@ -6327,31 +6334,32 @@ try {
     const title = document.getElementById("receiveDecodeTitleV2626E");
     const subtitle = document.getElementById("receiveDecodeSubtitleV2626E");
     const output = document.getElementById("receiveDecodeOutputV2626E");
-    const mode = modeForPassV2626E(pass) || (kind === "cw" ? "CW" : "digital");
+    const backendMode = kind === "cw" ? "cw" : "aprs";
     const downlink = downlinkHzForPassV2626E(pass);
     const params = new URLSearchParams({
-      mode,
-      name: (pass && pass.name) || "",
+      mode: backendMode,
       downlink_hz: String(downlink || "")
     });
 
     button.disabled = true;
     button.textContent = kind === "cw" ? "Starting CW..." : "Starting decode...";
-    if (status) status.textContent = kind === "cw" ? "Starting CW decode capture..." : "Starting digital decode screen...";
+    if (status) status.textContent = kind === "cw" ? "Starting CW decode..." : "Starting digital decode...";
 
     try {
-      const payload = await postJsonNoBodyV2626E(`/api/radio/receive/start?${params.toString()}`);
+      const payload = await postJsonNoBodyV2626E(`/api/radio/decode/start?${params.toString()}`);
+      if (!payload || !payload.ok) throw new Error((payload && payload.error) || "Decoder failed to start");
       modal.hidden = false;
       modal.classList.add("open");
       if (title) title.textContent = kind === "cw" ? "Decode CW" : "Decode Digital";
-      if (subtitle) subtitle.textContent = `${(pass && pass.name) || "Selected pass"} | ${mode || kind} | ${downlink ? formatHz(downlink) : "no downlink"}`;
-      if (output) output.textContent = formatDecodePayloadV2626E(payload);
+      if (subtitle) subtitle.textContent = `${(pass && pass.name) || "Selected pass"} | ${backendMode.toUpperCase()} | ${downlink ? formatHz(downlink) : "no downlink"}`;
+      if (output) output.textContent = "Waiting for decoder output...";
       if (window.__plutoDecodeSessionV2626E && window.__plutoDecodeSessionV2626E.timer) {
         window.clearInterval(window.__plutoDecodeSessionV2626E.timer);
       }
-      const timer = window.setInterval(() => pollDecodeOutputV2626E(kind, mode), 1500);
-      window.__plutoDecodeSessionV2626E = { timer, kind, mode };
-      pollDecodeOutputV2626E(kind, mode);
+      window.__plutoDecodeSessionV2626E = { timer: 0, kind, mode: backendMode, lastSeq: 0 };
+      const timer = window.setInterval(() => pollDecodeOutputV2626E(), 2000);
+      window.__plutoDecodeSessionV2626E.timer = timer;
+      pollDecodeOutputV2626E();
       button.textContent = kind === "cw" ? "Decode CW" : "Decode";
       if (status) status.textContent = kind === "cw" ? "CW decode screen open." : "Digital decode screen open.";
     } finally {
@@ -6845,7 +6853,7 @@ try {
 // PLUTO_UI_BADGE_PASS_REFRESH_RESCUE_V2_7_2_BEGIN
 (function () {
   "use strict";
-  const UI_VERSION = "v2.7.2";
+  const UI_VERSION = "v2.9.4";
   const BADGE_ID = "plutoVersionBadge";
   const PASS_RESCUE_KEY = "plutoPassRefreshRescueLastQueuedMsV272";
   const PASS_RESCUE_COOLDOWN_MS = 12 * 60 * 1000;
@@ -9237,7 +9245,4 @@ function passActionInactiveTextV286(pass) {
 })();
 /* BACKEND_TEST_MODAL_FORCE_OPEN_V2_8_31_END */
 
-/* AUDIO_UI_EXPERIMENT_ROLLBACK_V2_8_40C_BEGIN
- * Clean rollback of browser-side audio experiment blocks.
- * This branch restores the backend-test modal force-open UI baseline and leaves
- * audio start/stop behavior to the pre-experim
+/* AUDIO_UI_EXPERIMENT_ROLLBA

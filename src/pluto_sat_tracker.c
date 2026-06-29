@@ -23,7 +23,7 @@
 #include <stdint.h>
 #include <pthread.h>
 
-#define APP_VERSION "2.9.3"
+#define APP_VERSION "2.9.4"
 #define DEFAULT_BIND_ADDR "127.0.0.1"
 #define DEFAULT_NET_BIND_ADDR "0.0.0.0"
 #define DEFAULT_PORT 8080
@@ -95,6 +95,22 @@ static int json_double_value(const char *json, const char *key, double *out);
 static int send_wav_stream(int fd, const struct app_config *cfg, const char *query);
 static void append_audio_debug(const char *message);
 static struct live_audio_state g_live_audio = {0};
+
+/* ------------------------------------------------------------------ */
+/* Digital decode session                                              */
+/* ------------------------------------------------------------------ */
+
+struct decode_session_state {
+    pid_t pid;
+    int running;
+    long long frequency_hz;
+    char mode[16];          /* "aprs" | "cw" */
+    char frames_path[256];  /* NDJSON output file */
+    time_t started_epoch;
+};
+
+static struct decode_session_state g_decode_session = {0};
+static pthread_mutex_t g_decode_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static void on_signal(int signum)
 {
@@ -1686,6 +1702,9 @@ static int stop_live_audio_session(void)
     return was_running;
 }
 
+/* Forward declaration — defined later in decode session management block */
+static int stop_decode_session(void);
+
 static int start_live_audio_session(const struct app_config *cfg, long long frequency_hz)
 {
     char helper_path[PATH_BUF_SIZE];
@@ -1693,6 +1712,7 @@ static int start_live_audio_session(const struct app_config *cfg, long long freq
     pid_t pid;
 
     helper_binary_path(cfg, helper_path, sizeof(helper_path));
+    stop_decode_session();   /* IIO is exclusive — kill decoder before starting audio */
     stop_live_audio_session();
     unlink(AUDIO_LIVE_PCM_PATH);
 
@@ -2057,6 +2077,235 @@ static void send_live_audio_stop(int fd)
     send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
 }
 
+
+/* ------------------------------------------------------------------ */
+/* Digital decode session management                                   */
+/* ------------------------------------------------------------------ */
+
+static void decoder_binary_path(const struct app_config *cfg, char *out, size_t sz)
+{
+    /* Decoder lives alongside the main binary in DEPLOY_DIR */
+    char parent[PATH_BUF_SIZE];
+    const char *web = cfg && cfg->web_dir ? cfg->web_dir : DEFAULT_WEB_DIR;
+    size_t len;
+
+    snprintf(parent, sizeof(parent), "%s", web);
+    len = strlen(parent);
+    while (len > 0 && (parent[len-1] == '/' || parent[len-1] == '\\'))
+        parent[--len] = '\0';
+    while (len > 0 && parent[len-1] != '/' && parent[len-1] != '\\')
+        parent[--len] = '\0';
+    if (len > 0) parent[len-1] = '\0'; /* strip trailing slash */
+
+    join_path(out, sz, parent[0] ? parent : ".", "pluto_digital_decoder");
+}
+
+static int stop_decode_session(void)
+{
+    pid_t pid = 0;
+    int was_running = 0;
+
+    pthread_mutex_lock(&g_decode_lock);
+    if (g_decode_session.running && g_decode_session.pid > 0) {
+        pid = g_decode_session.pid;
+        was_running = 1;
+        g_decode_session.running = 0;
+        g_decode_session.pid = 0;
+    }
+    pthread_mutex_unlock(&g_decode_lock);
+
+    if (pid > 0) {
+        kill(pid, SIGTERM);
+        waitpid(pid, NULL, 0);
+    }
+    return was_running;
+}
+
+static int start_decode_session(const struct app_config *cfg,
+                                long long frequency_hz,
+                                const char *mode)
+{
+    char decoder_path[PATH_BUF_SIZE];
+    char freq_text[64];
+    char frames_path[256];
+    pid_t pid;
+
+    /* IIO exclusivity: stop audio before starting decode */
+    stop_live_audio_session();
+    stop_decode_session();
+
+    decoder_binary_path(cfg, decoder_path, sizeof(decoder_path));
+    snprintf(freq_text, sizeof(freq_text), "%lld", frequency_hz);
+    snprintf(frames_path, sizeof(frames_path), "%s/decode_frames.ndjson",
+             cfg->transient_dir ? cfg->transient_dir : "/tmp/pluto_sat_tracker");
+
+    /* Truncate output file for new session */
+    {
+        FILE *f = fopen(frames_path, "w");
+        if (f) fclose(f);
+    }
+
+    pid = fork();
+    if (pid < 0) return 0;
+
+    if (pid == 0) {
+        execl(decoder_path, decoder_path,
+              "--freq-hz", freq_text,
+              "--mode",    mode,
+              "--output",  frames_path,
+              (char *)NULL);
+        _exit(127);
+    }
+
+    pthread_mutex_lock(&g_decode_lock);
+    g_decode_session.pid = pid;
+    g_decode_session.running = 1;
+    g_decode_session.frequency_hz = frequency_hz;
+    g_decode_session.started_epoch = time(NULL);
+    snprintf(g_decode_session.mode, sizeof(g_decode_session.mode), "%s", mode);
+    snprintf(g_decode_session.frames_path, sizeof(g_decode_session.frames_path),
+             "%s", frames_path);
+    pthread_mutex_unlock(&g_decode_lock);
+    return 1;
+}
+
+static void send_decode_start(int fd, const struct app_config *cfg, const char *query)
+{
+    char freq_text[64] = "";
+    char mode[16] = "";
+    char body[256];
+    long long frequency_hz = 0;
+
+    query_param(query, "downlink_hz", freq_text, sizeof(freq_text));
+    query_param(query, "mode", mode, sizeof(mode));
+
+    if (freq_text[0]) {
+        if (!parse_frequency_hz(freq_text, &frequency_hz)) {
+            send_text(fd, 400, "Bad Request", "application/json; charset=utf-8",
+                      "{\"ok\":false,\"error\":\"valid downlink_hz required\"}\n");
+            return;
+        }
+    } else if (!read_active_audio_frequency_hz(cfg, &frequency_hz)) {
+        send_text(fd, 409, "Conflict", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"plan or tune a satellite first, or pass downlink_hz\"}\n");
+        return;
+    }
+
+    if (mode[0] == '\0') snprintf(mode, sizeof(mode), "aprs");
+
+    if (strcmp(mode, "aprs") != 0 && strcmp(mode, "cw") != 0) {
+        send_text(fd, 400, "Bad Request", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"mode must be aprs or cw\"}\n");
+        return;
+    }
+
+    if (!start_decode_session(cfg, frequency_hz, mode)) {
+        send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
+                  "{\"ok\":false,\"error\":\"could not start decoder\"}\n");
+        return;
+    }
+
+    snprintf(body, sizeof(body),
+             "{\"ok\":true,\"state\":\"running\",\"mode\":\"%s\",\"downlink_hz\":%lld}\n",
+             mode, frequency_hz);
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
+}
+
+static void send_decode_stop(int fd)
+{
+    int stopped = stop_decode_session();
+    char body[128];
+    snprintf(body, sizeof(body), "{\"ok\":true,\"stopped\":%s}\n",
+             stopped ? "true" : "false");
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
+}
+
+static void send_decode_status(int fd)
+{
+    char body[256];
+    int running;
+    long long hz;
+    char mode[16];
+    time_t started;
+
+    pthread_mutex_lock(&g_decode_lock);
+    running = g_decode_session.running;
+    hz      = g_decode_session.frequency_hz;
+    started = g_decode_session.started_epoch;
+    snprintf(mode, sizeof(mode), "%s", g_decode_session.mode[0] ? g_decode_session.mode : "");
+    pthread_mutex_unlock(&g_decode_lock);
+
+    snprintf(body, sizeof(body),
+             "{\"ok\":true,\"running\":%s,\"mode\":\"%s\","
+             "\"downlink_hz\":%lld,\"started_epoch\":%ld}\n",
+             running ? "true" : "false", mode, hz, (long)started);
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
+}
+
+/*
+ * Return decoded frames as a JSON array.
+ * Query param: since=N (return only frames with seq > N; 0 = all)
+ * Reads the NDJSON file line by line, up to 200 frames.
+ */
+static void send_decode_frames(int fd, const struct app_config *cfg, const char *query)
+{
+    char since_text[32] = "";
+    int since = 0;
+    char frames_path[256];
+    FILE *f;
+    char line[2048];
+    int count = 0;
+    const int MAX_FRAMES = 200;
+    char out[65536];
+    int out_len = 0;
+    int in_array = 0;
+    int running;
+    char mode[16];
+
+    query_param(query, "since", since_text, sizeof(since_text));
+    if (since_text[0]) since = atoi(since_text);
+
+    snprintf(frames_path, sizeof(frames_path), "%s/decode_frames.ndjson",
+             cfg->transient_dir ? cfg->transient_dir : "/tmp/pluto_sat_tracker");
+
+    out_len += snprintf(out + out_len, sizeof(out) - (size_t)out_len,
+                        "{\"ok\":true,\"frames\":[");
+
+    f = fopen(frames_path, "r");
+    if (f) {
+        while (fgets(line, sizeof(line), f) && count < MAX_FRAMES) {
+            char *seq_p = strstr(line, "\"seq\":");
+            int seq = 0;
+            if (seq_p) seq = atoi(seq_p + 6);
+            if (seq <= since) continue;
+
+            /* Strip trailing newline */
+            size_t ll = strlen(line);
+            while (ll > 0 && (line[ll-1] == '\n' || line[ll-1] == '\r'))
+                line[--ll] = '\0';
+
+            if (in_array)
+                out_len += snprintf(out + out_len, sizeof(out) - (size_t)out_len, ",");
+            out_len += snprintf(out + out_len, sizeof(out) - (size_t)out_len, "%s", line);
+            in_array = 1;
+            count++;
+
+            if (out_len > (int)sizeof(out) - 300) break;
+        }
+        fclose(f);
+    }
+
+    pthread_mutex_lock(&g_decode_lock);
+    running = g_decode_session.running;
+    snprintf(mode, sizeof(mode), "%s", g_decode_session.mode[0] ? g_decode_session.mode : "");
+    pthread_mutex_unlock(&g_decode_lock);
+
+    out_len += snprintf(out + out_len, sizeof(out) - (size_t)out_len,
+                        "],\"running\":%s,\"mode\":\"%s\",\"count\":%d}\n",
+                        running ? "true" : "false", mode, count);
+
+    send_text(fd, 200, "OK", "application/json; charset=utf-8", out);
+}
 
 /* BACKEND_AUDIO_TAIL_STREAM_V1H
  * Continuous browser audio stream mode.
@@ -3222,6 +3471,10 @@ static void handle_request(
             send_live_audio_start(fd, cfg, query);
         } else if (strcmp(path, "/api/radio/audio/live/stop") == 0) {
             send_live_audio_stop(fd);
+        } else if (strcmp(path, "/api/radio/decode/start") == 0) {
+            send_decode_start(fd, cfg, query);
+        } else if (strcmp(path, "/api/radio/decode/stop") == 0) {
+            send_decode_stop(fd);
         } else if (strcmp(path, "/api/config") == 0) {
             send_config_save(fd, cfg, body);
         } else if (strcmp(path, "/api/refresh/passes") == 0) {
@@ -3307,6 +3560,10 @@ static void handle_request(
         } else {
             send_live_audio_block(fd, query);
         }
+    } else if (strcmp(path, "/api/radio/decode/frames") == 0) {
+        send_decode_frames(fd, cfg, query);
+    } else if (strcmp(path, "/api/radio/decode/status") == 0) {
+        send_decode_status(fd);
     } else if (strcmp(path, "/api/radio/plan") == 0) {
         send_radio_plan(fd, cfg, query);
     } else if (strcmp(path, "/api/radio/tune") == 0) {
@@ -3520,4 +3777,23 @@ int main(int argc, char **argv)
             break;
         }
         {
-            s
+            struct client_job *job = malloc(sizeof(*job));
+            pthread_t tid;
+            if (!job) {
+                close(client_fd);
+                continue;
+            }
+            job->fd  = client_fd;
+            job->cfg = &cfg;
+            if (pthread_create(&tid, NULL, client_worker, job) != 0) {
+                close(client_fd);
+                free(job);
+            } else {
+                pthread_detach(tid);
+            }
+        }
+    }
+
+    close(server_fd);
+    return 0;
+}

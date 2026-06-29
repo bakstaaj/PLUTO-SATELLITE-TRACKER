@@ -16,6 +16,7 @@ SD_ROOT="${PLUTO_SD_ROOT:-/media/mmcblk0p1/pluto_sat_tracker}"
 
 BIN="$ROOT_DIR/dist/pluto_sat_tracker"
 FM_HELPER="$ROOT_DIR/dist/pluto_fm_receiver"
+DECODER="$ROOT_DIR/dist/pluto_digital_decoder"
 RUNTIME="$ROOT_DIR/tools/pluto_runtime.sh"
 WEB_HTML="$ROOT_DIR/web/index.html"
 OBSERVER_CONFIG="$ROOT_DIR/config/observer.example.json"
@@ -30,7 +31,7 @@ REFRESH_STATUS_WRITER="$ROOT_DIR/tools/write_refresh_status.py"
 SGP4_PACKAGE="$ROOT_DIR/.python-deps/sgp4"
 PYTHON_RUNTIME_TARBALL="${PLUTO_PYTHON_RUNTIME_TARBALL:-$ROOT_DIR/runtime/python-pluto-armhf.tar.gz}"
 
-for required in "$BIN" "$FM_HELPER" "$RUNTIME" "$WEB_HTML" "$OBSERVER_CONFIG" "$REPOSITORIES" "$SATELLITES" "$REFRESH_RUNNER" "$PASS_REFRESH_LOOP" "$PASS_UPDATER" "$CATALOG_UPDATER" "$REFRESH_STATUS_WRITER"; do
+for required in "$BIN" "$FM_HELPER" "$DECODER" "$RUNTIME" "$WEB_HTML" "$OBSERVER_CONFIG" "$REPOSITORIES" "$SATELLITES" "$REFRESH_RUNNER" "$PASS_REFRESH_LOOP" "$PASS_UPDATER" "$CATALOG_UPDATER" "$REFRESH_STATUS_WRITER"; do
   if [[ ! -f "$required" ]]; then
     echo "Missing required deploy file: $required"
     exit 1
@@ -94,6 +95,9 @@ fi
   "$FM_HELPER" "${PLUTO_USER}@${PLUTO_IP}:${DEPLOY_DIR}/pluto_fm_receiver.tmp"
 
 "${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
+  "$DECODER" "${PLUTO_USER}@${PLUTO_IP}:${DEPLOY_DIR}/pluto_digital_decoder.tmp"
+
+"${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
   "$RUNTIME" "${PLUTO_USER}@${PLUTO_IP}:${DEPLOY_DIR}/run_tracker.sh.tmp"
 
 "${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
@@ -142,10 +146,11 @@ fi
 
 "${SSHPASS[@]}" ssh "${SSH_OPTS[@]}" "${PLUTO_USER}@${PLUTO_IP}" "
   set -e
-  chmod +x '${DEPLOY_DIR}/pluto_sat_tracker.tmp' '${DEPLOY_DIR}/pluto_fm_receiver.tmp' '${DEPLOY_DIR}/run_tracker.sh.tmp'
+  chmod +x '${DEPLOY_DIR}/pluto_sat_tracker.tmp' '${DEPLOY_DIR}/pluto_fm_receiver.tmp' '${DEPLOY_DIR}/pluto_digital_decoder.tmp' '${DEPLOY_DIR}/run_tracker.sh.tmp'
   chmod +x '${SD_ROOT}/tools/pluto_refresh_data.sh.tmp' '${SD_ROOT}/tools/pluto_pass_refresh_loop.sh.tmp'
   mv '${DEPLOY_DIR}/pluto_sat_tracker.tmp' '${DEPLOY_DIR}/pluto_sat_tracker'
   mv '${DEPLOY_DIR}/pluto_fm_receiver.tmp' '${DEPLOY_DIR}/pluto_fm_receiver'
+  mv '${DEPLOY_DIR}/pluto_digital_decoder.tmp' '${DEPLOY_DIR}/pluto_digital_decoder'
   mv '${DEPLOY_DIR}/run_tracker.sh.tmp' '${DEPLOY_DIR}/run_tracker.sh'
   mv '${DEPLOY_DIR}/web/index.html.tmp' '${DEPLOY_DIR}/web/index.html'
   if [ -f '${DEPLOY_DIR}/config/observer.json' ]; then
@@ -178,14 +183,10 @@ fi
   echo '== Remote files (jffs2) =='
   ls -lh '${DEPLOY_DIR}/pluto_sat_tracker' \
          '${DEPLOY_DIR}/pluto_fm_receiver' \
+         '${DEPLOY_DIR}/pluto_digital_decoder' \
          '${DEPLOY_DIR}/run_tracker.sh' \
          '${DEPLOY_DIR}/web/index.html' \
          '${DEPLOY_DIR}/config/observer.json' \
          '${DEPLOY_DIR}/data/repositories.json' \
          '${DEPLOY_DIR}/data/satellites.json'
-  echo '== Remote files (SD card) =='
-  ls -lh '${SD_ROOT}/tools/pluto_refresh_data.sh' \
-         '${SD_ROOT}/tools/pluto_pass_refresh_loop.sh' \
-         '${SD_ROOT}/tools/update_pass_predictions.py' \
-         '${SD_ROOT}/tools/update_satellite_catalog.py' \
-         '${SD_ROOT}/tools/write_refresh_status.py' 2>/dev/null || echo '  (SD card not mounted or tools n
+  echo '==
