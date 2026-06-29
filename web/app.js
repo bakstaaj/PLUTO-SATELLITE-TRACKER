@@ -102,6 +102,7 @@
         if (shouldRefreshPasses) {
           await postJson("/api/refresh/passes", {});
           lastAutoPassRefreshMs = Date.now();
+          window.__plutoLastAutoPassRefreshMs = lastAutoPassRefreshMs;
         }
 
         return true;
@@ -4854,13 +4855,9 @@ const tbody = document.getElementById("satellites");
         bootstrapBrowserTimeRefreshV3();
       }, 300);
 
-      // Auto-reload passes every 15 minutes
-      window.setInterval(async () => {
-        try {
-          await triggerBrowserOwnedPassRefreshV3();
-          await refresh();
-        } catch (_error) {}
-      }, 15 * 60 * 1000);
+      /* Pass auto-refresh is handled exclusively by installPeriodicPassRefreshV2629
+       * (below). The duplicate 15-min setInterval that was here was removed to
+       * prevent double-triggers that produced "Pass refresh already running" spam. */
     })();
 
 
@@ -9174,4 +9171,173 @@ function passActionInactiveTextV286(pass) {
 
     if (!isListenActionV2831(pass, button)) {
       const msg = [
- 
+        `${label} backend target selected for ${name}.`,
+        `Mode: ${modeTextV2831(pass) || "unknown"}`,
+        `Downlink: ${fmtHzV2831(downlink)}`,
+        "",
+        "This modal is the single pass-row receive test surface.",
+        "Decoder-specific capture/decode wiring should attach here next."
+      ].join("\n");
+      if (status) status.textContent = msg;
+      setPageStatusV2831(`${label} backend target selected for ${name}.`);
+      return;
+    }
+
+    await resetAudioV2831(status);
+    try {
+      const stopButton = document.getElementById("passRowBackendTestStopV2827") || button;
+      if (stopButton) {
+        stopButton.hidden = false;
+        stopButton.disabled = false;
+        stopButton.textContent = "Stop audio";
+      }
+      if (status) status.textContent += `\nStarting existing backend audio path for ${fmtHzV2831(downlink)}...`;
+      if (typeof startAnalogAudio !== "function") throw new Error("startAnalogAudio() is not available in this UI build.");
+      await startAnalogAudio(pass, stopButton || button, status || document.getElementById("status"));
+      if (status) status.textContent += "\nBackend audio stream opened.";
+      setPageStatusV2831(`Listen backend test running for ${name}.`);
+      showModalV2831(pass, button, status ? status.textContent : `Listen backend test running for ${name}.`);
+    } catch (error) {
+      try { if (typeof stopAnalogAudio === "function") await stopAnalogAudio(); } catch (_stopError) {}
+      const msg = [
+        `Listen backend test failed for ${name}.`,
+        `Downlink: ${fmtHzV2831(downlink)}`,
+        `Error: ${error && error.message ? error.message : String(error)}`,
+        "",
+        "If this is a 409, the backend rejected the live.wav stream as busy/not-ready after live/start.",
+        "The modal is now open so the full error can be copied."
+      ].join("\n");
+      if (status) status.textContent = msg;
+      setPageStatusV2831(`Listen backend test failed for ${name}.`);
+      showModalV2831(pass, button, msg);
+    }
+  }
+
+  function interceptClickV2831(event) {
+    const button = event.target && event.target.closest ? event.target.closest(".pass-row-action-button-v286") : null;
+    if (!button) return;
+    const row = button.closest(".pass-row");
+    if (!row) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
+    button.disabled = false;
+    button.removeAttribute("disabled");
+    button.setAttribute("aria-disabled", "false");
+    const pass = passForButtonV2831(button);
+    showModalV2831(pass, button, `Opening ${actionLabelV2831(pass, button)} backend test...`);
+    window.setTimeout(() => runBackendTestV2831(pass, button), 0);
+  }
+
+  function annotateV2831() {
+    ensureStyleV2831();
+    document.querySelectorAll(".pass-row-action-button-v286").forEach((button) => {
+      button.disabled = false;
+      button.removeAttribute("disabled");
+      button.setAttribute("aria-disabled", "false");
+      button.style.pointerEvents = "auto";
+      button.style.opacity = "1";
+      button.title = "Open Backend Test modal for this pass row.";
+    });
+  }
+
+  try {
+    if (typeof renderPasses === "function" && renderPasses.backendTestPassCacheWrappedV2831 !== true) {
+      const previousRenderPassesV2831 = renderPasses;
+      renderPasses = function renderPassesBackendTestPassCacheV2831(payload) {
+        try { window.__plutoBackendTestPassesV2831 = (payload && payload.passes) || []; } catch (_error) {}
+        const result = previousRenderPassesV2831.apply(this, arguments);
+        try { annotateV2831(); } catch (_error) {}
+        return result;
+      };
+      renderPasses.backendTestPassCacheWrappedV2831 = true;
+    }
+  } catch (_error) {}
+
+  try {
+    configurePassRowActionButtonV286 = function configurePassRowActionButtonForceModalV2831(button, pass, onSelect) {
+      if (!button) return;
+      button.disabled = false;
+      button.removeAttribute("disabled");
+      button.setAttribute("aria-disabled", "false");
+      button.style.pointerEvents = "auto";
+      button.style.opacity = "1";
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
+        try { if (typeof onSelect === "function") onSelect(); } catch (_error) {}
+        showModalV2831(pass, button, `Opening ${actionLabelV2831(pass, button)} backend test...`);
+        window.setTimeout(() => runBackendTestV2831(pass, button), 0);
+      }, true);
+    };
+  } catch (_error) {}
+
+  document.addEventListener("click", interceptClickV2831, true);
+  window.addEventListener("click", interceptClickV2831, true);
+  window.plutoOpenBackendTestModalV2831 = showModalV2831;
+  window.plutoRunBackendTestV2831 = runBackendTestV2831;
+  window.plutoAnnotateBackendTestRowsV2831 = annotateV2831;
+
+  function startV2831() {
+    ensureModalV2831();
+    annotateV2831();
+    const observer = new MutationObserver(() => window.setTimeout(annotateV2831, 20));
+    if (document.body) observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["disabled", "hidden", "class", "style"] });
+    window.setInterval(annotateV2831, 1000);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", startV2831, { once: true });
+  } else {
+    startV2831();
+  }
+  console.info(`${MARKER} installed`);
+})();
+/* BACKEND_TEST_MODAL_FORCE_OPEN_V2_8_31_END */
+
+/* AUDIO_UI_EXPERIMENT_ROLLBACK_V2_8_40C_BEGIN
+ * Clean rollback of browser-side audio experiment blocks.
+ * This branch restores the backend-test modal force-open UI baseline and leaves
+ * audio start/stop behavior to the pre-experiment path for backend repair work.
+ * Backend C is unchanged.
+ */
+(function installAudioUiExperimentRollbackV2840C() {
+  window.__plutoAudioUiExperimentRollbackV2840C = true;
+})();
+/* AUDIO_UI_EXPERIMENT_ROLLBACK_V2_8_40C_END */
+
+/* LIVE_MAP_UPDATE_TIMER_V2_9_7
+ * Updates the satellite position on the map every 15 seconds using only
+ * local data — no HTTP requests. The pass ground_track is already loaded;
+ * we just re-compute the nearest point to now() and let the fast-path in
+ * renderMapPanel update the sky SVG and Leaflet overlay group in-place.
+ */
+(function installLiveMapTimerV297() {
+  "use strict";
+
+  const LIVE_MAP_INTERVAL_MS = 15000; /* 15 seconds — smooth without hammering */
+
+  function tick() {
+    try {
+      const pass = typeof currentSelectedPass !== "undefined" ? currentSelectedPass : null;
+      const config = typeof currentObserverConfig !== "undefined" ? currentObserverConfig : null;
+      if (!pass || !config) return;
+      /* Only run during active or imminent passes */
+      const timing = typeof passTimingState === "function" ? passTimingState(pass) : null;
+      if (!timing || (timing !== "active" && timing !== "upcoming")) return;
+      if (typeof renderMapPanel === "function") {
+        renderMapPanel(pass, config);
+      }
+    } catch (_err) {}
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function () {
+      window.setInterval(tick, LIVE_MAP_INTERVAL_MS);
+    }, { once: true });
+  } else {
+    window.setInterval(tick, LIVE_MAP_INTERVAL_MS);
+  }
+})();
+/* LIVE_MAP_UPDATE_TIMER_V2_9_7_END */

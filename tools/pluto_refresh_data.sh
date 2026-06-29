@@ -148,15 +148,34 @@ acquire_lock() {
   exit 0
 }
 
-clear_pass_locks() {
-  # Browser-time pass refresh is authoritative. Clear old pass refresh locks/jobs
-  # before queueing a fresh worker so stale boot-time windows cannot survive.
+worker_is_running_and_fresh() {
+  # Returns 0 (true) if the pass worker is already running and within QUICK_LOCK_MAX_AGE.
+  # This prevents double-start when the UI calls /api/refresh/passes multiple times.
+  WORKER_LOCK="/tmp/pluto_refresh_passes_worker.lock"
+  if [ ! -d "$WORKER_LOCK" ]; then return 1; fi
+  OLD_PID=""
+  if [ -f "${WORKER_LOCK}/pid" ]; then
+    OLD_PID="$(cat "${WORKER_LOCK}/pid" 2>/dev/null || true)"
+  fi
+  if [ -z "$OLD_PID" ] || ! kill -0 "$OLD_PID" 2>/dev/null; then return 1; fi
+  AGE="$(lock_age_seconds "$WORKER_LOCK")"
+  if [ "$AGE" -le "$QUICK_LOCK_MAX_AGE" ] 2>/dev/null; then return 0; fi
+  return 1
+}
+
+clear_stale_pass_locks() {
+  # Clear only STALE (not actively running) pass locks so boot-time zombie
+  # locks don't survive. Does NOT kill a fresh running worker.
   for LOCK_DIR in /tmp/pluto_refresh_passes_quick.lock /tmp/pluto_refresh_passes_full.lock /tmp/pluto_refresh_passes_worker.lock /tmp/pluto_refresh_passes.lock; do
     OLD_PID=""
     if [ -f "${LOCK_DIR}/pid" ]; then
       OLD_PID="$(cat "${LOCK_DIR}/pid" 2>/dev/null || true)"
     fi
+    # Skip if PID is alive and lock is fresh
     if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
+      AGE="$(lock_age_seconds "$LOCK_DIR")"
+      if [ "$AGE" -le "$QUICK_LOCK_MAX_AGE" ] 2>/dev/null; then continue; fi
+      # Stale running process — kill it
       kill "$OLD_PID" >/dev/null 2>&1 || true
       sleep 1
       kill -9 "$OLD_PID" >/dev/null 2>&1 || true
@@ -272,38 +291,24 @@ mkdir -p "$TRANSIENT_DIR" "$LOG_DIR" "$STATIC_DATA_DIR"
 
 case "$MODE" in
   passes)
-    clear_pass_locks
-    write_status "running" "passes" "Queued quick pass preview on Pluto"
+    # If a fresh worker is already running, do nothing — avoids double-start
+    # when the UI (bootstrap + periodic timer + rescue) all call this quickly.
+    if worker_is_running_and_fresh; then
+      write_status "running" "passes" "Pass refresh already in progress — waiting for results"
+      exit 0
+    fi
+    clear_stale_pass_locks
+    write_status "running" "passes" "Queued pass preview on Pluto"
     start_pass_worker_background
     ;;
   passes_worker)
     acquire_lock "/tmp/pluto_refresh_passes_worker.lock" "passes" "Pass refresh worker already in progress" "$QUICK_LOCK_MAX_AGE"
     QUICK_TMP="${TRANSIENT_DIR}/passes.quick.tmp.$$"
-    write_status "running" "passes" "Generating quick pass preview on Pluto"
-    run_pass_generation "$QUICK_TMP" "$QUICK_HOURS" "$QUICK_LIMIT" "$QUICK_STEP_SECONDS" "$REFRESH_START_UTC" || fail "quick pass preview failed"
+    write_status "running" "passes" "Generating ${QUICK_LIMIT} passes across ${QUICK_HOURS}h on Pluto"
+    run_pass_generation "$QUICK_TMP" "$QUICK_HOURS" "$QUICK_LIMIT" "$QUICK_STEP_SECONDS" "$REFRESH_START_UTC" || fail "pass generation failed"
     mv "$QUICK_TMP" "${TRANSIENT_DIR}/passes.json"
-    write_generated_status passes "${TRANSIENT_DIR}/passes.json" || fail "quick pass status update failed"
-    start_full_background
+    write_generated_status passes "${TRANSIENT_DIR}/passes.json" || fail "pass status update failed"
+    # No full background run — 10 passes every 15 min is sufficient.
     ;;
   passes_full)
-    acquire_lock "/tmp/pluto_refresh_passes_full.lock" "passes" "Full 24-hour pass refresh already in progress" "$FULL_LOCK_MAX_AGE"
-    FULL_TMP="${TRANSIENT_DIR}/passes.full.tmp.$$"
-    write_status "running" "passes" "Regenerating full 24-hour pass predictions on Pluto"
-    run_pass_generation "$FULL_TMP" "$FULL_HOURS" "$FULL_LIMIT" "$FULL_STEP_SECONDS" "$REFRESH_START_UTC" || fail "full 24-hour pass refresh failed"
-    mv "$FULL_TMP" "${TRANSIENT_DIR}/passes.json"
-    write_generated_status passes "${TRANSIENT_DIR}/passes.json" || fail "full pass status update failed"
-    ;;
-  catalog)
-    acquire_lock "/tmp/pluto_refresh_catalog.lock" "catalog" "Catalog refresh already in progress" "$CATALOG_LOCK_MAX_AGE"
-    write_status "running" "catalog" "Refreshing CelesTrak and SatNOGS catalog data on Pluto"
-    CATALOG_TMP="${STATIC_DATA_DIR}/satellites.tmp.$$"
-    run_python \
-      "${TOOLS_DIR}/update_satellite_catalog.py" \
-      --output "$CATALOG_TMP" || fail "catalog refresh failed"
-    mv "$CATALOG_TMP" "${STATIC_DATA_DIR}/satellites.json"
-    write_generated_status catalog "${STATIC_DATA_DIR}/satellites.json" || fail "catalog status update failed"
-    ;;
-  all)
-    "$0" catalog
-    "$0" passes
-    
+    # Retained 
