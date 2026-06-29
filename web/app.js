@@ -4858,6 +4858,18 @@ const tbody = document.getElementById("satellites");
       /* Pass auto-refresh is handled exclusively by installPeriodicPassRefreshV2629
        * (below). The duplicate 15-min setInterval that was here was removed to
        * prevent double-triggers that produced "Pass refresh already running" spam. */
+
+      /* Global hook for the live-map timer (LIVE_MAP_UPDATE_TIMER_V2_9_7).
+       * renderMapPanel and currentSelectedPass are closure-scoped here, so
+       * the outer IIFE timer calls this instead of accessing them directly. */
+      window.__plutoRenderMapLiveV297 = function () {
+        try {
+          if (!currentSelectedPass || !currentObserverConfig) return;
+          const timing = passTimingState(currentSelectedPass);
+          if (timing !== "active" && timing !== "upcoming") return;
+          renderMapPanel(currentSelectedPass, currentObserverConfig);
+        } catch (_err) {}
+      };
     })();
 
 
@@ -9309,27 +9321,18 @@ function passActionInactiveTextV286(pass) {
 
 /* LIVE_MAP_UPDATE_TIMER_V2_9_7
  * Updates the satellite position on the map every 15 seconds using only
- * local data — no HTTP requests. The pass ground_track is already loaded;
- * we just re-compute the nearest point to now() and let the fast-path in
- * renderMapPanel update the sky SVG and Leaflet overlay group in-place.
+ * local data — no HTTP. Calls window.__plutoRenderMapLiveV297 which is
+ * exposed by the main IIFE and has closure access to renderMapPanel,
+ * currentSelectedPass, currentObserverConfig, and passTimingState.
  */
 (function installLiveMapTimerV297() {
   "use strict";
 
-  const LIVE_MAP_INTERVAL_MS = 15000; /* 15 seconds — smooth without hammering */
+  const LIVE_MAP_INTERVAL_MS = 15000;
 
   function tick() {
-    try {
-      const pass = typeof currentSelectedPass !== "undefined" ? currentSelectedPass : null;
-      const config = typeof currentObserverConfig !== "undefined" ? currentObserverConfig : null;
-      if (!pass || !config) return;
-      /* Only run during active or imminent passes */
-      const timing = typeof passTimingState === "function" ? passTimingState(pass) : null;
-      if (!timing || (timing !== "active" && timing !== "upcoming")) return;
-      if (typeof renderMapPanel === "function") {
-        renderMapPanel(pass, config);
-      }
-    } catch (_err) {}
+    const fn = window.__plutoRenderMapLiveV297;
+    if (typeof fn === "function") fn();
   }
 
   if (document.readyState === "loading") {
@@ -9337,7 +9340,4 @@ function passActionInactiveTextV286(pass) {
       window.setInterval(tick, LIVE_MAP_INTERVAL_MS);
     }, { once: true });
   } else {
-    window.setInterval(tick, LIVE_MAP_INTERVAL_MS);
-  }
-})();
-/* LIVE_MAP_UPDATE_TIMER_V2_9_7_END */
+    window.setInterval(tick, LIVE_MAP_IN
