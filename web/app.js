@@ -9183,13 +9183,24 @@ function passActionInactiveTextV286(pass) {
     }
 
     if (!isListenActionV2831(pass, button)) {
+      /* Route CW/digital/data passes to the live decode modal */
+      const decodeForPass = window.__plutoDecodeForPassV2626E;
+      if (typeof decodeForPass === "function") {
+        const bModal = document.getElementById("passRowBackendTestModalV2827");
+        if (bModal) { bModal.hidden = true; bModal.style.display = "none"; }
+        setPageStatusV2831(`Starting decode for ${name}...`);
+        decodeForPass(pass).catch(function (err) {
+          setPageStatusV2831("Decode start failed: " + (err && err.message ? err.message : String(err)));
+        });
+        return;
+      }
+      /* Fallback: decode hook not yet loaded */
       const msg = [
         `${label} backend target selected for ${name}.`,
         `Mode: ${modeTextV2831(pass) || "unknown"}`,
         `Downlink: ${fmtHzV2831(downlink)}`,
         "",
-        "This modal is the single pass-row receive test surface.",
-        "Decoder-specific capture/decode wiring should attach here next."
+        "Decoder initialising — try again in a moment."
       ].join("\n");
       if (status) status.textContent = msg;
       setPageStatusV2831(`${label} backend target selected for ${name}.`);
