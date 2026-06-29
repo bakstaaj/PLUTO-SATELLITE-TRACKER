@@ -19,6 +19,8 @@ FM_HELPER="$ROOT_DIR/dist/pluto_fm_receiver"
 DECODER="$ROOT_DIR/dist/pluto_digital_decoder"
 RUNTIME="$ROOT_DIR/tools/pluto_runtime.sh"
 WEB_HTML="$ROOT_DIR/web/index.html"
+WEB_JS="$ROOT_DIR/web/app.js"
+WEB_CSS="$ROOT_DIR/web/app.css"
 OBSERVER_CONFIG="$ROOT_DIR/config/observer.example.json"
 REPOSITORIES="$ROOT_DIR/data/repositories.json"
 SATELLITES="$ROOT_DIR/data/satellites.json"
@@ -31,7 +33,7 @@ REFRESH_STATUS_WRITER="$ROOT_DIR/tools/write_refresh_status.py"
 SGP4_PACKAGE="$ROOT_DIR/.python-deps/sgp4"
 PYTHON_RUNTIME_TARBALL="${PLUTO_PYTHON_RUNTIME_TARBALL:-$ROOT_DIR/runtime/python-pluto-armhf.tar.gz}"
 
-for required in "$BIN" "$FM_HELPER" "$DECODER" "$RUNTIME" "$WEB_HTML" "$OBSERVER_CONFIG" "$REPOSITORIES" "$SATELLITES" "$REFRESH_RUNNER" "$PASS_REFRESH_LOOP" "$PASS_UPDATER" "$CATALOG_UPDATER" "$REFRESH_STATUS_WRITER"; do
+for required in "$BIN" "$FM_HELPER" "$DECODER" "$RUNTIME" "$WEB_HTML" "$WEB_JS" "$WEB_CSS" "$OBSERVER_CONFIG" "$REPOSITORIES" "$SATELLITES" "$REFRESH_RUNNER" "$PASS_REFRESH_LOOP" "$PASS_UPDATER" "$CATALOG_UPDATER" "$REFRESH_STATUS_WRITER"; do
   if [[ ! -f "$required" ]]; then
     echo "Missing required deploy file: $required"
     exit 1
@@ -104,6 +106,12 @@ fi
   "$WEB_HTML" "${PLUTO_USER}@${PLUTO_IP}:${DEPLOY_DIR}/web/index.html.tmp"
 
 "${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
+  "$WEB_JS" "${PLUTO_USER}@${PLUTO_IP}:${DEPLOY_DIR}/web/app.js.tmp"
+
+"${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
+  "$WEB_CSS" "${PLUTO_USER}@${PLUTO_IP}:${DEPLOY_DIR}/web/app.css.tmp"
+
+"${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
   "$OBSERVER_CONFIG" "${PLUTO_USER}@${PLUTO_IP}:${DEPLOY_DIR}/config/observer.json.tmp"
 
 # Static data goes on jffs2 — always deploy repositories and catalog seed
@@ -153,6 +161,8 @@ fi
   mv '${DEPLOY_DIR}/pluto_digital_decoder.tmp' '${DEPLOY_DIR}/pluto_digital_decoder'
   mv '${DEPLOY_DIR}/run_tracker.sh.tmp' '${DEPLOY_DIR}/run_tracker.sh'
   mv '${DEPLOY_DIR}/web/index.html.tmp' '${DEPLOY_DIR}/web/index.html'
+  mv '${DEPLOY_DIR}/web/app.js.tmp' '${DEPLOY_DIR}/web/app.js'
+  mv '${DEPLOY_DIR}/web/app.css.tmp' '${DEPLOY_DIR}/web/app.css'
   if [ -f '${DEPLOY_DIR}/config/observer.json' ]; then
     rm -f '${DEPLOY_DIR}/config/observer.json.tmp'
   else
@@ -177,16 +187,4 @@ fi
     fi
     rm -rf '${SD_ROOT}/python-runtime'
     mv '${SD_ROOT}/python-runtime.tmp' '${SD_ROOT}/python-runtime'
-    mv '${SD_ROOT}/cache/python-runtime.tar.gz.tmp' '${SD_ROOT}/cache/python-runtime.tar.gz'
-  fi
-  sync
-  echo '== Remote files (jffs2) =='
-  ls -lh '${DEPLOY_DIR}/pluto_sat_tracker' \
-         '${DEPLOY_DIR}/pluto_fm_receiver' \
-         '${DEPLOY_DIR}/pluto_digital_decoder' \
-         '${DEPLOY_DIR}/run_tracker.sh' \
-         '${DEPLOY_DIR}/web/index.html' \
-         '${DEPLOY_DIR}/config/observer.json' \
-         '${DEPLOY_DIR}/data/repositories.json' \
-         '${DEPLOY_DIR}/data/satellites.json'
-  echo '==
+    mv '${SD_ROOT}/cache/python-runtime.tar.gz.tmp' '${SD_ROOT}/cache/python-runt
