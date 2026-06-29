@@ -4394,7 +4394,12 @@ installPassRowSelectedUnlockV2826();
       }
 
       const foundIndex = visiblePasses.findIndex((pass) => passKey(pass) === currentSelectedPassKey);
-      const selectedIndex = foundIndex >= 0 ? foundIndex : 0;
+      /* If the previously-selected pass is gone (e.g. after regen), prefer any
+       * currently-active pass so the satellite keeps moving on the map rather
+       * than snapping to the first upcoming pass (which is frozen at AOS). */
+      const activeIndex = foundIndex >= 0 ? -1 :
+        visiblePasses.findIndex((pass) => passTimingState(pass) === "active");
+      const selectedIndex = foundIndex >= 0 ? foundIndex : activeIndex >= 0 ? activeIndex : 0;
 
       const selectPass = (pass, row) => {
         node.querySelectorAll(".pass-row").forEach((item) => item.classList.remove("selected"));
@@ -9459,10 +9464,6 @@ function passActionInactiveTextV286(pass) {
     }
     window.__plutoRenderMapLiveV297 = function mapLiveDiagV2914() {
       tickCount++;
-      var pass = window.__plutoLastPassesPayload &&
-        window.__plutoLastPassesPayload.passes &&
-        window.__plutoLastPassesPayload.passes[0];
-      /* Try to read selectedPass key from DOM */
       var selRow = document.querySelector(".pass-row.selected");
       var passName = selRow ? selRow.querySelector("strong") && selRow.querySelector("strong").textContent : "none selected";
 
@@ -9473,7 +9474,7 @@ function passActionInactiveTextV286(pass) {
         updateBadge("tick #" + tickCount + "  " + nowHMS() + "\nERROR: " + String(err));
       }
     };
-    updateBadge("MAP DIAG installed — waiting for tick");
+    updateBadge("MAP DIAG installed \u2014 waiting for tick");
   }
 
   if (document.readyState === "loading") {
