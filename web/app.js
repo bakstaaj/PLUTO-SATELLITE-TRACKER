@@ -8806,14 +8806,25 @@ function passActionInactiveTextV286(pass) {
     }
 
     if (!analogModeV2830(pass)) {
+      /* Route CW/digital passes to the live decode modal */
+      const decodeForPass = window.__plutoDecodeForPassV2626E;
+      if (typeof decodeForPass === "function") {
+        /* Close the backend-test modal — decode modal will open instead */
+        const bModal = document.getElementById("passRowBackendTestModalV2827");
+        if (bModal) { bModal.hidden = true; bModal.style.display = "none"; }
+        setPageStatusV2830(`Starting decode for ${name}...`);
+        decodeForPass(pass).catch(function(err) {
+          setPageStatusV2830("Decode start failed: " + (err && err.message ? err.message : String(err)));
+        });
+        return;
+      }
+      /* Fallback if decode hook not yet loaded */
       const msg = [
         `Receive backend target selected for ${name}.`,
         `Mode: ${modeTextV2830(pass) || "unknown"}`,
         `Downlink: ${formatHzV2830(downlink)}`,
         "",
-        "The legacy Receive Decode placeholder has been retired.",
-        "This modal is now the single pass-row action surface.",
-        "Next decoder work should attach the proper backend receive/capture/decode action here."
+        "Decoder initialising — try again in a moment."
       ].join("\n");
       if (status) status.textContent = msg;
       setPageStatusV2830(`Receive backend target selected for ${name}.`);
@@ -9232,14 +9243,4 @@ function passActionInactiveTextV286(pass) {
       button.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
-        if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
-        try { if (typeof onSelect === "function") onSelect(); } catch (_error) {}
-        showModalV2831(pass, button, `Opening ${actionLabelV2831(pass, button)} backend test...`);
-        window.setTimeout(() => runBackendTestV2831(pass, button), 0);
-      }, true);
-    };
-  } catch (_error) {}
-
-  document.addEventListener("click", interceptClickV2831, true);
-  window.addEventListener("click", interceptClickV2831, true);
-  window.plutoOpenBackendTestModalV2831 = showModalV2831
+        if (typeof event.stopImmediatePr
