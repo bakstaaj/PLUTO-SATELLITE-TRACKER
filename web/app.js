@@ -4314,7 +4314,7 @@ installPassRowSelectedUnlockV2826();
         if (passFilter === "active") return readiness.state === "active";
         return readiness.state !== "stale";
       });
-      const visiblePasses = filteredPasses.slice(0, 12);
+      const visiblePasses = filteredPasses.slice(0, 10);
       /* PASS_FILTER_BUTTONS_REMOVED_V2_8_6F
        * The pass list intentionally uses the default useful pass set without
        * the Upcoming/Ready/Active/All filter button row.
@@ -4828,6 +4828,14 @@ const tbody = document.getElementById("satellites");
       window.setTimeout(() => {
         bootstrapBrowserTimeRefreshV3();
       }, 300);
+
+      // Auto-reload passes every 15 minutes
+      window.setInterval(async () => {
+        try {
+          await triggerBrowserOwnedPassRefreshV3();
+          await refresh();
+        } catch (_error) {}
+      }, 15 * 60 * 1000);
     })();
 
 
@@ -7107,7 +7115,7 @@ try {
 
 // VERSION_BADGE_PASS_REPAIR_V2_7_4
 (function () {
-  const UI_VERSION = "2.9.2-dev";
+  const UI_VERSION = "2.9.3";
   const REFRESH_COOLDOWN_MS = 12 * 60 * 1000;
   let lastForcedRefreshMs = 0;
 
@@ -8028,9 +8036,9 @@ function passActionInactiveTextV286(pass) {
         if (typeof passFilter !== "undefined" && passFilter === "ready") return !!readiness.actionable;
         if (typeof passFilter !== "undefined" && passFilter === "active") return readiness.state === "active";
         return readiness.state !== "stale";
-      }).slice(0, 12);
+      }).slice(0, 10);
     } catch (_error) {
-      return passes.slice(0, 12);
+      return passes.slice(0, 10);
     }
   }
 
@@ -8625,9 +8633,9 @@ function passActionInactiveTextV286(pass) {
         if (typeof passFilter !== "undefined" && passFilter === "ready") return !!readiness.actionable;
         if (typeof passFilter !== "undefined" && passFilter === "active") return readiness.state === "active";
         return readiness.state !== "stale";
-      }).slice(0, 12);
+      }).slice(0, 10);
     } catch (_error) {
-      return source.slice(0, 12);
+      return source.slice(0, 10);
     }
   }
 
@@ -9061,7 +9069,7 @@ function passActionInactiveTextV286(pass) {
       window.__plutoLastRenderedPassesV2825
     ];
     for (const item of candidates) {
-      if (Array.isArray(item) && item.length) return item.slice(0, 12);
+      if (Array.isArray(item) && item.length) return item.slice(0, 10);
     }
     return [];
   }
@@ -9232,10 +9240,4 @@ function passActionInactiveTextV286(pass) {
 /* AUDIO_UI_EXPERIMENT_ROLLBACK_V2_8_40C_BEGIN
  * Clean rollback of browser-side audio experiment blocks.
  * This branch restores the backend-test modal force-open UI baseline and leaves
- * audio start/stop behavior to the pre-experiment path for backend repair work.
- * Backend C is unchanged.
- */
-(function installAudioUiExperimentRollbackV2840C() {
-  window.__plutoAudioUiExperimentRollbackV2840C = true;
-})();
-/* AUDIO_UI_EXPERIMENT_ROLLBACK_V2_8_40C_END */
+ * audio start/stop behavior to the pre-experim

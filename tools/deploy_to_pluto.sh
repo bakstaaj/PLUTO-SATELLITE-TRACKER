@@ -30,7 +30,7 @@ REFRESH_STATUS_WRITER="$ROOT_DIR/tools/write_refresh_status.py"
 SGP4_PACKAGE="$ROOT_DIR/.python-deps/sgp4"
 PYTHON_RUNTIME_TARBALL="${PLUTO_PYTHON_RUNTIME_TARBALL:-$ROOT_DIR/runtime/python-pluto-armhf.tar.gz}"
 
-for required in "$BIN" "$FM_HELPER" "$RUNTIME" "$WEB_HTML" "$OBSERVER_CONFIG" "$REPOSITORIES" "$SATELLITES" "$PASSES" "$REFRESH_RUNNER" "$PASS_REFRESH_LOOP" "$PASS_UPDATER" "$CATALOG_UPDATER" "$REFRESH_STATUS_WRITER"; do
+for required in "$BIN" "$FM_HELPER" "$RUNTIME" "$WEB_HTML" "$OBSERVER_CONFIG" "$REPOSITORIES" "$SATELLITES" "$REFRESH_RUNNER" "$PASS_REFRESH_LOOP" "$PASS_UPDATER" "$CATALOG_UPDATER" "$REFRESH_STATUS_WRITER"; do
   if [[ ! -f "$required" ]]; then
     echo "Missing required deploy file: $required"
     exit 1
@@ -58,13 +58,9 @@ SSHPASS=(sshpass -p "$PLUTO_PASS")
 DEPLOY_SEED_DATA="${PLUTO_DEPLOY_SEED_DATA:-0}"
 
 echo "== Deploying Pluto Satellite Tracker =="
-echo "Runtime: ${PLUTO_USER}@${PLUTO_IP}:${DEPLOY_DIR}"
-echo "SD data: ${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}"
-if [[ "$DEPLOY_SEED_DATA" == "1" ]]; then
-  echo "Seed data: enabled (host catalog/passes will overwrite on-device copies)"
-else
-  echo "Seed data: disabled (preserving on-device catalog/passes)"
-fi
+echo "jffs2:  ${PLUTO_USER}@${PLUTO_IP}:${DEPLOY_DIR} (binaries, web, config, catalog)"
+echo "SD:     ${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT} (tools, python — read-only OK)"
+echo "Passes/state will be generated at runtime in /tmp/pluto_sat_tracker"
 if [[ -f "$PYTHON_RUNTIME_TARBALL" ]]; then
   echo "Python runtime: $PYTHON_RUNTIME_TARBALL"
 else
@@ -73,12 +69,22 @@ fi
 
 "${SSHPASS[@]}" ssh "${SSH_OPTS[@]}" "${PLUTO_USER}@${PLUTO_IP}" "
   set -e
+  # jffs2: remove symlinks left by old migrations before mkdir
+  # Use unlink (not rm -f) — BusyBox rm refuses to remove symlinks to dirs
+  for D in '$DEPLOY_DIR/data' '$DEPLOY_DIR/logs'; do
+    if [ -L \"\$D\" ]; then
+      echo \"Removing stale symlink: \$D -> \$(readlink \"\$D\")\"
+      unlink \"\$D\"
+    fi
+  done
+  mkdir -p '$DEPLOY_DIR/web' '$DEPLOY_DIR/config' '$DEPLOY_DIR/data'
+  # SD card: tools and python only (read-only after deploy is fine)
   SD_PARENT=\$(dirname '$SD_ROOT')
-  if [ ! -d \"\$SD_PARENT\" ]; then
-    echo \"SD mount parent not found: \$SD_PARENT\"
-    exit 1
+  if [ -d \"\$SD_PARENT\" ]; then
+    mkdir -p '$SD_ROOT/tools' '$SD_ROOT/python' '$SD_ROOT/cache'
+  else
+    echo 'SD card not mounted — skipping SD dirs (tools/python will not be available)'
   fi
-  mkdir -p '$DEPLOY_DIR/web' '$DEPLOY_DIR/config' '$SD_ROOT/data' '$SD_ROOT/cache' '$SD_ROOT/logs' '$SD_ROOT/tools' '$SD_ROOT/python'
 "
 
 "${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
@@ -96,16 +102,14 @@ fi
 "${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
   "$OBSERVER_CONFIG" "${PLUTO_USER}@${PLUTO_IP}:${DEPLOY_DIR}/config/observer.json.tmp"
 
+# Static data goes on jffs2 — always deploy repositories and catalog seed
 "${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
-  "$REPOSITORIES" "${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}/data/repositories.json.tmp"
+  "$REPOSITORIES" "${PLUTO_USER}@${PLUTO_IP}:${DEPLOY_DIR}/data/repositories.json.tmp"
 
-if [[ "$DEPLOY_SEED_DATA" == "1" ]]; then
-  "${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
-    "$SATELLITES" "${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}/data/satellites.json.tmp"
+"${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
+  "$SATELLITES" "${PLUTO_USER}@${PLUTO_IP}:${DEPLOY_DIR}/data/satellites.json.tmp"
 
-  "${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
-    "$PASSES" "${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}/data/passes.json.tmp"
-fi
+# passes.json is generated at runtime in /tmp — never deployed
 
 "${SSHPASS[@]}" scp -O "${SSH_OPTS[@]}" \
   "$REFRESH_RUNNER" "${PLUTO_USER}@${PLUTO_IP}:${SD_ROOT}/tools/pluto_refresh_data.sh.tmp"
@@ -149,13 +153,8 @@ fi
   else
     mv '${DEPLOY_DIR}/config/observer.json.tmp' '${DEPLOY_DIR}/config/observer.json'
   fi
-  mv '${SD_ROOT}/data/repositories.json.tmp' '${SD_ROOT}/data/repositories.json'
-  if [ -f '${SD_ROOT}/data/satellites.json.tmp' ]; then
-    mv '${SD_ROOT}/data/satellites.json.tmp' '${SD_ROOT}/data/satellites.json'
-  fi
-  if [ -f '${SD_ROOT}/data/passes.json.tmp' ]; then
-    mv '${SD_ROOT}/data/passes.json.tmp' '${SD_ROOT}/data/passes.json'
-  fi
+  mv '${DEPLOY_DIR}/data/repositories.json.tmp' '${DEPLOY_DIR}/data/repositories.json'
+  mv '${DEPLOY_DIR}/data/satellites.json.tmp' '${DEPLOY_DIR}/data/satellites.json'
   mv '${SD_ROOT}/tools/pluto_refresh_data.sh.tmp' '${SD_ROOT}/tools/pluto_refresh_data.sh'
   mv '${SD_ROOT}/tools/pluto_pass_refresh_loop.sh.tmp' '${SD_ROOT}/tools/pluto_pass_refresh_loop.sh'
   mv '${SD_ROOT}/tools/update_pass_predictions.py.tmp' '${SD_ROOT}/tools/update_pass_predictions.py'
@@ -176,25 +175,17 @@ fi
     mv '${SD_ROOT}/cache/python-runtime.tar.gz.tmp' '${SD_ROOT}/cache/python-runtime.tar.gz'
   fi
   sync
-  echo '== Remote files =='
+  echo '== Remote files (jffs2) =='
   ls -lh '${DEPLOY_DIR}/pluto_sat_tracker' \
          '${DEPLOY_DIR}/pluto_fm_receiver' \
          '${DEPLOY_DIR}/run_tracker.sh' \
          '${DEPLOY_DIR}/web/index.html' \
          '${DEPLOY_DIR}/config/observer.json' \
-         '${SD_ROOT}/data/repositories.json' \
-         '${SD_ROOT}/data/satellites.json' \
-         '${SD_ROOT}/data/passes.json' \
-         '${SD_ROOT}/tools/pluto_refresh_data.sh' \
+         '${DEPLOY_DIR}/data/repositories.json' \
+         '${DEPLOY_DIR}/data/satellites.json'
+  echo '== Remote files (SD card) =='
+  ls -lh '${SD_ROOT}/tools/pluto_refresh_data.sh' \
          '${SD_ROOT}/tools/pluto_pass_refresh_loop.sh' \
          '${SD_ROOT}/tools/update_pass_predictions.py' \
          '${SD_ROOT}/tools/update_satellite_catalog.py' \
-         '${SD_ROOT}/tools/write_refresh_status.py'
-  if [ -f '${SD_ROOT}/python-runtime/bin/python3.11' ]; then
-    '${SD_ROOT}/python-runtime/bin/python3.11' --version 2>/dev/null || \
-      /lib/ld-linux-armhf.so.3 '${SD_ROOT}/python-runtime/bin/python3.11' --version || true
-  fi
-"
-
-echo
-echo "Deploy complete."
+         '${SD_ROOT}/tools/write_refresh_status.py' 2>/dev/null || echo '  (SD card not mounted or tools n

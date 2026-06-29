@@ -28,14 +28,17 @@ sanitize_path() {
 
 DEPLOY_DIR="$(sanitize_path "${PLUTO_DEPLOY_DIR:-/mnt/jffs2/pluto_sat_tracker}")"
 SD_ROOT="$(sanitize_path "${PLUTO_SD_ROOT:-/media/mmcblk0p1/pluto_sat_tracker}")"
-DATA_DIR="${SD_ROOT}/data"
+# Persistent static data on jffs2 (satellites.json written by catalog refresh)
+STATIC_DATA_DIR="${DEPLOY_DIR}/data"
+# Ephemeral runtime data in /tmp (passes, status, logs — reset on reboot)
+TRANSIENT_DIR="${PLUTO_SAT_TRANSIENT_DIR:-/tmp/pluto_sat_tracker}"
 TOOLS_DIR="${SD_ROOT}/tools"
 PYTHON_DIR="${SD_ROOT}/python"
 PYTHON_RUNTIME_DIR="${SD_ROOT}/python-runtime"
 MODE="${1:-passes}"
-STATUS_FILE="${DATA_DIR}/refresh_status.json"
+STATUS_FILE="${TRANSIENT_DIR}/refresh_status.json"
 STATUS_UPDATER="${TOOLS_DIR}/write_refresh_status.py"
-LOG_DIR="${SD_ROOT}/logs"
+LOG_DIR="${TRANSIENT_DIR}/logs"
 
 QUICK_HOURS="${PLUTO_PASS_QUICK_HOURS:-4}"
 QUICK_LIMIT="${PLUTO_PASS_QUICK_LIMIT:-5}"
@@ -62,7 +65,7 @@ write_status() {
   MESSAGE="$(json_clean "$3")"
   NOW="$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || echo '')"
 
-  mkdir -p "$DATA_DIR"
+  mkdir -p "$TRANSIENT_DIR"
   cat >"${STATUS_FILE}.tmp" <<EOF
 {
   "ok": true,
@@ -212,7 +215,7 @@ run_pass_generation() {
 
   run_python \
     "${TOOLS_DIR}/update_pass_predictions.py" \
-    --catalog "${DATA_DIR}/satellites.json" \
+    --catalog "${STATIC_DATA_DIR}/satellites.json" \
     --observer "${DEPLOY_DIR}/config/observer.json" \
     --output "$OUTPUT" \
     --hours "$HOURS" \
@@ -265,7 +268,7 @@ start_full_background() {
   ) >"$FULL_LOG" 2>&1 &
 }
 
-mkdir -p "$DATA_DIR" "$TOOLS_DIR" "$PYTHON_DIR" "$LOG_DIR"
+mkdir -p "$TRANSIENT_DIR" "$LOG_DIR" "$STATIC_DATA_DIR"
 
 case "$MODE" in
   passes)
@@ -275,36 +278,32 @@ case "$MODE" in
     ;;
   passes_worker)
     acquire_lock "/tmp/pluto_refresh_passes_worker.lock" "passes" "Pass refresh worker already in progress" "$QUICK_LOCK_MAX_AGE"
-    QUICK_TMP="${DATA_DIR}/passes.quick.tmp.$$"
+    QUICK_TMP="${TRANSIENT_DIR}/passes.quick.tmp.$$"
     write_status "running" "passes" "Generating quick pass preview on Pluto"
     run_pass_generation "$QUICK_TMP" "$QUICK_HOURS" "$QUICK_LIMIT" "$QUICK_STEP_SECONDS" "$REFRESH_START_UTC" || fail "quick pass preview failed"
-    mv "$QUICK_TMP" "${DATA_DIR}/passes.json"
-    write_generated_status passes "${DATA_DIR}/passes.json" || fail "quick pass status update failed"
+    mv "$QUICK_TMP" "${TRANSIENT_DIR}/passes.json"
+    write_generated_status passes "${TRANSIENT_DIR}/passes.json" || fail "quick pass status update failed"
     start_full_background
     ;;
   passes_full)
     acquire_lock "/tmp/pluto_refresh_passes_full.lock" "passes" "Full 24-hour pass refresh already in progress" "$FULL_LOCK_MAX_AGE"
-    FULL_TMP="${DATA_DIR}/passes.full.tmp.$$"
+    FULL_TMP="${TRANSIENT_DIR}/passes.full.tmp.$$"
     write_status "running" "passes" "Regenerating full 24-hour pass predictions on Pluto"
     run_pass_generation "$FULL_TMP" "$FULL_HOURS" "$FULL_LIMIT" "$FULL_STEP_SECONDS" "$REFRESH_START_UTC" || fail "full 24-hour pass refresh failed"
-    mv "$FULL_TMP" "${DATA_DIR}/passes.json"
-    write_generated_status passes "${DATA_DIR}/passes.json" || fail "full pass status update failed"
+    mv "$FULL_TMP" "${TRANSIENT_DIR}/passes.json"
+    write_generated_status passes "${TRANSIENT_DIR}/passes.json" || fail "full pass status update failed"
     ;;
   catalog)
     acquire_lock "/tmp/pluto_refresh_catalog.lock" "catalog" "Catalog refresh already in progress" "$CATALOG_LOCK_MAX_AGE"
     write_status "running" "catalog" "Refreshing CelesTrak and SatNOGS catalog data on Pluto"
-    CATALOG_TMP="${DATA_DIR}/satellites.tmp.$$"
+    CATALOG_TMP="${STATIC_DATA_DIR}/satellites.tmp.$$"
     run_python \
       "${TOOLS_DIR}/update_satellite_catalog.py" \
       --output "$CATALOG_TMP" || fail "catalog refresh failed"
-    mv "$CATALOG_TMP" "${DATA_DIR}/satellites.json"
-    write_generated_status catalog "${DATA_DIR}/satellites.json" || fail "catalog status update failed"
+    mv "$CATALOG_TMP" "${STATIC_DATA_DIR}/satellites.json"
+    write_generated_status catalog "${STATIC_DATA_DIR}/satellites.json" || fail "catalog status update failed"
     ;;
   all)
     "$0" catalog
     "$0" passes
-    ;;
-  *)
-    fail "unknown refresh target: $MODE"
-    ;;
-esac
+    ;

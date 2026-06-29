@@ -2,14 +2,15 @@
 
 DEPLOY_DIR="${PLUTO_DEPLOY_DIR:-/mnt/jffs2/pluto_sat_tracker}"
 SD_ROOT="${PLUTO_SD_ROOT:-/media/mmcblk0p1/pluto_sat_tracker}"
+TMP_ROOT="/tmp/pluto_sat_tracker"
 BIN="${DEPLOY_DIR}/pluto_sat_tracker"
 REFRESH_RUNNER="${SD_ROOT}/tools/pluto_refresh_data.sh"
 PASS_REFRESH_LOOP="${SD_ROOT}/tools/pluto_pass_refresh_loop.sh"
 OBSERVER_FILE="${DEPLOY_DIR}/config/observer.json"
-CATALOG_FILE="${SD_ROOT}/data/satellites.json"
-PASSES_FILE="${SD_ROOT}/data/passes.json"
-STARTUP_REFRESH_LOG="${SD_ROOT}/logs/startup_pass_refresh.log"
-PASS_REFRESH_LOOP_LOG="${SD_ROOT}/logs/pass_refresh_loop.log"
+CATALOG_FILE="${DEPLOY_DIR}/data/satellites.json"
+PASSES_FILE="${TMP_ROOT}/passes.json"
+STARTUP_REFRESH_LOG="${TMP_ROOT}/logs/startup_pass_refresh.log"
+PASS_REFRESH_LOOP_LOG="${TMP_ROOT}/logs/pass_refresh_loop.log"
 
 TIME_EPOCH_FILE="${DEPLOY_DIR}/last_time_epoch.txt"
 TIME_UTC_FILE="${DEPLOY_DIR}/last_time_utc.txt"
@@ -156,9 +157,24 @@ trap "save_time" EXIT
 
 echo "== Pluto Satellite Tracker runtime =="
 echo "Deploy dir: $DEPLOY_DIR"
-echo "SD root:    $SD_ROOT"
+echo "SD root:    $SD_ROOT (read-only OK)"
+echo "Tmp root:   $TMP_ROOT"
 
-mkdir -p "$SD_ROOT/data" "$SD_ROOT/cache" "$SD_ROOT/logs"
+# Kill any existing tracker instance before starting
+if command -v killall >/dev/null 2>&1; then
+  killall pluto_sat_tracker 2>/dev/null || true
+else
+  kill "$(cat /var/run/pluto_sat_tracker.pid 2>/dev/null)" 2>/dev/null || true
+  ps | awk '/pluto_sat_tracker/ && !/awk/ { print $1 }' | while read -r pid; do
+    kill "$pid" 2>/dev/null || true
+  done
+fi
+sleep 1
+
+# jffs2 dirs (persistent, writable)
+mkdir -p "${DEPLOY_DIR}/data"
+# transient dirs (reset on reboot, always writable)
+mkdir -p "${TMP_ROOT}/logs"
 
 if try_host_time; then
   :
@@ -173,11 +189,3 @@ fi
 echo "Current Pluto UTC time: $(date -u 2>/dev/null || true)"
 maybe_refresh_passes
 start_pass_refresh_loop
-echo "Starting: $BIN --web-dir $DEPLOY_DIR/web --config-dir $DEPLOY_DIR/config --data-dir $SD_ROOT/data $TRACKER_ARGS"
-echo
-
-exec "$BIN" \
-  --web-dir "$DEPLOY_DIR/web" \
-  --config-dir "$DEPLOY_DIR/config" \
-  --data-dir "$SD_ROOT/data" \
-  $TRACKER_ARGS

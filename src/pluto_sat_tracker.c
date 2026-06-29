@@ -23,13 +23,15 @@
 #include <stdint.h>
 #include <pthread.h>
 
-#define APP_VERSION "2.9.2-dev"
+#define APP_VERSION "2.9.3"
 #define DEFAULT_BIND_ADDR "127.0.0.1"
 #define DEFAULT_NET_BIND_ADDR "0.0.0.0"
 #define DEFAULT_PORT 8080
 #define DEFAULT_DATA_DIR "data"
 #define DEFAULT_WEB_DIR "web"
 #define DEFAULT_CONFIG_DIR "config"
+#define DEFAULT_TRANSIENT_DIR "/tmp/pluto_sat_tracker"
+#define DEFAULT_SD_ROOT "/media/mmcblk0p1/pluto_sat_tracker"
 #define REQ_BUF_SIZE 131072
 #define PATH_BUF_SIZE 1024
 #define PLUTO_MIN_HZ 70000000LL
@@ -56,9 +58,11 @@ static const char *g_audio_debug_log = "/tmp/pluto_audio_debug.log";
 struct app_config {
     const char *bind_addr;
     int port;
-    const char *data_dir;
+    const char *data_dir;       /* persistent static data: satellites.json */
+    const char *transient_dir;  /* ephemeral runtime data: passes, track state, etc. */
     const char *web_dir;
     const char *config_dir;
+    const char *sd_root;        /* SD card root for tools/python (read-only OK) */
     int interactive;
 };
 
@@ -112,9 +116,11 @@ static void usage(const char *argv0)
             "  --net                 Bind to 0.0.0.0 instead of 127.0.0.1.\n"
             "  --bind ADDR           Bind address.\n"
             "  --port PORT           HTTP port, default 8080.\n"
-            "  --data-dir DIR        Satellite data directory.\n"
+            "  --data-dir DIR        Persistent static data directory (satellites.json).\n"
+            "  --transient-dir DIR   Ephemeral runtime data directory (passes, track state).\n"
             "  --web-dir DIR         Web asset directory.\n"
             "  --config-dir DIR      Observer config directory.\n"
+            "  --sd-root DIR         SD card root for tools/python (read-only OK).\n"
             "  --interactive         Print request log lines.\n"
             "  --help                Show this help.\n",
             argv0);
@@ -127,8 +133,10 @@ static int parse_args(int argc, char **argv, struct app_config *cfg)
     cfg->bind_addr = DEFAULT_BIND_ADDR;
     cfg->port = DEFAULT_PORT;
     cfg->data_dir = env_or_default("PLUTO_SAT_DATA_DIR", DEFAULT_DATA_DIR);
+    cfg->transient_dir = env_or_default("PLUTO_SAT_TRANSIENT_DIR", DEFAULT_TRANSIENT_DIR);
     cfg->web_dir = env_or_default("PLUTO_SAT_WEB_DIR", DEFAULT_WEB_DIR);
     cfg->config_dir = env_or_default("PLUTO_SAT_CONFIG_DIR", DEFAULT_CONFIG_DIR);
+    cfg->sd_root = env_or_default("PLUTO_SAT_SD_ROOT", DEFAULT_SD_ROOT);
     cfg->interactive = 0;
 
     for (i = 1; i < argc; i++) {
@@ -146,10 +154,14 @@ static int parse_args(int argc, char **argv, struct app_config *cfg)
             }
         } else if (strcmp(argv[i], "--data-dir") == 0 && i + 1 < argc) {
             cfg->data_dir = argv[++i];
+        } else if (strcmp(argv[i], "--transient-dir") == 0 && i + 1 < argc) {
+            cfg->transient_dir = argv[++i];
         } else if (strcmp(argv[i], "--web-dir") == 0 && i + 1 < argc) {
             cfg->web_dir = argv[++i];
         } else if (strcmp(argv[i], "--config-dir") == 0 && i + 1 < argc) {
             cfg->config_dir = argv[++i];
+        } else if (strcmp(argv[i], "--sd-root") == 0 && i + 1 < argc) {
+            cfg->sd_root = argv[++i];
         } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
             usage(argv[0]);
             exit(0);
@@ -555,10 +567,13 @@ static void send_status(int fd, const struct app_config *cfg)
              "\"port\":%d,"
              "\"web_dir\":\"%s\","
              "\"config_dir\":\"%s\","
-             "\"data_dir\":\"%s\""
+             "\"data_dir\":\"%s\","
+             "\"transient_dir\":\"%s\","
+             "\"sd_root\":\"%s\""
              "}\n",
              APP_VERSION, (long)now, cfg->bind_addr, cfg->port,
-             cfg->web_dir, cfg->config_dir, cfg->data_dir);
+             cfg->web_dir, cfg->config_dir, cfg->data_dir,
+             cfg->transient_dir, cfg->sd_root);
     send_text(fd, 200, "OK", "application/json; charset=utf-8", body);
 }
 
@@ -597,7 +612,7 @@ static void send_time_sync(int fd, const struct app_config *cfg, const char *que
         return;
     }
 
-    join_path(path, sizeof(path), cfg->data_dir, "time_sync.json");
+    join_path(path, sizeof(path), cfg->transient_dir, "time_sync.json");
     snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
     f = fopen(tmp_path, "wb");
     if (f) {
@@ -723,7 +738,7 @@ static void send_refresh_status_code(int fd, const struct app_config *cfg, int s
 {
     char path[PATH_BUF_SIZE];
 
-    join_path(path, sizeof(path), cfg->data_dir, "refresh_status.json");
+    join_path(path, sizeof(path), cfg->transient_dir, "refresh_status.json");
     if (status == 200) {
         send_json_file_or_default(fd, path,
                                   "{\"ok\":true,\"state\":\"idle\",\"target\":\"none\",\"message\":\"No Pluto-local refresh has run yet.\"}\n");
@@ -755,7 +770,6 @@ static void send_refresh_run(int fd, const struct app_config *cfg, const char *t
     char command[PATH_BUF_SIZE * 4];
     char script_path[PATH_BUF_SIZE * 2];
     char deploy_dir[PATH_BUF_SIZE];
-    char sd_root[PATH_BUF_SIZE];
     char *slash;
     int result;
 
@@ -770,12 +784,7 @@ static void send_refresh_run(int fd, const struct app_config *cfg, const char *t
     if (slash) {
         *slash = '\0';
     }
-    snprintf(sd_root, sizeof(sd_root), "%s", cfg->data_dir);
-    slash = strrchr(sd_root, '/');
-    if (slash) {
-        *slash = '\0';
-    }
-    join_path(script_path, sizeof(script_path), sd_root, "tools/pluto_refresh_data.sh");
+    join_path(script_path, sizeof(script_path), cfg->sd_root, "tools/pluto_refresh_data.sh");
 
     if (access(script_path, X_OK) != 0 && access(script_path, R_OK) != 0) {
         send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
@@ -784,8 +793,8 @@ static void send_refresh_run(int fd, const struct app_config *cfg, const char *t
     }
 
     if (snprintf(command, sizeof(command),
-                 "PLUTO_DEPLOY_DIR='%s' PLUTO_SD_ROOT='%s' /bin/sh '%s' '%s'",
-                 deploy_dir, sd_root, script_path, target) >= (int)sizeof(command)) {
+                 "PLUTO_DEPLOY_DIR='%s' PLUTO_SD_ROOT='%s' PLUTO_SAT_TRANSIENT_DIR='%s' /bin/sh '%s' '%s'",
+                 deploy_dir, cfg->sd_root, cfg->transient_dir, script_path, target) >= (int)sizeof(command)) {
         send_text(fd, 500, "Internal Server Error", "application/json; charset=utf-8",
                   "{\"ok\":false,\"error\":\"refresh command path is too long\"}\n");
         return;
@@ -1068,7 +1077,7 @@ static void send_radio_plan(int fd, const struct app_config *cfg, const char *qu
     json_escape(mode_json, sizeof(mode_json), mode);
     json_escape(description_json, sizeof(description_json), description);
 
-    join_path(path, sizeof(path), cfg->data_dir, "radio_target.json");
+    join_path(path, sizeof(path), cfg->transient_dir, "radio_target.json");
     snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
 
     f = fopen(tmp_path, "wb");
@@ -1155,7 +1164,7 @@ static int write_radio_target_state(
         snprintf(tuned_epoch_value, sizeof(tuned_epoch_value), "null");
     }
 
-    join_path(path, sizeof(path), cfg->data_dir, "radio_target.json");
+    join_path(path, sizeof(path), cfg->transient_dir, "radio_target.json");
     snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
 
     f = fopen(tmp_path, "wb");
@@ -1328,7 +1337,7 @@ static int read_active_audio_frequency_hz(const struct app_config *cfg, long lon
         return 0;
     }
 
-    join_path(path, sizeof(path), cfg->data_dir, "radio_target.json");
+    join_path(path, sizeof(path), cfg->transient_dir, "radio_target.json");
     if (read_file_to_string(path, &body, &body_len) == 0) {
         (void)body_len;
         if (json_long_long_after(body, "downlink_hz", &hz) && hz >= PLUTO_MIN_HZ && hz <= PLUTO_MAX_HZ) {
@@ -2270,7 +2279,7 @@ static void write_radio_profile(const struct app_config *cfg, const char *body)
     char tmp_path[PATH_BUF_SIZE + 8];
     FILE *f;
 
-    join_path(path, sizeof(path), cfg->data_dir, "radio_profile.json");
+    join_path(path, sizeof(path), cfg->transient_dir, "radio_profile.json");
     snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
     f = fopen(tmp_path, "wb");
     if (!f) {
@@ -2399,7 +2408,7 @@ static void send_radio_track_plan(int fd, const struct app_config *cfg, const ch
         return;
     }
 
-    join_path(path, sizeof(path), cfg->data_dir, "radio_track.json");
+    join_path(path, sizeof(path), cfg->transient_dir, "radio_track.json");
     snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
 
     f = fopen(tmp_path, "wb");
@@ -2627,7 +2636,7 @@ static int write_track_state(
     json_escape(message_json, sizeof(message_json), message ? message : "");
     json_escape(lo_result_json, sizeof(lo_result_json), lo_write_result ? lo_write_result : "not_attempted");
 
-    join_path(path, sizeof(path), cfg->data_dir, "radio_track_state.json");
+    join_path(path, sizeof(path), cfg->transient_dir, "radio_track_state.json");
     snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
     f = fopen(tmp_path, "wb");
     if (!f) {
@@ -2695,7 +2704,7 @@ static int time_sync_state_is_synced(const struct app_config *cfg)
     size_t body_len = 0;
     int synced = 0;
 
-    join_path(path, sizeof(path), cfg->data_dir, "time_sync.json");
+    join_path(path, sizeof(path), cfg->transient_dir, "time_sync.json");
     if (read_file_to_string(path, &body, &body_len) != 0) {
         return 0;
     }
@@ -2719,7 +2728,7 @@ static int read_stored_track_window(
     size_t plan_len = 0;
     int ok;
 
-    join_path(path, sizeof(path), cfg->data_dir, "radio_track.json");
+    join_path(path, sizeof(path), cfg->transient_dir, "radio_track.json");
     if (read_file_to_string(path, &plan, &plan_len) != 0) {
         snprintf(error, error_size, "no Doppler track plan has been stored");
         return 0;
@@ -2762,7 +2771,7 @@ static int apply_radio_track_step(
     int point_index = -1;
     time_t now = time(NULL);
 
-    join_path(path, sizeof(path), cfg->data_dir, "radio_track.json");
+    join_path(path, sizeof(path), cfg->transient_dir, "radio_track.json");
     if (read_file_to_string(path, &plan, &plan_len) != 0) {
         snprintf(error, error_size, "no Doppler track plan has been stored");
         return 404;
@@ -2930,7 +2939,7 @@ static void send_radio_track_tune_point(int fd, const struct app_config *cfg, co
         return;
     }
 
-    join_path(path, sizeof(path), cfg->data_dir, "radio_track.json");
+    join_path(path, sizeof(path), cfg->transient_dir, "radio_track.json");
     if (read_file_to_string(path, &plan, &plan_len) != 0) {
         send_error_json(fd, 404, "no Doppler track plan has been stored");
         return;
@@ -3234,12 +3243,18 @@ static void handle_request(
                strcmp(path, "/SatelliteTracker/index.html") == 0) {
         join_path(file_path, sizeof(file_path), cfg->web_dir, "index.html");
         send_file(fd, file_path);
+    } else if (strcmp(path, "/app.css") == 0) {
+        join_path(file_path, sizeof(file_path), cfg->web_dir, "app.css");
+        send_file(fd, file_path);
+    } else if (strcmp(path, "/app.js") == 0) {
+        join_path(file_path, sizeof(file_path), cfg->web_dir, "app.js");
+        send_file(fd, file_path);
     } else if (strcmp(path, "/api/status") == 0) {
         send_status(fd, cfg);
     } else if (strcmp(path, "/api/time/sync") == 0) {
         send_time_sync(fd, cfg, query);
     } else if (strcmp(path, "/api/time/status") == 0) {
-        join_path(file_path, sizeof(file_path), cfg->data_dir, "time_sync.json");
+        join_path(file_path, sizeof(file_path), cfg->transient_dir, "time_sync.json");
         send_json_file_or_default(fd, file_path,
                                   "{\"ok\":true,\"state\":\"unknown\",\"message\":\"Time has not been synced from the UI.\"}\n");
     } else if (strcmp(path, "/api/refresh/status") == 0) {
@@ -3249,19 +3264,19 @@ static void handle_request(
     } else if (strcmp(path, "/api/satellites") == 0) {
         send_satellites(fd, cfg);
     } else if (strcmp(path, "/api/passes") == 0) {
-        join_path(file_path, sizeof(file_path), cfg->data_dir, "passes.json");
+        join_path(file_path, sizeof(file_path), cfg->transient_dir, "passes.json");
         send_json_file_or_default(fd, file_path,
                                   "{\"version\":1,\"passes\":[],\"message\":\"Pass predictions have not been generated yet.\"}\n");
     } else if (strcmp(path, "/api/radio/status") == 0) {
-        join_path(file_path, sizeof(file_path), cfg->data_dir, "radio_target.json");
+        join_path(file_path, sizeof(file_path), cfg->transient_dir, "radio_target.json");
         send_json_file_or_default(fd, file_path,
                                   "{\"ok\":true,\"state\":\"idle\",\"message\":\"No radio target planned.\"}\n");
     } else if (strcmp(path, "/api/radio/track/status") == 0) {
-        join_path(file_path, sizeof(file_path), cfg->data_dir, "radio_track.json");
+        join_path(file_path, sizeof(file_path), cfg->transient_dir, "radio_track.json");
         send_json_file_or_default(fd, file_path,
                                   "{\"ok\":true,\"state\":\"idle\",\"message\":\"No Doppler track planned.\"}\n");
     } else if (strcmp(path, "/api/radio/track/state") == 0) {
-        join_path(file_path, sizeof(file_path), cfg->data_dir, "radio_track_state.json");
+        join_path(file_path, sizeof(file_path), cfg->transient_dir, "radio_track_state.json");
         send_json_file_or_default(fd, file_path,
                                   "{\"ok\":true,\"state\":\"idle\",\"message\":\"Doppler tracking has not started.\"}\n");
     } else if (strcmp(path, "/api/radio/track/start") == 0) {
@@ -3486,9 +3501,11 @@ int main(int argc, char **argv)
 
     printf("Pluto Satellite Tracker %s\n", APP_VERSION);
     printf("Listening on http://%s:%d/SatelliteTracker/\n", cfg.bind_addr, cfg.port);
-    printf("Web dir:    %s\n", cfg.web_dir);
-    printf("Config dir: %s\n", cfg.config_dir);
-    printf("Data dir:   %s\n", cfg.data_dir);
+    printf("Web dir:      %s\n", cfg.web_dir);
+    printf("Config dir:   %s\n", cfg.config_dir);
+    printf("Data dir:     %s\n", cfg.data_dir);
+    printf("Transient dir:%s\n", cfg.transient_dir);
+    printf("SD root:      %s\n", cfg.sd_root);
     fflush(stdout);
 
     while (g_running) {
@@ -3503,27 +3520,4 @@ int main(int argc, char **argv)
             break;
         }
         {
-            struct client_job *job = (struct client_job *)malloc(sizeof(*job));
-            pthread_t client_thread;
-            int create_result;
-
-            if (!job) {
-                close(client_fd);
-                continue;
-            }
-
-            job->fd = client_fd;
-            job->cfg = &cfg;
-            create_result = pthread_create(&client_thread, NULL, client_worker, job);
-            if (create_result != 0) {
-                close(client_fd);
-                free(job);
-                continue;
-            }
-            pthread_detach(client_thread);
-        }
-    }
-
-    close(server_fd);
-    return 0;
-}
+            s
