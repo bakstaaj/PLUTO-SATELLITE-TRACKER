@@ -6431,6 +6431,18 @@ try {
   if (typeof bindReceiveDecodePlaceholderV282 !== "undefined") {
     bindReceiveDecodePlaceholderV282 = function() {};
   }
+
+  /* Expose decode functions for the pass-row hook block below */
+  window.__plutoDecodeKindForPassV2626E = receiveKindForPassV2626E;
+  window.__plutoDecodeHzForPassV2626E   = downlinkHzForPassV2626E;
+  window.__plutoDecodeForPassV2626E = async function(pass) {
+    const kind = receiveKindForPassV2626E(pass);
+    const fakeButton = { disabled: false, textContent: "" };
+    const fakeStatus = { textContent: "" };
+    try {
+      await startDecodeForPassV2626E(pass, fakeButton, fakeStatus);
+    } catch (_err) {}
+  };
 })();
 
 /* PERIODIC_PASS_REFRESH_V2_6_29
@@ -9230,16 +9242,4 @@ function passActionInactiveTextV286(pass) {
 
   document.addEventListener("click", interceptClickV2831, true);
   window.addEventListener("click", interceptClickV2831, true);
-  window.plutoOpenBackendTestModalV2831 = showModalV2831;
-  window.plutoRunBackendTestV2831 = runBackendTestV2831;
-  window.plutoAnnotateBackendTestRowsV2831 = annotateV2831;
-
-  function startV2831() {
-    ensureModalV2831();
-    annotateV2831();
-    const observer = new MutationObserver(() => window.setTimeout(annotateV2831, 20));
-    if (document.body) observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["disabled", "hidden", "class", "style"] });
-    window.setInterval(annotateV2831, 1000);
-  }
-
-  if (document.readyState
+  window.plutoOpenBackendTestModalV2831 = showModalV2831
