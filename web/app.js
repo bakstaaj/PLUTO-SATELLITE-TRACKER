@@ -4908,10 +4908,28 @@ const tbody = document.getElementById("satellites");
        * the outer IIFE timer calls this instead of accessing them directly. */
       window.__plutoRenderMapLiveV297 = function () {
         try {
-          if (!currentSelectedPass || !currentObserverConfig) return;
+          if (!currentObserverConfig) return;
+          /* If selected pass just went stale, immediately re-render the pass
+           * list to drop it — don't wait 20s for the stale-pass checker. */
+          if (!currentSelectedPass || passTimingState(currentSelectedPass) === "stale") {
+            const payload = window.__plutoLastPassesPayload;
+            if (payload && typeof renderPasses === "function") renderPasses(payload);
+            return;
+          }
           const timing = passTimingState(currentSelectedPass);
           if (timing !== "active" && timing !== "upcoming") return;
           renderMapPanel(currentSelectedPass, currentObserverConfig);
+          /* For upcoming passes: update the AOS countdown label in the map. */
+          if (timing === "upcoming") {
+            const aosMs = Date.parse(currentSelectedPass.aos_utc || "");
+            if (Number.isFinite(aosMs)) {
+              const secsToAos = Math.max(0, Math.round((aosMs - Date.now()) / 1000));
+              const mm = Math.floor(secsToAos / 60);
+              const ss = secsToAos % 60;
+              const label = document.querySelector(".map-live-label");
+              if (label) label.textContent = `AOS in ${mm}m ${ss < 10 ? "0" : ""}${ss}s`;
+            }
+          }
         } catch (_err) {}
       };
     })();
