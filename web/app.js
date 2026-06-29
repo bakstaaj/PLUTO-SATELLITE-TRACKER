@@ -9332,7 +9332,7 @@ function passActionInactiveTextV286(pass) {
 /* AUDIO_UI_EXPERIMENT_ROLLBACK_V2_8_40C_END */
 
 /* LIVE_MAP_UPDATE_TIMER_V2_9_7
- * Updates the satellite position on the map every 15 seconds using only
+ * Updates the satellite position on the map every 5 seconds using only
  * local data — no HTTP. Calls window.__plutoRenderMapLiveV297 which is
  * exposed by the main IIFE and has closure access to renderMapPanel,
  * currentSelectedPass, currentObserverConfig, and passTimingState.
@@ -9340,7 +9340,7 @@ function passActionInactiveTextV286(pass) {
 (function installLiveMapTimerV297() {
   "use strict";
 
-  const LIVE_MAP_INTERVAL_MS = 15000;
+  const LIVE_MAP_INTERVAL_MS = 5000;
 
   function tick() {
     const fn = window.__plutoRenderMapLiveV297;
@@ -9380,3 +9380,4 @@ function passActionInactiveTextV286(pass) {
   }, 20000);
 })();
 /* STALE_PASS_CHECKER_V2_9_9_END */
+
