@@ -4919,15 +4919,25 @@ const tbody = document.getElementById("satellites");
           const timing = passTimingState(currentSelectedPass);
           if (timing !== "active" && timing !== "upcoming") return;
           renderMapPanel(currentSelectedPass, currentObserverConfig);
-          /* For upcoming passes: update the AOS countdown label in the map. */
-          if (timing === "upcoming") {
-            const aosMs = Date.parse(currentSelectedPass.aos_utc || "");
-            if (Number.isFinite(aosMs)) {
-              const secsToAos = Math.max(0, Math.round((aosMs - Date.now()) / 1000));
-              const mm = Math.floor(secsToAos / 60);
-              const ss = secsToAos % 60;
-              const label = document.querySelector(".map-live-label");
-              if (label) label.textContent = `AOS in ${mm}m ${ss < 10 ? "0" : ""}${ss}s`;
+          /* Update the live-label countdown for upcoming and active passes. */
+          const labelEl = document.querySelector(".map-live-label");
+          if (labelEl) {
+            if (timing === "upcoming") {
+              const aosMs = Date.parse(currentSelectedPass.aos_utc || "");
+              if (Number.isFinite(aosMs)) {
+                const secsToAos = Math.max(0, Math.round((aosMs - Date.now()) / 1000));
+                const mm = Math.floor(secsToAos / 60);
+                const ss = secsToAos % 60;
+                labelEl.textContent = `AOS in ${mm}m ${ss < 10 ? "0" : ""}${ss}s`;
+              }
+            } else if (timing === "active") {
+              const losMs = Date.parse(currentSelectedPass.los_utc || "");
+              if (Number.isFinite(losMs)) {
+                const secsToLos = Math.max(0, Math.round((losMs - Date.now()) / 1000));
+                const mm = Math.floor(secsToLos / 60);
+                const ss = secsToLos % 60;
+                labelEl.textContent = `LOS in ${mm}m ${ss < 10 ? "0" : ""}${ss}s`;
+              }
             }
           }
         } catch (_err) {}
