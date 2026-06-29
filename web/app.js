@@ -427,6 +427,45 @@
       return bestPoint;
     }
 
+    /* Linearly interpolate a synthetic track point between the two surrounding
+     * recorded points, so the satellite icon moves smoothly even with coarse
+     * (30s or 120s) step intervals. Falls back to nearest point at edges. */
+    function interpolateTrackPoint(pass, isoTime) {
+      if (!pass || !isoTime) return null;
+      const target = Date.parse(isoTime);
+      const points = (pass.ground_track) || [];
+      if (!Number.isFinite(target) || !points.length) return null;
+
+      let before = null;
+      let after = null;
+      for (const p of points) {
+        const t = Date.parse(p.time_utc || "");
+        if (!Number.isFinite(t)) continue;
+        if (t <= target) { before = p; }
+        if (t >= target && !after) { after = p; }
+      }
+
+      if (!before && !after) return null;
+      if (!before) return after;
+      if (!after) return before;
+      if (before === after || before.time_utc === after.time_utc) return before;
+
+      const t0 = Date.parse(before.time_utc);
+      const t1 = Date.parse(after.time_utc);
+      const alpha = (t1 > t0) ? (target - t0) / (t1 - t0) : 0;
+      const lerp = (a, b) => Number(a) + (Number(b) - Number(a)) * alpha;
+
+      return {
+        time_utc: isoTime,
+        latitude_deg: lerp(before.latitude_deg, after.latitude_deg),
+        longitude_deg: lerp(before.longitude_deg, after.longitude_deg),
+        azimuth_deg: lerp(before.azimuth_deg, after.azimuth_deg),
+        elevation_deg: lerp(before.elevation_deg, after.elevation_deg),
+        altitude_km: lerp(before.altitude_km, after.altitude_km),
+        doppler_hz: before.doppler_hz != null ? lerp(before.doppler_hz, after.doppler_hz) : null
+      };
+    }
+
     function trackedPointForPass(pass, trackState) {
       if (!pass || !trackState || !trackState.point_time_utc) return null;
       if (trackState.state === "idle" || trackState.state === "complete") return null;
@@ -552,7 +591,7 @@
 
       const timing = passTimingState(pass);
       if (timing === "active") {
-        return findNearestTrackPoint(pass, new Date().toISOString()) || trackPoints[0] || null;
+        return interpolateTrackPoint(pass, new Date().toISOString()) || trackPoints[0] || null;
       }
       if (timing === "stale") {
         return trackPoints[trackPoints.length - 1] || null;
