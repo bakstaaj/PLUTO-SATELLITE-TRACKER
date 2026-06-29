@@ -9418,3 +9418,68 @@ function passActionInactiveTextV286(pass) {
   }, 20000);
 })();
 /* STALE_PASS_CHECKER_V2_9_9_END */
+
+/* MAP_LIVE_DIAGNOSTIC_V2_9_14
+ * Wraps the live-map hook to show a visible badge in the map panel:
+ *   "Map tick #N  HH:MM:SS  state: <timing>  pass: <name>"
+ * Remove this block once the timer/render chain is confirmed working.
+ */
+(function installMapLiveDiagnosticV2914() {
+  "use strict";
+  var tickCount = 0;
+
+  function pad2(n) { return n < 10 ? "0" + n : String(n); }
+  function nowHMS() {
+    var d = new Date();
+    return pad2(d.getHours()) + ":" + pad2(d.getMinutes()) + ":" + pad2(d.getSeconds());
+  }
+
+  function updateBadge(msg) {
+    var badge = document.getElementById("mapLiveDiagBadgeV2914");
+    if (!badge) {
+      badge = document.createElement("div");
+      badge.id = "mapLiveDiagBadgeV2914";
+      badge.style.cssText = [
+        "position:fixed", "bottom:8px", "right:8px", "z-index:9999",
+        "background:rgba(0,0,0,0.78)", "color:#0ff", "font:11px/1.5 monospace",
+        "padding:4px 8px", "border-radius:4px", "pointer-events:none",
+        "max-width:320px", "word-break:break-all"
+      ].join(";");
+      document.body && document.body.appendChild(badge);
+    }
+    badge.textContent = msg;
+  }
+
+  /* Wrap the hook once it's available (it's set synchronously at page load) */
+  function wrapHook() {
+    var orig = window.__plutoRenderMapLiveV297;
+    if (typeof orig !== "function") {
+      updateBadge("MAP DIAG: hook not set yet");
+      return;
+    }
+    window.__plutoRenderMapLiveV297 = function mapLiveDiagV2914() {
+      tickCount++;
+      var pass = window.__plutoLastPassesPayload &&
+        window.__plutoLastPassesPayload.passes &&
+        window.__plutoLastPassesPayload.passes[0];
+      /* Try to read selectedPass key from DOM */
+      var selRow = document.querySelector(".pass-row.selected");
+      var passName = selRow ? selRow.querySelector("strong") && selRow.querySelector("strong").textContent : "none selected";
+
+      try {
+        orig.apply(this, arguments);
+        updateBadge("tick #" + tickCount + "  " + nowHMS() + "\npass: " + (passName || "?") + "\nhook: OK");
+      } catch (err) {
+        updateBadge("tick #" + tickCount + "  " + nowHMS() + "\nERROR: " + String(err));
+      }
+    };
+    updateBadge("MAP DIAG installed — waiting for tick");
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", wrapHook, { once: true });
+  } else {
+    wrapHook();
+  }
+})();
+/* MAP_LIVE_DIAGNOSTIC_V2_9_14_END */
