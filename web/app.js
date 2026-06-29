@@ -6426,6 +6426,11 @@ try {
       }
     });
   };
+
+  /* Retire the old placeholder binder — bindAnalogAudioV2626E handles all modes now */
+  if (typeof bindReceiveDecodePlaceholderV282 !== "undefined") {
+    bindReceiveDecodePlaceholderV282 = function() {};
+  }
 })();
 
 /* PERIODIC_PASS_REFRESH_V2_6_29
@@ -9237,12 +9242,4 @@ function passActionInactiveTextV286(pass) {
     window.setInterval(annotateV2831, 1000);
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", startV2831, { once: true });
-  } else {
-    startV2831();
-  }
-})();
-/* BACKEND_TEST_MODAL_FORCE_OPEN_V2_8_31_END */
-
-/* AUDIO_UI_EXPERIMENT_ROLLBA
+  if (document.readyState
