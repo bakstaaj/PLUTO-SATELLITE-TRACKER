@@ -9462,9 +9462,9 @@ function passActionInactiveTextV286(pass) {
     if (!badge) {
       badge = document.createElement('div');
       badge.id = 'mapLiveDiagBadgeV2914';
-      badge.style.cssText = 'position:fixed;bottom:8px;right:8px;z-index:9999;'
-        + 'background:rgba(0,0,0,0.82);color:#0ff;font:11px/1.6 monospace;'
-        + 'padding:4px 8px;border-radius:4px;pointer-events:none;max-width:340px;white-space:pre';
+      badge.style.cssText = 'position:fixed;bottom:40px;left:50%;transform:translateX(-50%);z-index:99999;'
+        + 'background:rgba(0,0,0,0.82);color:#0ff;font:13px/1.6 monospace;'
+        + 'padding:6px 14px;border-radius:6px;pointer-events:none;min-width:260px;text-align:center;white-space:pre';
       document.body && document.body.appendChild(badge);
     }
     badge.textContent = nowHMS() + '  raw:' + rawTick + '  hook:' + hookTick + '\n' + getTimingState();
