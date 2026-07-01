@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #ifndef PLUTO_PI
@@ -28,6 +29,8 @@
 #define DEFAULT_TX_CHANNEL    1
 #define DEFAULT_CW_WPM        12.0
 #define DEFAULT_CW_TEXT       "CQ PLUTO TEST"
+#define DEFAULT_CW_TIMING_SCALE 1.0
+#define DEFAULT_WORKDIR       "/media/mmcblk0p1/pluto_test_iq"
 
 #define TX_STREAM_DEVICE "cf-ad9361-dds-core-lpc"
 #define PHY_DEVICE_NAME  "ad9361-phy"
@@ -61,9 +64,13 @@ typedef struct {
     double deviation_hz;
     double offset_hz;
     double cw_wpm;
+    double cw_timing_scale;
     char cw_text[256];
     int tx_channel;
     int dry_run;
+    int file_backed;
+    int keep_iq;
+    char workdir[512];
 } options_t;
 
 static void usage(const char *prog) {
@@ -87,6 +94,11 @@ static void usage(const char *prog) {
         "  --deviation-hz <hz>     FM deviation, default %.1f\n"
         "  --cw-text <text>        CW text, default \"%s\"\n"
         "  --cw-wpm <wpm>          CW speed, default %.1f\n"
+        "  --cw-timing-scale <v>   CW timing multiplier, default %.3f\n"
+        "  --file-backed           Generate IQ file locally, then iio_writedev < file; default\n"
+        "  --stream-live           Stream generated samples directly to iio_writedev; diagnostic only\n"
+        "  --workdir <path>         File-backed IQ workdir, default %s\n"
+        "  --keep-iq               Keep generated IQ file after transmit\n"
         "  --dry-run               Configure only; do not transmit samples\n"
         "\n"
         "Examples:\n"
@@ -106,6 +118,8 @@ static void usage(const char *prog) {
         DEFAULT_DEVIATION_HZ,
         DEFAULT_CW_TEXT,
         DEFAULT_CW_WPM,
+        DEFAULT_CW_TIMING_SCALE,
+        DEFAULT_WORKDIR,
         prog, prog, prog
     );
 }
@@ -202,6 +216,33 @@ static void fmt_u64(char *buf, size_t buflen, uint64_t v) { snprintf(buf, buflen
 static void fmt_uint(char *buf, size_t buflen, unsigned v) { snprintf(buf, buflen, "%u", v); }
 static void fmt_double(char *buf, size_t buflen, double v) { snprintf(buf, buflen, "%.6f", v); }
 
+static uint64_t tx_lo_hz_for_options(const options_t *opt) {
+    double lo = (double)opt->freq_hz - opt->offset_hz;
+    if (lo < 0.0) lo = 0.0;
+    return (uint64_t)llround(lo);
+}
+
+static int ensure_dir(const char *path) {
+    char cmd[1024];
+    snprintf(cmd, sizeof(cmd), "mkdir -p '%s'", path);
+    int rc = system(cmd);
+    if (rc != 0) {
+        fprintf(stderr, "ERROR: mkdir -p %s failed rc=%d\n", path, rc);
+        return -1;
+    }
+    return 0;
+}
+
+static int remove_file_quiet(const char *path) {
+    if (!path || !*path) return 0;
+    if (unlink(path) != 0 && errno != ENOENT) {
+        fprintf(stderr, "WARN: unlink %s failed: %s\n", path, strerror(errno));
+        return -1;
+    }
+    return 0;
+}
+
+
 static int configure_tx(const options_t *opt) {
     char phy_dir[512], tx_dir[512];
 
@@ -210,7 +251,8 @@ static int configure_tx(const options_t *opt) {
 
     char v[64];
 
-    fmt_u64(v, sizeof(v), opt->freq_hz);
+    uint64_t tx_lo_hz = tx_lo_hz_for_options(opt);
+    fmt_u64(v, sizeof(v), tx_lo_hz);
     if (write_attr(phy_dir, "out_altvoltage1_TX_LO_frequency", v, 1) != 0) return -1;
 
     fmt_uint(v, sizeof(v), opt->sample_rate);
@@ -254,7 +296,9 @@ static int configure_tx(const options_t *opt) {
     fprintf(stderr, "  stream:       %s\n", tx_dir);
     fprintf(stderr, "  tx_channel:   %d\n", opt->tx_channel);
     fprintf(stderr, "  iio channels: %s\n", opt->tx_channel == 1 ? "voltage0 voltage1" : "voltage2 voltage3");
-    fprintf(stderr, "  freq_hz:      %" PRIu64 "\n", opt->freq_hz);
+    fprintf(stderr, "  freq_hz:      %" PRIu64 " (intended RF carrier)\n", opt->freq_hz);
+    fprintf(stderr, "  tx_lo_hz:     %" PRIu64 " (= freq_hz - offset_hz)\n", tx_lo_hz);
+    fprintf(stderr, "  expected_rf:  %.1f (= tx_lo_hz + offset_hz)\n", (double)tx_lo_hz + opt->offset_hz);
     fprintf(stderr, "  sample_rate:  %u\n", opt->sample_rate);
     fprintf(stderr, "  bandwidth_hz: %u\n", opt->bandwidth_hz);
     fprintf(stderr, "  tx_gain_db:   %.2f\n", opt->tx_gain_db);
@@ -263,6 +307,12 @@ static int configure_tx(const options_t *opt) {
     if (opt->mode == MODE_CW) {
         fprintf(stderr, "  cw_text:      %s\n", opt->cw_text);
         fprintf(stderr, "  cw_wpm:       %.1f\n", opt->cw_wpm);
+        fprintf(stderr, "  cw_timing_scale: %.3f\n", opt->cw_timing_scale);
+    }
+    fprintf(stderr, "  tx_method:    %s\n", opt->file_backed ? "file-backed" : "live-stream");
+    if (opt->file_backed) {
+        fprintf(stderr, "  workdir:      %s\n", opt->workdir);
+        fprintf(stderr, "  keep_iq:      %d\n", opt->keep_iq);
     }
 
     return 0;
@@ -360,34 +410,15 @@ static int cw_key_on_for_sample(const cw_pattern_t *pat, double unit_samples, ui
     return 0;
 }
 
-static int transmit_samples(const options_t *opt) {
+
+static int write_generated_iq(FILE *sink, const options_t *opt, uint64_t *samples_written_out) {
     uint64_t total_samples = (uint64_t)opt->sample_rate * (uint64_t)opt->seconds;
     double amp = opt->amplitude * 32767.0;
-
-    const char *chans = (opt->tx_channel == 1) ? "voltage0 voltage1" : "voltage2 voltage3";
-
-    char cmd[384];
-    snprintf(cmd, sizeof(cmd),
-             "iio_writedev -u local: -b 8192 -s %" PRIu64 " %s %s",
-             total_samples, TX_STREAM_DEVICE, chans);
-
-    fprintf(stderr, "Starting TX stream:\n");
-    fprintf(stderr, "  command: %s\n", cmd);
-    fprintf(stderr, "  samples: %" PRIu64 "\n", total_samples);
-    fprintf(stderr, "  lanes:   2 int16 values per scan sample, explicit channel args\n");
-    fprintf(stderr, "  mode:    %s\n", opt->mode == MODE_CARRIER ? "carrier" : (opt->mode == MODE_FM_TONE ? "fm-tone" : "cw"));
-
-    FILE *pipe = popen(cmd, "w");
-    if (!pipe) {
-        fprintf(stderr, "ERROR: popen iio_writedev failed: %s\n", strerror(errno));
-        return -1;
-    }
 
     const size_t chunk_samples = 4096;
     int16_t *buf = calloc(chunk_samples * 2, sizeof(int16_t));
     if (!buf) {
         fprintf(stderr, "ERROR: calloc failed\n");
-        pclose(pipe);
         return -1;
     }
 
@@ -397,12 +428,13 @@ static int transmit_samples(const options_t *opt) {
         if (cw_build_pattern(opt->cw_text, &cw) != 0) {
             fprintf(stderr, "ERROR: could not build CW pattern from text: %s\n", opt->cw_text);
             free(buf);
-            pclose(pipe);
             return -1;
         }
         double unit_seconds = 1.2 / opt->cw_wpm;
-        cw_unit_samples = unit_seconds * (double)opt->sample_rate;
+        cw_unit_samples = unit_seconds * (double)opt->sample_rate * opt->cw_timing_scale;
         fprintf(stderr, "  cw_unit_sec: %.6f\n", unit_seconds);
+        fprintf(stderr, "  cw_timing_scale: %.3f\n", opt->cw_timing_scale);
+        fprintf(stderr, "  cw_unit_samples: %.1f\n", cw_unit_samples);
         fprintf(stderr, "  cw_events:   %zu\n", cw.count);
     }
 
@@ -460,12 +492,11 @@ static int transmit_samples(const options_t *opt) {
             buf[i * 2 + 1] = clamp_i16(qv);
         }
 
-        size_t wrote = fwrite(buf, sizeof(int16_t) * 2, n, pipe);
+        size_t wrote = fwrite(buf, sizeof(int16_t) * 2, n, sink);
         if (wrote != n) {
-            fprintf(stderr, "ERROR: fwrite to iio_writedev failed after %" PRIu64 " samples\n", produced);
+            fprintf(stderr, "ERROR: fwrite generated IQ failed after %" PRIu64 " samples\n", produced);
             free(cw.events);
             free(buf);
-            pclose(pipe);
             return -1;
         }
 
@@ -475,14 +506,124 @@ static int transmit_samples(const options_t *opt) {
     free(cw.events);
     free(buf);
 
+    if (fflush(sink) != 0) {
+        fprintf(stderr, "ERROR: fflush generated IQ failed: %s\n", strerror(errno));
+        return -1;
+    }
+
+    if (samples_written_out) *samples_written_out = produced;
+    return 0;
+}
+
+static int run_iio_writedev_from_file(const options_t *opt, const char *iq_path, uint64_t total_samples) {
+    const char *chans = (opt->tx_channel == 1) ? "voltage0 voltage1" : "voltage2 voltage3";
+
+    char cmd[1024];
+    snprintf(cmd, sizeof(cmd),
+             "iio_writedev -u local: -b 8192 -s %" PRIu64 " %s %s < '%s'",
+             total_samples, TX_STREAM_DEVICE, chans, iq_path);
+
+    fprintf(stderr, "Starting TX from local IQ file:\n");
+    fprintf(stderr, "  command: %s\n", cmd);
+    fprintf(stderr, "  samples: %" PRIu64 "\n", total_samples);
+    fprintf(stderr, "  iq_path: %s\n", iq_path);
+
+    int rc = system(cmd);
+    if (rc != 0) {
+        fprintf(stderr, "ERROR: iio_writedev file-backed command exited with status %d\n", rc);
+        return -1;
+    }
+
+    return 0;
+}
+
+static int transmit_samples_live(const options_t *opt) {
+    uint64_t total_samples = (uint64_t)opt->sample_rate * (uint64_t)opt->seconds;
+    const char *chans = (opt->tx_channel == 1) ? "voltage0 voltage1" : "voltage2 voltage3";
+
+    char cmd[384];
+    snprintf(cmd, sizeof(cmd),
+             "iio_writedev -u local: -b 8192 -s %" PRIu64 " %s %s",
+             total_samples, TX_STREAM_DEVICE, chans);
+
+    fprintf(stderr, "Starting TX live stream:\n");
+    fprintf(stderr, "  command: %s\n", cmd);
+    fprintf(stderr, "  samples: %" PRIu64 "\n", total_samples);
+    fprintf(stderr, "  WARNING: live streaming is diagnostic only; file-backed mode is the validated path.\n");
+
+    FILE *pipe = popen(cmd, "w");
+    if (!pipe) {
+        fprintf(stderr, "ERROR: popen iio_writedev failed: %s\n", strerror(errno));
+        return -1;
+    }
+
+    uint64_t produced = 0;
+    int wr = write_generated_iq(pipe, opt, &produced);
+
     int rc = pclose(pipe);
+    if (wr != 0) return -1;
     if (rc != 0) {
         fprintf(stderr, "ERROR: iio_writedev exited with status %d\n", rc);
         return -1;
     }
 
-    fprintf(stderr, "TX complete.\n");
+    fprintf(stderr, "TX live stream complete. samples=%" PRIu64 "\n", produced);
     return 0;
+}
+
+static int transmit_samples_file_backed(const options_t *opt) {
+    if (ensure_dir(opt->workdir) != 0) return -1;
+
+    char iq_path[1024];
+    snprintf(iq_path, sizeof(iq_path),
+             "%s/pluto_test_tx_%s_%" PRIu64 "_off%.0f_ch%d_%ld.i16",
+             opt->workdir,
+             opt->mode == MODE_CARRIER ? "carrier" : (opt->mode == MODE_FM_TONE ? "fmtone" : "cw"),
+             opt->freq_hz,
+             opt->offset_hz,
+             opt->tx_channel,
+             (long)getpid());
+
+    FILE *f = fopen(iq_path, "wb");
+    if (!f) {
+        fprintf(stderr, "ERROR: open IQ file for write failed: %s: %s\n", iq_path, strerror(errno));
+        return -1;
+    }
+
+    fprintf(stderr, "Generating local IQ file:\n");
+    fprintf(stderr, "  iq_path: %s\n", iq_path);
+
+    uint64_t produced = 0;
+    int wr = write_generated_iq(f, opt, &produced);
+    if (fclose(f) != 0) {
+        fprintf(stderr, "ERROR: close IQ file failed: %s\n", strerror(errno));
+        wr = -1;
+    }
+    if (wr != 0) {
+        remove_file_quiet(iq_path);
+        return -1;
+    }
+
+    fprintf(stderr, "Generated IQ file complete:\n");
+    fprintf(stderr, "  samples: %" PRIu64 "\n", produced);
+    fprintf(stderr, "  bytes:   %" PRIu64 "\n", produced * 4ULL);
+
+    int rc = run_iio_writedev_from_file(opt, iq_path, produced);
+
+    if (!opt->keep_iq) {
+        remove_file_quiet(iq_path);
+    } else {
+        fprintf(stderr, "Kept IQ file: %s\n", iq_path);
+    }
+
+    if (rc != 0) return -1;
+    fprintf(stderr, "TX file-backed complete.\n");
+    return 0;
+}
+
+static int transmit_samples(const options_t *opt) {
+    if (opt->file_backed) return transmit_samples_file_backed(opt);
+    return transmit_samples_live(opt);
 }
 
 int main(int argc, char **argv) {
@@ -500,8 +641,12 @@ int main(int argc, char **argv) {
     opt.deviation_hz = DEFAULT_DEVIATION_HZ;
     opt.offset_hz = DEFAULT_OFFSET_HZ;
     opt.cw_wpm = DEFAULT_CW_WPM;
+    opt.cw_timing_scale = DEFAULT_CW_TIMING_SCALE;
     snprintf(opt.cw_text, sizeof(opt.cw_text), "%s", DEFAULT_CW_TEXT);
     opt.tx_channel = DEFAULT_TX_CHANNEL;
+    opt.file_backed = 1;
+    opt.keep_iq = 0;
+    snprintf(opt.workdir, sizeof(opt.workdir), "%s", DEFAULT_WORKDIR);
 
     int mode_seen = 0;
 
@@ -513,6 +658,14 @@ int main(int argc, char **argv) {
             return 0;
         } else if (strcmp(a, "--dry-run") == 0) {
             opt.dry_run = 1;
+        } else if (strcmp(a, "--file-backed") == 0) {
+            opt.file_backed = 1;
+        } else if (strcmp(a, "--stream-live") == 0) {
+            opt.file_backed = 0;
+        } else if (strcmp(a, "--keep-iq") == 0) {
+            opt.keep_iq = 1;
+        } else if (strcmp(a, "--workdir") == 0 && i + 1 < argc) {
+            snprintf(opt.workdir, sizeof(opt.workdir), "%s", argv[++i]);
         } else if (strcmp(a, "--mode") == 0 && i + 1 < argc) {
             const char *m = argv[++i];
             if (strcasecmp(m, "carrier") == 0) opt.mode = MODE_CARRIER;
@@ -579,6 +732,11 @@ int main(int argc, char **argv) {
         } else if (strcmp(a, "--cw-wpm") == 0 && i + 1 < argc) {
             if (parse_double(argv[++i], &opt.cw_wpm) != 0 || opt.cw_wpm < 3.0 || opt.cw_wpm > 60.0) {
                 fprintf(stderr, "ERROR: invalid --cw-wpm; use 3..60\n");
+                return 2;
+            }
+        } else if (strcmp(a, "--cw-timing-scale") == 0 && i + 1 < argc) {
+            if (parse_double(argv[++i], &opt.cw_timing_scale) != 0 || opt.cw_timing_scale < 0.25 || opt.cw_timing_scale > 4.0) {
+                fprintf(stderr, "ERROR: invalid --cw-timing-scale; use 0.25..4.0\n");
                 return 2;
             }
         } else if (strcmp(a, "--cw-text") == 0 && i + 1 < argc) {
