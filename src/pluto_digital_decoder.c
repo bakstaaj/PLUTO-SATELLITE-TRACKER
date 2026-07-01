@@ -22,6 +22,9 @@
 
 #include <errno.h>
 #include <math.h>
+#ifndef CW_MIXER_PI
+#define CW_MIXER_PI 3.14159265358979323846
+#endif
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -43,6 +46,9 @@
 #define FM_DECIMATION    100           /* IQ -> audio decimation       */
 #define AUDIO_RATE       24000         /* = IQ_SAMPLE_RATE/FM_DECIM   */
 #define IIO_BUFFER_SAMPS 24000         /* iio_readdev buffer size      */
+#define DEFAULT_RX_CHANNEL 1            /* Pluto Plus RX1               */
+#define DEFAULT_OFFSET_HZ  0.0          /* Backward compatible default  */
+#define DEFAULT_RX_BW_HZ   200000       /* APRS/CW/GFSK narrowband      */
 
 /* ------------------------------------------------------------------ */
 /* APRS / AFSK constants                                               */
@@ -94,6 +100,14 @@
 #define CW_ENVELOPE_RATE (IQ_SAMPLE_RATE / CW_DECIMATION)  /* 12 kHz  */
 #define CW_WPM_INIT      20            /* starting WPM estimate        */
 #define CW_DIT_MS_INIT   (1200 / CW_WPM_INIT)  /* dit length ms       */
+#define CW_WPM_MIN       5             /* slow satellite CW beacon    */
+#define CW_WPM_MAX       40            /* fast practical CW beacon    */
+#define DEFAULT_CW_MIN_SPAN 60.0       /* mixed envelope signal gate   */
+#define DEFAULT_CW_MIN_PEAK 90.0       /* mixed envelope peak gate     */
+#define DEFAULT_CW_OPEN_FRAC 0.55      /* Schmitt open fraction        */
+#define DEFAULT_CW_CLOSE_FRAC 0.32     /* Schmitt close fraction       */
+#define DEFAULT_CW_MIN_ELEMENT_FRAC 0.40 /* min valid element in dits   */
+#define DEFAULT_CW_MIX_SIGN 1          /* +1 or -1 IF mixer sign       */
 
 /* ------------------------------------------------------------------ */
 /* Global state                                                        */
@@ -128,62 +142,81 @@ static int write_rx_lo(long long hz)
     return 0;
 }
 
-static void disable_rx2_scan_elements(void)
+static void configure_rx_scan_elements(int rx_channel)
 {
-    /* The AD9361 in dual-RX (2T2R) mode outputs 4-channel interleaved IQ
-     * data [I1,Q1,I2,Q2,...] from iio_readdev.  The decoder assumes 2-channel
-     * [I,Q] so every other pair comes from RX2, producing random atan2 phase
-     * jumps and ~50% BER.  Disabling voltage2/voltage3 scan elements forces
-     * the kernel DMA to output only RX1 (I,Q) pairs. */
+    /* Pluto Plus 2R2T exposes RX1 as voltage0/voltage1 and RX2 as
+     * voltage2/voltage3 on cf-ad9361-lpc.  The decoder consumes exactly
+     * one complex stream, so explicitly enable the selected I/Q pair and
+     * disable the other pair before starting iio_readdev. */
     int dev, ch;
     char path[128];
     FILE *f;
+
     for (dev = 0; dev <= 9; dev++) {
-        for (ch = 2; ch <= 3; ch++) {
+        for (ch = 0; ch <= 3; ch++) {
+            int want = 0;
+            if (rx_channel == 1 && (ch == 0 || ch == 1)) want = 1;
+            if (rx_channel == 2 && (ch == 2 || ch == 3)) want = 1;
+
             snprintf(path, sizeof(path),
                 "/sys/bus/iio/devices/iio:device%d/scan_elements/in_voltage%d_en",
                 dev, ch);
             f = fopen(path, "w");
             if (f) {
-                fputs("0\n", f);
+                fprintf(f, "%d\n", want);
                 fclose(f);
-                fprintf(stderr, "rx: disabled iio:device%d voltage%d scan element\n",
-                        dev, ch);
+                if (g_debug) {
+                    fprintf(stderr, "rx: iio:device%d voltage%d_en=%d\n", dev, ch, want);
+                }
             }
         }
     }
 }
 
-static int configure_rx(long long hz, int sample_rate_hz)
+static int configure_rx(long long rx_lo_hz, int sample_rate_hz, int rx_channel, int bandwidth_hz)
 {
     char cmd[512];
     int r;
-    if (hz < PLUTO_MIN_HZ || hz > PLUTO_MAX_HZ) return 0;
+    const char *phy_voltage = (rx_channel == 2) ? "voltage1" : "voltage0";
+
+    if (rx_lo_hz < PLUTO_MIN_HZ || rx_lo_hz > PLUTO_MAX_HZ) return 0;
+    if (rx_channel != 1 && rx_channel != 2) return 0;
+    if (bandwidth_hz < 200000) bandwidth_hz = 200000;
 
     snprintf(cmd, sizeof(cmd),
-        "/usr/bin/iio_attr -u local: -c ad9361-phy voltage0 sampling_frequency %d >/dev/null 2>&1",
-        sample_rate_hz);
+        "/usr/bin/iio_attr -u local: -c ad9361-phy %s sampling_frequency %d >/dev/null 2>&1",
+        phy_voltage, sample_rate_hz);
     r = system(cmd); if (r == -1 || !WIFEXITED(r) || WEXITSTATUS(r) != 0) return 0;
-    snprintf(cmd, sizeof(cmd),
-        "/usr/bin/iio_attr -u local: -c ad9361-phy voltage0 rf_bandwidth 200000 >/dev/null 2>&1");
-    r = system(cmd); if (r == -1 || !WIFEXITED(r) || WEXITSTATUS(r) != 0) return 0;
-    snprintf(cmd, sizeof(cmd),
-        "/usr/bin/iio_attr -u local: -c ad9361-phy voltage0 gain_control_mode slow_attack >/dev/null 2>&1");
-    r = system(cmd); if (r == -1 || !WIFEXITED(r) || WEXITSTATUS(r) != 0) return 0;
-    if (!write_rx_lo(hz)) return 0;
 
-    /* Disable RX2 scan elements AFTER all iio_attr calls.  Attribute writes
-     * such as sampling_frequency may reset the IIO buffer and re-enable all
-     * scan elements, so this must be the last step before start_iio_stream(). */
-    disable_rx2_scan_elements();
+    snprintf(cmd, sizeof(cmd),
+        "/usr/bin/iio_attr -u local: -c ad9361-phy %s rf_bandwidth %d >/dev/null 2>&1",
+        phy_voltage, bandwidth_hz);
+    r = system(cmd); if (r == -1 || !WIFEXITED(r) || WEXITSTATUS(r) != 0) return 0;
+
+    snprintf(cmd, sizeof(cmd),
+        "/usr/bin/iio_attr -u local: -c ad9361-phy %s gain_control_mode slow_attack >/dev/null 2>&1",
+        phy_voltage);
+    r = system(cmd); if (r == -1 || !WIFEXITED(r) || WEXITSTATUS(r) != 0) return 0;
+
+    if (!write_rx_lo(rx_lo_hz)) return 0;
+
+    configure_rx_scan_elements(rx_channel);
+
+    fprintf(stderr,
+        "decoder: configure_rx rx_lo=%lld rx_channel=%d phy=%s sample_rate=%d bandwidth=%d\n",
+        rx_lo_hz, rx_channel, phy_voltage, sample_rate_hz, bandwidth_hz);
+
     return 1;
 }
 
-static FILE *start_iio_stream(pid_t *child_pid, int buffer_samps)
+static FILE *start_iio_stream(pid_t *child_pid, int buffer_samps, int rx_channel)
 {
     int fds[2];
     pid_t pid;
     char buf[32];
+    const char *v_i = (rx_channel == 2) ? "voltage2" : "voltage0";
+    const char *v_q = (rx_channel == 2) ? "voltage3" : "voltage1";
+
     if (pipe(fds) != 0) return NULL;
     pid = fork();
     if (pid < 0) { close(fds[0]); close(fds[1]); return NULL; }
@@ -191,14 +224,12 @@ static FILE *start_iio_stream(pid_t *child_pid, int buffer_samps)
         snprintf(buf, sizeof(buf), "%d", buffer_samps);
         dup2(fds[1], STDOUT_FILENO);
         close(fds[0]); close(fds[1]);
-        /* Select only RX1 channels (voltage0=I, voltage1=Q).
-         * Without channel selection, cf-ad9361-lpc outputs interleaved
-         * RX1+RX2 data [I1,Q1,I2,Q2,...] which corrupts the FM demodulator. */
         execl("/usr/bin/iio_readdev", "iio_readdev",
               "-u", "local:", "-b", buf, "-s", "0",
-              "cf-ad9361-lpc", "voltage0", "voltage1", (char *)NULL);
+              "cf-ad9361-lpc", v_i, v_q, (char *)NULL);
         _exit(127);
     }
+    fprintf(stderr, "decoder: iio_readdev cf-ad9361-lpc %s %s\n", v_i, v_q);
     close(fds[1]);
     *child_pid = pid;
     return fdopen(fds[0], "rb");
@@ -641,7 +672,7 @@ static void write_aprs_frame(FILE *out, const uint8_t *frame, int flen)
 /* APRS decode loop                                                    */
 /* ------------------------------------------------------------------ */
 
-static void run_aprs(long long freq_hz, FILE *out)
+static void run_aprs(long long freq_hz, double offset_hz, int rx_channel, int bandwidth_hz, FILE *out)
 {
     pid_t child = -1;
     FILE *pipe = NULL;
@@ -661,12 +692,15 @@ static void run_aprs(long long freq_hz, FILE *out)
     goertzel_init(&g1200, AFSK_MARK_HZ,  AUDIO_RATE, SAMPS_PER_SYM);
     goertzel_init(&g2200, AFSK_SPACE_HZ, AUDIO_RATE, SAMPS_PER_SYM);
 
-    if (!configure_rx(freq_hz, IQ_SAMPLE_RATE)) {
+    long long rx_lo_hz = freq_hz - (long long)llround(offset_hz);
+    if (!configure_rx(rx_lo_hz, IQ_SAMPLE_RATE, rx_channel, bandwidth_hz)) {
         fprintf(stderr, "decoder: configure_rx failed for APRS\n");
         return;
     }
+    fprintf(stderr, "decoder: APRS downlink=%lld offset_hz=%.1f rx_lo=%lld rx_channel=%d\n",
+            freq_hz, offset_hz, rx_lo_hz, rx_channel);
 
-    pipe = start_iio_stream(&child, IIO_BUFFER_SAMPS);
+    pipe = start_iio_stream(&child, IIO_BUFFER_SAMPS, rx_channel);
     if (!pipe) { fprintf(stderr, "decoder: iio stream failed\n"); return; }
 
     while (g_running) {
@@ -739,23 +773,75 @@ static char morse_lookup(const char *code)
 /* CW decode loop                                                      */
 /* ------------------------------------------------------------------ */
 
-static void run_cw(long long freq_hz, FILE *out)
+static void run_cw(long long freq_hz, double offset_hz, int rx_channel, int bandwidth_hz, double cw_wpm, double cw_min_span, double cw_min_peak, double cw_open_frac, double cw_close_frac, double cw_min_element_frac, int cw_mix_sign, double cw_abs_low, double cw_abs_high, FILE *out)
 {
     pid_t child = -1;
     FILE *pipe = NULL;
     unsigned char raw[IIO_BUFFER_SAMPS * 4];
 
-    /* Envelope state */
+    /* CW offset mixer.
+     *
+     * The receiver tunes RX LO to freq_hz - offset_hz, so the wanted CW
+     * carrier appears at +offset_hz in the complex baseband.  Mix that IF
+     * carrier back to DC before taking magnitude.  This prevents raw IQ
+     * magnitude beating against DC/LO leakage from fragmenting key-down
+     * intervals into many ~40-sample glitches.
+     */
+    double cw_phase = 0.0;
+    double cw_phase_inc = 2.0 * CW_MIXER_PI * offset_hz * (double)cw_mix_sign / (double)CW_ENVELOPE_RATE;
+    double cw_i_lp = 0.0;
+    double cw_q_lp = 0.0;
+    int cw_lp_ready = 0;
+    const double cw_lp_alpha = exp(-2.0 * CW_MIXER_PI * 600.0 / (double)CW_ENVELOPE_RATE);
+
+    /* Envelope state.
+     *
+     * Track floor and peak separately, then use hysteresis and edge debounce.
+     * This prevents RF/AGC flutter from splitting dashes into many dots.
+     */
     double env_smooth = 0.0;
     double threshold = 0.0;
-    double env_max = 0.0;
+    double env_floor = 0.0;
+    double env_peak = 0.0;
+    int have_env = 0;
     long long env_acc = 0;
     int env_n = 0;
 
-    /* Dit timing (adaptive) */
-    int dit_samples = (CW_ENVELOPE_RATE * CW_DIT_MS_INIT) / 1000;
+    /* Dit timing.
+     * If --cw-wpm is supplied, lock timing to the requested WPM.  If not,
+     * start at CW_WPM_INIT and allow conservative adaptation with clamps.
+     */
+    int cw_locked_wpm = (cw_wpm > 0.0);
+    int dit_samples = cw_locked_wpm
+        ? (int)lrint((double)CW_ENVELOPE_RATE * (1200.0 / cw_wpm) / 1000.0)
+        : (CW_ENVELOPE_RATE * CW_DIT_MS_INIT) / 1000;
+    const int dit_min_samples = (int)lrint((double)CW_ENVELOPE_RATE * (1200.0 / CW_WPM_MAX) / 1000.0);
+    const int dit_max_samples = (int)lrint((double)CW_ENVELOPE_RATE * (1200.0 / CW_WPM_MIN) / 1000.0);
+    if (dit_samples < dit_min_samples) dit_samples = dit_min_samples;
+    if (dit_samples > dit_max_samples) dit_samples = dit_max_samples;
+
     int on_count = 0, off_count = 0;
     int in_tone = 0;
+
+    /* WPM-relative timing filters.
+     * Anything shorter than 1/4 dit is not a valid CW element.  This is
+     * critical with Pluto/AD9361 AGC ripple: without this guard, short
+     * amplitude fragments become bogus dots and corrupt the Morse buffer.
+     */
+    int min_element_samples = (int)lrint((double)dit_samples * cw_min_element_frac);
+    int dash_threshold_samples = (dit_samples * 22) / 10;  /* 2.2 dits */
+    int letter_gap_samples = (dit_samples * 22) / 10;      /* >=2.2 dits */
+    int word_gap_samples = (dit_samples * 55) / 10;        /* >=5.5 dits */
+    /* Debounce raw threshold crossings before changing CW key state. */
+    int raw_on_count = 0;
+    int raw_off_count = 0;
+    const int edge_debounce = CW_ENVELOPE_RATE / 500; /* 2 ms */
+    if (min_element_samples < edge_debounce) min_element_samples = edge_debounce;
+    long long dbg_env_ticks = 0;
+    long long dbg_on_ticks = 0;
+    long long dbg_sig_ticks = 0;
+    double dbg_env_min = 1.0e30;
+    double dbg_env_max = 0.0;
 
     /* Morse buffer */
     char morse_buf[16];
@@ -763,12 +849,25 @@ static void run_cw(long long freq_hz, FILE *out)
     char decoded_text[256];
     int text_len = 0;
 
-    if (!configure_rx(freq_hz, IQ_SAMPLE_RATE)) {
+    long long rx_lo_hz = freq_hz - (long long)llround(offset_hz);
+    if (!configure_rx(rx_lo_hz, IQ_SAMPLE_RATE, rx_channel, bandwidth_hz)) {
         fprintf(stderr, "decoder: configure_rx failed for CW\n");
         return;
     }
+    fprintf(stderr, "decoder: CW downlink=%lld offset_hz=%.1f rx_lo=%lld rx_channel=%d\n",
+            freq_hz, offset_hz, rx_lo_hz, rx_channel);
+    fprintf(stderr,
+            "decoder: CW timing cw_wpm=%.1f locked=%d dit_samples=%d min=%d max=%d min_element=%d dash_th=%d letter_gap=%d word_gap=%d\n",
+            cw_wpm, cw_locked_wpm, dit_samples, dit_min_samples, dit_max_samples,
+            min_element_samples, dash_threshold_samples, letter_gap_samples, word_gap_samples);
+    fprintf(stderr,
+            "decoder: CW mixer offset_hz=%.1f mix_sign=%d phase_inc=%.9f mixer_rate=%d lp_alpha=%.9f\n",
+            offset_hz, cw_mix_sign, cw_phase_inc, CW_ENVELOPE_RATE, cw_lp_alpha);
+    fprintf(stderr,
+            "decoder: CW signal gate min_span=%.2f min_peak=%.2f open_frac=%.2f close_frac=%.2f min_element_frac=%.2f\n",
+            cw_min_span, cw_min_peak, cw_open_frac, cw_close_frac, cw_min_element_frac);
 
-    pipe = start_iio_stream(&child, IIO_BUFFER_SAMPS);
+    pipe = start_iio_stream(&child, IIO_BUFFER_SAMPS, rx_channel);
     if (!pipe) { fprintf(stderr, "decoder: iio stream failed\n"); return; }
 
     /* Output file for CW text accumulation */
@@ -785,9 +884,33 @@ static void run_cw(long long freq_hz, FILE *out)
             short i_raw = (short)((uint16_t)raw[off]   | ((uint16_t)raw[off+1] << 8));
             short q_raw = (short)((uint16_t)raw[off+2] | ((uint16_t)raw[off+3] << 8));
 
-            /* Magnitude envelope */
-            double mag = sqrt((double)i_raw*(double)i_raw + (double)q_raw*(double)q_raw);
-            env_smooth = 0.95 * env_smooth + 0.05 * mag;
+            /* Offset-aware CW envelope.
+             *
+             * Mix the +offset_hz IF carrier down to DC, then low-pass the
+             * complex baseband before magnitude detection.  This keeps a
+             * steady key-down carrier steady in the envelope detector.
+             */
+            double c = cos(cw_phase);
+            double sn = sin(cw_phase);
+            double mix_i = (double)i_raw * c + (double)q_raw * sn;
+            double mix_q = (double)q_raw * c - (double)i_raw * sn;
+
+            cw_phase += cw_phase_inc;
+            if (cw_phase >  CW_MIXER_PI) cw_phase -= 2.0 * CW_MIXER_PI;
+            if (cw_phase < -CW_MIXER_PI) cw_phase += 2.0 * CW_MIXER_PI;
+
+            if (!cw_lp_ready) {
+                cw_i_lp = mix_i;
+                cw_q_lp = mix_q;
+                cw_lp_ready = 1;
+            } else {
+                cw_i_lp = cw_lp_alpha * cw_i_lp + (1.0 - cw_lp_alpha) * mix_i;
+                cw_q_lp = cw_lp_alpha * cw_q_lp + (1.0 - cw_lp_alpha) * mix_q;
+            }
+
+            double mag = sqrt(cw_i_lp * cw_i_lp + cw_q_lp * cw_q_lp);
+            if (!have_env) env_smooth = mag;
+            else env_smooth = 0.98 * env_smooth + 0.02 * mag;
 
             /* Decimation: one decision every CW_DECIMATION samples */
             env_acc += (long long)env_smooth;
@@ -797,28 +920,100 @@ static void run_cw(long long freq_hz, FILE *out)
             double env = (double)(env_acc / env_n);
             env_acc = 0; env_n = 0;
 
-            /* Adaptive threshold: 40% of recent peak */
-            if (env > env_max) env_max = env;
-            else env_max *= 0.9999;
-            threshold = env_max * 0.40;
+            /* Adaptive floor/peak threshold with hysteresis.
+             *
+             * Floor updates mostly while key-up.  Peak tracks key-down signal
+             * and decays slowly.  A valid key requires enough peak/floor
+             * separation to suppress pre-TX noise and weak envelope bumps.
+             */
+            if (!have_env) {
+                env_floor = env;
+                env_peak = env;
+                have_env = 1;
+            }
 
-            int tone_on = (env > threshold && env_max > 100.0);
+            if (!in_tone) {
+                if (env < env_floor) {
+                    env_floor = 0.90 * env_floor + 0.10 * env;      /* down fast */
+                } else {
+                    env_floor = 0.9995 * env_floor + 0.0005 * env;  /* up slow */
+                }
+            }
+            if (env > env_peak) env_peak = env;
+            else env_peak = 0.9995 * env_peak + 0.0005 * env_floor;
+            if (env_peak < env_floor + 0.001) env_peak = env_floor + 0.001;
+
+            double span = env_peak - env_floor;
+            int use_abs_threshold = (cw_abs_high > 0.0 && cw_abs_low >= 0.0 && cw_abs_low < cw_abs_high);
+            double high_threshold = use_abs_threshold ? cw_abs_high : (env_floor + cw_open_frac * span);
+            double low_threshold  = use_abs_threshold ? cw_abs_low  : (env_floor + cw_close_frac * span);
+            threshold = in_tone ? low_threshold : high_threshold;
+
+            int signal_present = use_abs_threshold ? 1 : (span >= cw_min_span && env_peak >= cw_min_peak);
+            int raw_tone_on = 0;
+            if (signal_present) {
+                raw_tone_on = in_tone ? (env > low_threshold) : (env > high_threshold);
+            }
+
+            if (g_debug) {
+                dbg_env_ticks++;
+                if (env < dbg_env_min) dbg_env_min = env;
+                if (env > dbg_env_max) dbg_env_max = env;
+                if (signal_present) dbg_sig_ticks++;
+                if (in_tone || raw_tone_on) dbg_on_ticks++;
+                if (dbg_env_ticks >= CW_ENVELOPE_RATE) {
+                    fprintf(stderr,
+                        "cw: env min=%.2f max=%.2f floor=%.2f peak=%.2f span=%.2f th=%.2f sig=%lld/%lld on=%lld/%lld dit=%d debounce=%d abs_low=%.2f abs_high=%.2f\n",
+                        dbg_env_min, dbg_env_max, env_floor, env_peak, span, threshold,
+                        dbg_sig_ticks, dbg_env_ticks, dbg_on_ticks, dbg_env_ticks,
+                        dit_samples, edge_debounce, cw_abs_low, cw_abs_high);
+                    dbg_env_ticks = 0;
+                    dbg_on_ticks = 0;
+                    dbg_sig_ticks = 0;
+                    dbg_env_min = 1.0e30;
+                    dbg_env_max = 0.0;
+                }
+            }
+
+            if (raw_tone_on) {
+                raw_on_count++;
+                raw_off_count = 0;
+            } else {
+                raw_off_count++;
+                raw_on_count = 0;
+            }
+
+            int tone_on = in_tone;
+            if (!in_tone && raw_on_count >= edge_debounce) tone_on = 1;
+            if ( in_tone && raw_off_count >= edge_debounce) tone_on = 0;
 
             if (tone_on && !in_tone) {
                 /* Rising edge */
                 in_tone = 1;
                 /* Classify silence before this tone */
                 if (off_count > 0) {
-                    if (off_count > dit_samples * 5) {
+                    if (off_count >= word_gap_samples) {
                         /* Word space */
-                        if (text_len > 0) decoded_text[text_len++] = ' ';
-                    } else if (off_count > dit_samples * 2) {
+                        if (morse_len > 0) {
+                            morse_buf[morse_len] = '\0';
+                            char c = morse_lookup(morse_buf);
+                            if (text_len < (int)sizeof(decoded_text) - 1)
+                                decoded_text[text_len++] = c;
+                            if (g_debug)
+                                fprintf(stderr, "cw: emit char '%c' code=%s gap=%d(word)\n", c, morse_buf, off_count);
+                            morse_len = 0;
+                        }
+                        if (text_len > 0 && text_len < (int)sizeof(decoded_text) - 1)
+                            decoded_text[text_len++] = ' ';
+                    } else if (off_count >= letter_gap_samples) {
                         /* Letter space: emit decoded char */
                         if (morse_len > 0) {
                             morse_buf[morse_len] = '\0';
                             char c = morse_lookup(morse_buf);
                             if (text_len < (int)sizeof(decoded_text) - 1)
                                 decoded_text[text_len++] = c;
+                            if (g_debug)
+                                fprintf(stderr, "cw: emit char '%c' code=%s gap=%d(letter)\n", c, morse_buf, off_count);
                             morse_len = 0;
                         }
                     }
@@ -826,15 +1021,37 @@ static void run_cw(long long freq_hz, FILE *out)
                 off_count = 0;
                 on_count = 0;
             } else if (!tone_on && in_tone) {
-                /* Falling edge: classify dit or dah */
+                /* Falling edge: classify dit or dah.
+                 * Ignore very short key-down glitches caused by threshold
+                 * chatter; they are not valid CW elements.
+                 */
                 in_tone = 0;
-                char element = (on_count > dit_samples * 2) ? '-' : '.';
-                if (morse_len < (int)sizeof(morse_buf) - 1)
-                    morse_buf[morse_len++] = element;
+                if (on_count >= min_element_samples) {
+                    char element = (on_count >= dash_threshold_samples) ? '-' : '.';
+                    if (morse_len < (int)sizeof(morse_buf) - 1)
+                        morse_buf[morse_len++] = element;
+                    if (g_debug)
+                        fprintf(stderr, "cw: element %c on_count=%d dit=%d morse_len=%d\n",
+                                element, on_count, dit_samples, morse_len);
 
-                /* Adaptive dit timing */
-                if (element == '.') {
-                    dit_samples = (dit_samples * 7 + on_count) / 8;
+                    /* Adaptive dit timing from clean dots only.
+                     * Do not adapt when --cw-wpm locked the timing, and never
+                     * allow a glitch-sized dot to collapse the decoder timing.
+                     */
+                    if (!cw_locked_wpm && element == '.' &&
+                        on_count >= dit_min_samples && on_count <= dit_max_samples) {
+                        dit_samples = (dit_samples * 7 + on_count) / 8;
+                        if (dit_samples < dit_min_samples) dit_samples = dit_min_samples;
+                        if (dit_samples > dit_max_samples) dit_samples = dit_max_samples;
+                        min_element_samples = (int)lrint((double)dit_samples * cw_min_element_frac);
+                        dash_threshold_samples = (dit_samples * 22) / 10;
+                        letter_gap_samples = (dit_samples * 22) / 10;
+                        word_gap_samples = (dit_samples * 55) / 10;
+                        if (min_element_samples < edge_debounce) min_element_samples = edge_debounce;
+                    }
+                } else if (g_debug) {
+                    fprintf(stderr, "cw: ignored short on glitch count=%d min_element=%d\n",
+                            on_count, min_element_samples);
                 }
 
                 on_count = 0;
@@ -849,7 +1066,7 @@ static void run_cw(long long freq_hz, FILE *out)
             } else {
                 off_count++;
                 /* Flush decoded text after a long pause */
-                if (off_count == dit_samples * 7 + 1 && text_len > 0) {
+                if (off_count == word_gap_samples + dit_samples && text_len > 0) {
                     decoded_text[text_len] = '\0';
                     utc_now(ts, sizeof(ts));
                     char text_esc[512];
@@ -940,7 +1157,7 @@ static int g3ruh_descramble(struct g3ruh_state *s, int bit)
  * When consecutive bits are equal (no transition) sign difference = 0,
  * so TED is quiescent — it only adjusts on transitions, as intended.
  */
-static void run_gfsk(long long freq_hz, int baud, int use_g3ruh, FILE *out)
+static void run_gfsk(long long freq_hz, double offset_hz, int rx_channel, int bandwidth_hz, int baud, int use_g3ruh, FILE *out)
 {
     pid_t child = -1;
     FILE *iq_pipe = NULL;
@@ -1009,13 +1226,16 @@ static void run_gfsk(long long freq_hz, int baud, int use_g3ruh, FILE *out)
     int sym_gate_ok  = 0;
     int gate_quiet   = 0;
 
-    if (!configure_rx(freq_hz, IQ_SAMPLE_RATE)) {
+    long long rx_lo_hz = freq_hz - (long long)llround(offset_hz);
+    if (!configure_rx(rx_lo_hz, IQ_SAMPLE_RATE, rx_channel, bandwidth_hz)) {
         fprintf(stderr, "gfsk: configure_rx failed\n");
         free(ma_buf);
         return;
     }
+    fprintf(stderr, "decoder: GFSK downlink=%lld offset_hz=%.1f rx_lo=%lld rx_channel=%d baud=%d g3ruh=%d\n",
+            freq_hz, offset_hz, rx_lo_hz, rx_channel, baud, use_g3ruh);
 
-    iq_pipe = start_iio_stream(&child, IIO_BUFFER_SAMPS);
+    iq_pipe = start_iio_stream(&child, IIO_BUFFER_SAMPS, rx_channel);
     if (!iq_pipe) {
         fprintf(stderr, "gfsk: iio stream failed\n");
         free(ma_buf);
@@ -1216,6 +1436,18 @@ int main(int argc, char **argv)
     const char *output_path = NULL;
     int baud = 9600;    /* GFSK baud rate; ignored for aprs/cw */
     int use_g3ruh = 0;  /* --g3ruh: enable G3RUH descrambler for GFSK */
+    double offset_hz = DEFAULT_OFFSET_HZ;
+    int rx_channel = DEFAULT_RX_CHANNEL;
+    int bandwidth_hz = DEFAULT_RX_BW_HZ;
+    double cw_wpm = 0.0;  /* 0 = adaptive, >0 = lock CW timing */
+    double cw_min_span = DEFAULT_CW_MIN_SPAN;
+    double cw_min_peak = DEFAULT_CW_MIN_PEAK;
+    double cw_open_frac = DEFAULT_CW_OPEN_FRAC;
+    double cw_close_frac = DEFAULT_CW_CLOSE_FRAC;
+    double cw_min_element_frac = DEFAULT_CW_MIN_ELEMENT_FRAC;
+    int cw_mix_sign = DEFAULT_CW_MIX_SIGN;
+    double cw_abs_low = -1.0;
+    double cw_abs_high = -1.0;
     FILE *out = NULL;
     int i;
 
@@ -1245,10 +1477,94 @@ int main(int argc, char **argv)
             use_g3ruh = 1;
         } else if (strcmp(argv[i], "--debug") == 0) {
             g_debug = 1;
+        } else if (strcmp(argv[i], "--rx-channel") == 0 && i + 1 < argc) {
+            char *end = NULL;
+            errno = 0;
+            rx_channel = (int)strtol(argv[++i], &end, 10);
+            if (errno || !end || *end || (rx_channel != 1 && rx_channel != 2)) {
+                fprintf(stderr, "Invalid --rx-channel; use 1 or 2\n"); return 2;
+            }
+        } else if (strcmp(argv[i], "--offset-hz") == 0 && i + 1 < argc) {
+            char *end = NULL;
+            errno = 0;
+            offset_hz = strtod(argv[++i], &end);
+            if (errno || !end || *end || fabs(offset_hz) > 500000.0) {
+                fprintf(stderr, "Invalid --offset-hz; use -500000..500000\n"); return 2;
+            }
+        } else if (strcmp(argv[i], "--cw-wpm") == 0 && i + 1 < argc) {
+            char *end = NULL;
+            errno = 0;
+            cw_wpm = strtod(argv[++i], &end);
+            if (errno || !end || *end || cw_wpm < CW_WPM_MIN || cw_wpm > CW_WPM_MAX) {
+                fprintf(stderr, "Invalid --cw-wpm; use %d..%d\n", CW_WPM_MIN, CW_WPM_MAX); return 2;
+            }
+        } else if (strcmp(argv[i], "--cw-min-span") == 0 && i + 1 < argc) {
+            char *end = NULL;
+            errno = 0;
+            cw_min_span = strtod(argv[++i], &end);
+            if (errno || !end || *end || cw_min_span < 0.0) {
+                fprintf(stderr, "Invalid --cw-min-span; use >=0\n"); return 2;
+            }
+        } else if (strcmp(argv[i], "--cw-min-peak") == 0 && i + 1 < argc) {
+            char *end = NULL;
+            errno = 0;
+            cw_min_peak = strtod(argv[++i], &end);
+            if (errno || !end || *end || cw_min_peak < 0.0) {
+                fprintf(stderr, "Invalid --cw-min-peak; use >=0\n"); return 2;
+            }
+        } else if (strcmp(argv[i], "--cw-open-frac") == 0 && i + 1 < argc) {
+            char *end = NULL;
+            errno = 0;
+            cw_open_frac = strtod(argv[++i], &end);
+            if (errno || !end || *end || cw_open_frac <= 0.0 || cw_open_frac >= 1.0) {
+                fprintf(stderr, "Invalid --cw-open-frac; use 0..1\n"); return 2;
+            }
+        } else if (strcmp(argv[i], "--cw-close-frac") == 0 && i + 1 < argc) {
+            char *end = NULL;
+            errno = 0;
+            cw_close_frac = strtod(argv[++i], &end);
+            if (errno || !end || *end || cw_close_frac <= 0.0 || cw_close_frac >= 1.0 || cw_close_frac >= cw_open_frac) {
+                fprintf(stderr, "Invalid --cw-close-frac; use 0..1 and less than open frac\n"); return 2;
+            }
+        } else if (strcmp(argv[i], "--cw-min-element-frac") == 0 && i + 1 < argc) {
+            char *end = NULL;
+            errno = 0;
+            cw_min_element_frac = strtod(argv[++i], &end);
+            if (errno || !end || *end || cw_min_element_frac <= 0.0 || cw_min_element_frac > 1.5) {
+                fprintf(stderr, "Invalid --cw-min-element-frac; use >0 and <=1.5\n"); return 2;
+            }
+        } else if (strcmp(argv[i], "--cw-mix-sign") == 0 && i + 1 < argc) {
+            char *end = NULL;
+            errno = 0;
+            cw_mix_sign = (int)strtol(argv[++i], &end, 10);
+            if (errno || !end || *end || (cw_mix_sign != 1 && cw_mix_sign != -1)) {
+                fprintf(stderr, "Invalid --cw-mix-sign; use 1 or -1\n"); return 2;
+            }
+        } else if (strcmp(argv[i], "--cw-abs-low") == 0 && i + 1 < argc) {
+            char *end = NULL;
+            errno = 0;
+            cw_abs_low = strtod(argv[++i], &end);
+            if (errno || !end || *end || cw_abs_low < 0.0) {
+                fprintf(stderr, "Invalid --cw-abs-low; use >=0\n"); return 2;
+            }
+        } else if (strcmp(argv[i], "--cw-abs-high") == 0 && i + 1 < argc) {
+            char *end = NULL;
+            errno = 0;
+            cw_abs_high = strtod(argv[++i], &end);
+            if (errno || !end || *end || cw_abs_high <= 0.0) {
+                fprintf(stderr, "Invalid --cw-abs-high; use >0\n"); return 2;
+            }
+        } else if (strcmp(argv[i], "--bandwidth-hz") == 0 && i + 1 < argc) {
+            char *end = NULL;
+            errno = 0;
+            bandwidth_hz = (int)strtol(argv[++i], &end, 10);
+            if (errno || !end || *end || bandwidth_hz < 200000) {
+                fprintf(stderr, "Invalid --bandwidth-hz; use >=200000\n"); return 2;
+            }
         } else {
             fprintf(stderr,
                 "Usage: %s --freq-hz <hz> --mode <aprs|cw|gfsk> --output <path>"
-                " [--baud <rate>] [--g3ruh]\n", argv[0]);
+                " [--baud <rate>] [--g3ruh] [--rx-channel 1|2] [--offset-hz hz] [--bandwidth-hz hz] [--cw-wpm wpm] [--cw-min-span v] [--cw-min-peak v] [--cw-open-frac v] [--cw-close-frac v] [--cw-min-element-frac v] [--cw-mix-sign 1|-1] [--cw-abs-low v] [--cw-abs-high v]\n", argv[0]);
             return 2;
         }
     }
@@ -1256,7 +1572,7 @@ int main(int argc, char **argv)
     if (freq_hz < PLUTO_MIN_HZ || freq_hz > PLUTO_MAX_HZ || !mode || !output_path) {
         fprintf(stderr,
             "Usage: %s --freq-hz <hz> --mode <aprs|cw|gfsk> --output <path>"
-            " [--baud <rate>]\n", argv[0]);
+            " [--baud <rate>] [--g3ruh] [--rx-channel 1|2] [--offset-hz hz] [--bandwidth-hz hz] [--cw-wpm wpm] [--cw-min-span v] [--cw-min-peak v] [--cw-open-frac v] [--cw-close-frac v] [--cw-min-element-frac v] [--cw-mix-sign 1|-1] [--cw-abs-low v] [--cw-abs-high v]\n", argv[0]);
         return 2;
     }
 
@@ -1265,11 +1581,11 @@ int main(int argc, char **argv)
     setvbuf(out, NULL, _IOLBF, 0);
 
     if (strcmp(mode, "aprs") == 0) {
-        run_aprs(freq_hz, out);
+        run_aprs(freq_hz, offset_hz, rx_channel, bandwidth_hz, out);
     } else if (strcmp(mode, "cw") == 0) {
-        run_cw(freq_hz, out);
+        run_cw(freq_hz, offset_hz, rx_channel, bandwidth_hz, cw_wpm, cw_min_span, cw_min_peak, cw_open_frac, cw_close_frac, cw_min_element_frac, cw_mix_sign, cw_abs_low, cw_abs_high, out);
     } else if (strcmp(mode, "gfsk") == 0) {
-        run_gfsk(freq_hz, baud, use_g3ruh, out);
+        run_gfsk(freq_hz, offset_hz, rx_channel, bandwidth_hz, baud, use_g3ruh, out);
     } else {
         fprintf(stderr, "Unknown mode: %s (supported: aprs, cw, gfsk)\n", mode);
         fclose(out);
