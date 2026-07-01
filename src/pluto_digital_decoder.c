@@ -1084,7 +1084,40 @@ static void run_cw(long long freq_hz, double offset_hz, int rx_channel, int band
         if (got == 0 && feof(pipe)) break;
     }
 
-    /* Flush remaining text */
+    /*
+     * CW EOF final flush:
+     * If the stream ends while a tone, Morse element, or decoded word is
+     * pending, emit one final complete CW frame instead of requiring more
+     * trailing silence. This prevents short beacon/test captures from losing
+     * the final character, and avoids emitting a partial frame before the
+     * last pending Morse character has been classified.
+     */
+    if (in_tone && on_count >= min_element_samples) {
+        char element = (on_count >= dash_threshold_samples) ? '-' : '.';
+        if (morse_len < (int)sizeof(morse_buf) - 1)
+            morse_buf[morse_len++] = element;
+        if (g_debug)
+            fprintf(stderr, "cw: element %c on_count=%d dit=%d morse_len=%d gap=eof-final\n",
+                    element, on_count, dit_samples, morse_len);
+        in_tone = 0;
+        on_count = 0;
+    } else if (in_tone && g_debug) {
+        fprintf(stderr, "cw: ignored short eof on glitch count=%d min_element=%d\n",
+                on_count, min_element_samples);
+        in_tone = 0;
+        on_count = 0;
+    }
+
+    if (morse_len > 0) {
+        morse_buf[morse_len] = '\0';
+        char c = morse_lookup(morse_buf);
+        if (text_len < (int)sizeof(decoded_text) - 1)
+            decoded_text[text_len++] = c;
+        if (g_debug)
+            fprintf(stderr, "cw: emit char '%c' code=%s gap=eof-flush\n", c, morse_buf);
+        morse_len = 0;
+    }
+
     if (text_len > 0) {
         decoded_text[text_len] = '\0';
         utc_now(ts, sizeof(ts));
@@ -1095,41 +1128,14 @@ static void run_cw(long long freq_hz, double offset_hz, int rx_channel, int band
             "\"text\":\"%s\"}\n",
             ++g_seq, ts, text_esc);
         fflush(out);
+        if (g_debug)
+            fprintf(stderr, "cw: emit text reason=eof-final text=%s\n", decoded_text);
+        text_len = 0;
+        decoded_text[0] = '\0';
     }
 
     fclose(pipe);
     if (child > 0) { kill(child, SIGTERM); waitpid(child, NULL, 0); }
-
-    /*
-     * CW EOF final flush:
-     * If the stream ends while a Morse element or decoded word is pending,
-     * emit it instead of requiring additional trailing silence. This prevents
-     * short beacon/test captures from losing the final character.
-     */
-    if (morse_len > 0) {
-        morse_buf[morse_len] = '\0';
-        char c = morse_lookup(morse_buf);
-        if (text_len < (int)sizeof(decoded_text) - 1)
-            decoded_text[text_len++] = c;
-        if (g_debug)
-            fprintf(stderr, "cw: emit char '%c' code=%s gap=eof-flush\n", c, morse_buf);
-        morse_len = 0;
-    }
-    if (text_len > 0) {
-        decoded_text[text_len] = '\0';
-        char ts[32];
-        time_t now = time(NULL);
-        struct tm tm_utc;
-        gmtime_r(&now, &tm_utc);
-        strftime(ts, sizeof(ts), "%Y-%m-%dT%H:%M:%SZ", &tm_utc);
-        fprintf(out, "{\"seq\":%lld,\"time_utc\":\"%s\",\"type\":\"cw\",\"text\":\"%s\"}\n",
-                ++g_seq, ts, decoded_text);
-        fflush(out);
-        if (g_debug)
-            fprintf(stderr, "cw: emit text reason=eof-flush text=%s\n", decoded_text);
-        text_len = 0;
-        decoded_text[0] = '\0';
-    }
 }
 
 /* ------------------------------------------------------------------ */
