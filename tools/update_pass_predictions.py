@@ -507,6 +507,10 @@ def build_predictions(args: argparse.Namespace) -> dict[str, Any]:
         )
 
     passes.sort(key=lambda row: row["aos_utc"])
+    # Drop passes whose LOS has already passed — prevents stale data even if
+    # the system clock was wrong at boot and then got corrected before write.
+    now_iso = iso_utc(utc_now())
+    passes = [p for p in passes if p["los_utc"] >= now_iso]
     if args.limit > 0:
         passes = passes[: args.limit]
 
@@ -527,6 +531,38 @@ def build_predictions(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+def write_status_file(status_path: str, predictions: dict[str, Any]) -> None:
+    """Write refresh_status.json inline, eliminating a separate Python startup."""
+    meta = predictions.get("metadata") or {}
+    status = {
+        "message": "Pass predictions regenerated on Pluto",
+        "ok": True,
+        "state": "ok",
+        "summary": {
+            "generated_utc": predictions.get("generated_utc"),
+            "minimum_elevation_deg": meta.get("minimum_elevation_deg"),
+            "pass_count": meta.get("pass_count"),
+            "prediction_hours": predictions.get("hours"),
+            "satellite_count": meta.get("satellite_count"),
+            "start_utc": predictions.get("start_utc"),
+        },
+        "target": "passes",
+        "updated_utc": predictions.get("generated_utc"),
+    }
+    status_out = Path(status_path)
+    status_out.parent.mkdir(parents=True, exist_ok=True)
+    tmp = status_out.with_name(status_out.name + ".tmp")
+    try:
+        tmp.write_text(json.dumps(status, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        os.replace(tmp, status_out)
+    except Exception:
+        try:
+            tmp.unlink()
+        except FileNotFoundError:
+            pass
+        raise
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--catalog", default="data/satellites.json")
@@ -537,12 +573,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--step-seconds", type=int, default=30)
     parser.add_argument("--pass-sample-seconds", type=int, default=5)
     parser.add_argument("--start-utc", default=None)
+    parser.add_argument("--status-file", default=None,
+                        help="If set, write refresh_status.json here after passes.json — "
+                             "avoids a separate write_refresh_status.py Python startup.")
     return parser.parse_args()
 
 
 def main() -> int:
+    import time as _time
+    _t0 = _time.monotonic()
     args = parse_args()
+    print(f"t+{_time.monotonic()-_t0:.2f}s args parsed", flush=True)
     predictions = build_predictions(args)
+    print(f"t+{_time.monotonic()-_t0:.2f}s predictions built ({predictions['metadata']['pass_count']} passes)", flush=True)
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
 
@@ -568,9 +611,15 @@ def main() -> int:
             pass
         raise
     meta = predictions["metadata"]
-    print(f"wrote {output}")
+    print(f"t+{_time.monotonic()-_t0:.2f}s wrote {output}")
     print(f"passes: {meta['pass_count']}")
     print(f"window: {predictions['start_utc']} + {predictions['hours']}h")
+    print(f"total elapsed: {_time.monotonic()-_t0:.2f}s", flush=True)
+
+    if args.status_file:
+        write_status_file(args.status_file, predictions)
+        print(f"status: {args.status_file}")
+
     return 0
 
 

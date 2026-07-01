@@ -187,4 +187,43 @@ fi
     fi
     rm -rf '${SD_ROOT}/python-runtime'
     mv '${SD_ROOT}/python-runtime.tmp' '${SD_ROOT}/python-runtime'
-    mv '${SD_ROOT}/cache/python-runtime.tar.gz.tmp' '${SD_ROOT}/cache/python-runt
+    mv '${SD_ROOT}/cache/python-runtime.tar.gz.tmp' '${SD_ROOT}/cache/python-runtime.tar.gz'
+  fi
+  sync
+  echo '== Remote files (jffs2) =='
+  ls -lh '${DEPLOY_DIR}/pluto_sat_tracker' \
+         '${DEPLOY_DIR}/pluto_fm_receiver' \
+         '${DEPLOY_DIR}/pluto_digital_decoder' \
+         '${DEPLOY_DIR}/run_tracker.sh' \
+         '${DEPLOY_DIR}/web/index.html' \
+         '${DEPLOY_DIR}/config/observer.json' \
+         '${DEPLOY_DIR}/data/repositories.json' \
+         '${DEPLOY_DIR}/data/satellites.json'
+  echo '== Remote files (SD card) =='
+  ls -lh '${SD_ROOT}/tools/pluto_refresh_data.sh' \
+         '${SD_ROOT}/tools/pluto_pass_refresh_loop.sh' \
+         '${SD_ROOT}/tools/update_pass_predictions.py' \
+         '${SD_ROOT}/tools/update_satellite_catalog.py' \
+         '${SD_ROOT}/tools/write_refresh_status.py' 2>/dev/null || echo '  (SD card not mounted or tools not deployed)'
+  if [ -f '${SD_ROOT}/python-runtime/bin/python3.11' ]; then
+    '${SD_ROOT}/python-runtime/bin/python3.11' --version 2>/dev/null || \
+      /lib/ld-linux-armhf.so.3 '${SD_ROOT}/python-runtime/bin/python3.11' --version || true
+  fi
+"
+
+echo
+echo "Deploy complete. Rebooting Pluto..."
+"${SSHPASS[@]}" ssh "${SSH_OPTS[@]}" "${PLUTO_USER}@${PLUTO_IP}" "reboot" 2>/dev/null || true
+
+echo "Waiting for Pluto to come back online..."
+sleep 15
+for i in $(seq 1 20); do
+  if "${SSHPASS[@]}" ssh "${SSH_OPTS[@]}" -o ConnectTimeout=3 "${PLUTO_USER}@${PLUTO_IP}" "echo ok" >/dev/null 2>&1; then
+    echo "Pluto is back online. Tracker starting via autorun."
+    echo "Browse to: http://${PLUTO_IP}:8080/SatelliteTracker/"
+    exit 0
+  fi
+  echo "  ...still waiting (${i}/20)"
+  sleep 5
+done
+echo "Pluto did not respond after reboot — check manually at http://${PLUTO_IP}:8080/SatelliteTracker/"

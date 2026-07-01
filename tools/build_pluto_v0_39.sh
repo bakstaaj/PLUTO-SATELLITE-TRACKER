@@ -109,12 +109,22 @@ MSYS_NO_PATHCONV=1 "$DOCKER" run --rm \
     cp pluto_sat_tracker dist/pluto_sat_tracker
     cp pluto_fm_receiver dist/pluto_fm_receiver
     cp pluto_digital_decoder dist/pluto_digital_decoder
+    cp pluto_test_gen dist/pluto_test_gen
     arm-linux-gnueabihf-strip dist/pluto_sat_tracker || true
     arm-linux-gnueabihf-strip dist/pluto_fm_receiver || true
     arm-linux-gnueabihf-strip dist/pluto_digital_decoder || true
+    arm-linux-gnueabihf-strip dist/pluto_test_gen || true
 
     echo
     echo '== Built binaries =='
     file dist/pluto_sat_tracker
     file dist/pluto_fm_receiver
-    file dist/pluto_
+    file dist/pluto_digital_decoder
+    file dist/pluto_test_gen
+    ls -lh dist/pluto_sat_tracker dist/pluto_fm_receiver dist/pluto_digital_decoder dist/pluto_test_gen
+  "
+
+echo
+echo "Build complete:"
+echo "  $ROOT_DIR/dist/pluto_sat_tracker"
+echo "  $ROOT_DIR/dist/pluto_digital_decoder"

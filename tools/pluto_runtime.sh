@@ -14,6 +14,13 @@ PASS_REFRESH_LOOP_LOG="${TMP_ROOT}/logs/pass_refresh_loop.log"
 
 TIME_EPOCH_FILE="${DEPLOY_DIR}/last_time_epoch.txt"
 TIME_UTC_FILE="${DEPLOY_DIR}/last_time_utc.txt"
+STARTUP_TIMING_LOG="${TMP_ROOT}/logs/startup_timing.log"
+
+tlog_runtime() {
+  mkdir -p "${TMP_ROOT}/logs"
+  printf "[%s] [runtime] %s\n" "$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || echo unknown)" "$*" >> "$STARTUP_TIMING_LOG"
+  echo "$*"
+}
 
 # 2026-06-11 00:00:00 UTC
 FALLBACK_UTC="2026.06.11-00:00:00"
@@ -83,7 +90,7 @@ maybe_refresh_passes() {
 
   echo "Startup pass refresh: regenerating passes from saved observer config"
   (
-    /bin/sh "$REFRESH_RUNNER" passes
+    /bin/sh "$REFRESH_RUNNER" passes_boot
   ) >"$STARTUP_REFRESH_LOG" 2>&1 &
 }
 
@@ -176,16 +183,40 @@ mkdir -p "${DEPLOY_DIR}/data"
 # transient dirs (reset on reboot, always writable)
 mkdir -p "${TMP_ROOT}/logs"
 
+tlog_runtime "boot start"
+BOOT_TIME_RELIABLE=0
 if try_host_time; then
-  :
+  BOOT_TIME_RELIABLE=1
+  tlog_runtime "time source: host"
 elif try_internet_time; then
-  :
+  BOOT_TIME_RELIABLE=1
+  tlog_runtime "time source: internet/ntp"
 elif try_saved_time; then
-  :
+  BOOT_TIME_RELIABLE=1
+  tlog_runtime "time source: saved"
 else
   use_fallback_time
+  BOOT_TIME_RELIABLE=0
+  tlog_runtime "time source: fallback (June 11) — pass gen deferred to browser"
 fi
 
-echo "Current Pluto UTC time: $(date -u 2>/dev/null || true)"
-maybe_refresh_passes
+tlog_runtime "clock set: $(date -u 2>/dev/null || true)"
+if [ "$BOOT_TIME_RELIABLE" = "1" ]; then
+  tlog_runtime "maybe_refresh_passes: starting"
+  maybe_refresh_passes
+  tlog_runtime "maybe_refresh_passes: queued (running in background)"
+else
+  tlog_runtime "maybe_refresh_passes: skipped (fallback clock)"
+fi
+tlog_runtime "starting pass refresh loop"
 start_pass_refresh_loop
+echo "Starting: $BIN --web-dir $DEPLOY_DIR/web --config-dir $DEPLOY_DIR/config --data-dir $DEPLOY_DIR/data --transient-dir $TMP_ROOT --sd-root $SD_ROOT $TRACKER_ARGS"
+echo
+
+exec "$BIN" \
+  --web-dir "$DEPLOY_DIR/web" \
+  --config-dir "$DEPLOY_DIR/config" \
+  --data-dir "$DEPLOY_DIR/data" \
+  --transient-dir "$TMP_ROOT" \
+  --sd-root "$SD_ROOT" \
+  $TRACKER_ARGS

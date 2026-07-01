@@ -42,7 +42,7 @@ LOG_DIR="${TRANSIENT_DIR}/logs"
 
 QUICK_HOURS="${PLUTO_PASS_QUICK_HOURS:-8}"
 QUICK_LIMIT="${PLUTO_PASS_QUICK_LIMIT:-10}"
-QUICK_STEP_SECONDS="${PLUTO_PASS_QUICK_STEP_SECONDS:-30}"
+QUICK_STEP_SECONDS="${PLUTO_PASS_QUICK_STEP_SECONDS:-90}"
 FULL_HOURS="${PLUTO_PASS_FULL_HOURS:-24}"
 FULL_LIMIT="${PLUTO_PASS_FULL_LIMIT:-80}"
 FULL_STEP_SECONDS="${PLUTO_PASS_STEP_SECONDS:-60}"
@@ -51,8 +51,19 @@ FULL_LOCK_MAX_AGE="${PLUTO_PASS_FULL_LOCK_MAX_AGE_SECONDS:-240}"
 CATALOG_LOCK_MAX_AGE="${PLUTO_CATALOG_LOCK_MAX_AGE_SECONDS:-900}"
 REFRESH_START_UTC="${PLUTO_REFRESH_START_UTC:-$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || echo '')}"
 
+TIMING_LOG="${TRANSIENT_DIR}/logs/pass_timing.log"
+
 now_epoch() {
   date -u '+%s' 2>/dev/null || echo 0
+}
+
+now_ts() {
+  date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || echo unknown
+}
+
+tlog() {
+  mkdir -p "${TRANSIENT_DIR}/logs"
+  printf "[%s] [%s] %s\n" "$(now_ts)" "$MODE" "$*" >> "$TIMING_LOG"
 }
 
 json_clean() {
@@ -131,8 +142,8 @@ acquire_lock() {
       write_status "running" "$TARGET" "$BUSY_MESSAGE"
       exit 0
     fi
-    kill "$OLD_PID" >/dev/null 2>&1 || true
-    sleep 1
+    # SIGKILL only — SIGTERM would fire the old process's EXIT trap which could
+    # remove the lock directory after we re-create it, causing a double-acquire race.
     kill -9 "$OLD_PID" >/dev/null 2>&1 || true
   fi
 
@@ -175,9 +186,8 @@ clear_stale_pass_locks() {
     if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
       AGE="$(lock_age_seconds "$LOCK_DIR")"
       if [ "$AGE" -le "$QUICK_LOCK_MAX_AGE" ] 2>/dev/null; then continue; fi
-      # Stale running process — kill it
-      kill "$OLD_PID" >/dev/null 2>&1 || true
-      sleep 1
+      # Stale running process — SIGKILL directly so the EXIT trap cannot fire
+      # and race against the lock directory we are about to recreate.
       kill -9 "$OLD_PID" >/dev/null 2>&1 || true
     fi
     rm -rf "$LOCK_DIR" >/dev/null 2>&1 || true
@@ -231,16 +241,36 @@ run_pass_generation() {
   LIMIT="$3"
   STEP_SECONDS="$4"
   START_UTC="$5"
+  STATUS_OUT="${6:-}"   # optional: write refresh_status.json inline (no extra Python startup)
 
-  run_python \
-    "${TOOLS_DIR}/update_pass_predictions.py" \
-    --catalog "${STATIC_DATA_DIR}/satellites.json" \
-    --observer "${DEPLOY_DIR}/config/observer.json" \
-    --output "$OUTPUT" \
-    --hours "$HOURS" \
-    --limit "$LIMIT" \
-    --step-seconds "$STEP_SECONDS" \
-    --start-utc "$START_UTC"
+  tlog "python start | limit=$LIMIT hours=$HOURS step=${STEP_SECONDS}s start=$START_UTC"
+  _T0="$(now_epoch)"
+
+  if [ -n "$STATUS_OUT" ]; then
+    run_python \
+      "${TOOLS_DIR}/update_pass_predictions.py" \
+      --catalog "${STATIC_DATA_DIR}/satellites.json" \
+      --observer "${DEPLOY_DIR}/config/observer.json" \
+      --output "$OUTPUT" \
+      --hours "$HOURS" \
+      --limit "$LIMIT" \
+      --step-seconds "$STEP_SECONDS" \
+      --start-utc "$START_UTC" \
+      --status-file "$STATUS_OUT"
+  else
+    run_python \
+      "${TOOLS_DIR}/update_pass_predictions.py" \
+      --catalog "${STATIC_DATA_DIR}/satellites.json" \
+      --observer "${DEPLOY_DIR}/config/observer.json" \
+      --output "$OUTPUT" \
+      --hours "$HOURS" \
+      --limit "$LIMIT" \
+      --step-seconds "$STEP_SECONDS" \
+      --start-utc "$START_UTC"
+  fi
+  _RC=$?
+  tlog "python done | rc=$_RC elapsed=$(( $(now_epoch) - _T0 ))s"
+  return $_RC
 }
 
 write_generated_status() {
@@ -254,6 +284,7 @@ write_generated_status() {
 }
 
 start_pass_worker_background() {
+  # Used by the 15-min loop: single Python run, 10 passes, no quick preview step.
   mkdir -p "$LOG_DIR"
   WORKER_LOG="${LOG_DIR}/pass_refresh_worker.log"
   (
@@ -270,6 +301,26 @@ start_pass_worker_background() {
     PLUTO_PASS_FULL_LOCK_MAX_AGE_SECONDS="$FULL_LOCK_MAX_AGE" \
     /bin/sh "$0" passes_worker
   ) >"$WORKER_LOG" 2>&1 &
+}
+
+start_boot_background() {
+  # Used by browser-triggered refreshes: 2-pass quick preview then 10-pass full set.
+  mkdir -p "$LOG_DIR"
+  BOOT_LOG="${LOG_DIR}/pass_refresh_boot.log"
+  (
+    PLUTO_DEPLOY_DIR="$DEPLOY_DIR" \
+    PLUTO_SD_ROOT="$SD_ROOT" \
+    PLUTO_REFRESH_START_UTC="$REFRESH_START_UTC" \
+    PLUTO_PASS_QUICK_HOURS="$QUICK_HOURS" \
+    PLUTO_PASS_QUICK_LIMIT="$QUICK_LIMIT" \
+    PLUTO_PASS_QUICK_STEP_SECONDS="$QUICK_STEP_SECONDS" \
+    PLUTO_PASS_FULL_HOURS="$FULL_HOURS" \
+    PLUTO_PASS_FULL_LIMIT="$FULL_LIMIT" \
+    PLUTO_PASS_STEP_SECONDS="$FULL_STEP_SECONDS" \
+    PLUTO_PASS_QUICK_LOCK_MAX_AGE_SECONDS="$QUICK_LOCK_MAX_AGE" \
+    PLUTO_PASS_FULL_LOCK_MAX_AGE_SECONDS="$FULL_LOCK_MAX_AGE" \
+    /bin/sh "$0" passes_boot
+  ) >"$BOOT_LOG" 2>&1 &
 }
 
 start_full_background() {
@@ -291,24 +342,72 @@ mkdir -p "$TRANSIENT_DIR" "$LOG_DIR" "$STATIC_DATA_DIR"
 
 case "$MODE" in
   passes)
-    # If a fresh worker is already running, do nothing — avoids double-start
-    # when the UI (bootstrap + periodic timer + rescue) all call this quickly.
+    # Browser/UI-triggered refresh: publish 2 passes quickly, then swap in 10.
+    # If a fresh worker is already running, do nothing — avoids double-start.
     if worker_is_running_and_fresh; then
       write_status "running" "passes" "Pass refresh already in progress — waiting for results"
       exit 0
     fi
     clear_stale_pass_locks
     write_status "running" "passes" "Queued pass preview on Pluto"
-    start_pass_worker_background
+    start_boot_background
+    ;;
+  passes_boot)
+    # Boot/browser-triggered sequence: publish 2 passes immediately for fast
+    # first view, then replace with the full 10-pass set. Both phases write
+    # passes.json and status in a single Python call — no extra Python startup.
+    tlog "passes_boot start | pid=$$"
+    acquire_lock "/tmp/pluto_refresh_passes_worker.lock" "passes" "Pass refresh already in progress" "$FULL_LOCK_MAX_AGE"
+    tlog "lock acquired"
+    BOOT_QUICK_TMP="${TRANSIENT_DIR}/passes.boot_quick.tmp.$$"
+    BOOT_FULL_TMP="${TRANSIENT_DIR}/passes.boot_full.tmp.$$"
+    # Phase 1: 2 passes — fast first look (Python writes passes + status inline)
+    write_status "running" "passes" "Generating first 2 passes for quick preview"
+    tlog "phase1 start"
+    run_pass_generation "$BOOT_QUICK_TMP" 4 2 "$QUICK_STEP_SECONDS" "$REFRESH_START_UTC" "$STATUS_FILE" || fail "boot quick pass generation failed"
+    mv "$BOOT_QUICK_TMP" "${TRANSIENT_DIR}/passes.json"
+    tlog "phase1 published"
+    # Phase 2: full 10-pass set (Python writes passes + status inline, no write_status "running" to avoid spinner)
+    tlog "phase2 start"
+    run_pass_generation "$BOOT_FULL_TMP" "$QUICK_HOURS" "$QUICK_LIMIT" "$QUICK_STEP_SECONDS" "$REFRESH_START_UTC" "$STATUS_FILE" || fail "boot full pass generation failed"
+    mv "$BOOT_FULL_TMP" "${TRANSIENT_DIR}/passes.json"
+    tlog "phase2 published — passes_boot complete"
     ;;
   passes_worker)
+    tlog "passes_worker start | pid=$$"
     acquire_lock "/tmp/pluto_refresh_passes_worker.lock" "passes" "Pass refresh worker already in progress" "$QUICK_LOCK_MAX_AGE"
+    tlog "lock acquired"
     QUICK_TMP="${TRANSIENT_DIR}/passes.quick.tmp.$$"
     write_status "running" "passes" "Generating ${QUICK_LIMIT} passes across ${QUICK_HOURS}h on Pluto"
-    run_pass_generation "$QUICK_TMP" "$QUICK_HOURS" "$QUICK_LIMIT" "$QUICK_STEP_SECONDS" "$REFRESH_START_UTC" || fail "pass generation failed"
+    tlog "generation start"
+    run_pass_generation "$QUICK_TMP" "$QUICK_HOURS" "$QUICK_LIMIT" "$QUICK_STEP_SECONDS" "$REFRESH_START_UTC" "$STATUS_FILE" || fail "pass generation failed"
     mv "$QUICK_TMP" "${TRANSIENT_DIR}/passes.json"
-    write_generated_status passes "${TRANSIENT_DIR}/passes.json" || fail "pass status update failed"
+    tlog "passes_worker complete"
     # No full background run — 10 passes every 15 min is sufficient.
     ;;
   passes_full)
-    # Retained f
+    # Retained for manual invocation only. Not started automatically.
+    acquire_lock "/tmp/pluto_refresh_passes_full.lock" "passes" "Full pass refresh already in progress" "$FULL_LOCK_MAX_AGE"
+    FULL_TMP="${TRANSIENT_DIR}/passes.full.tmp.$$"
+    write_status "running" "passes" "Regenerating full pass predictions on Pluto"
+    run_pass_generation "$FULL_TMP" "$FULL_HOURS" "$FULL_LIMIT" "$FULL_STEP_SECONDS" "$REFRESH_START_UTC" "$STATUS_FILE" || fail "full pass refresh failed"
+    mv "$FULL_TMP" "${TRANSIENT_DIR}/passes.json"
+    ;;
+  catalog)
+    acquire_lock "/tmp/pluto_refresh_catalog.lock" "catalog" "Catalog refresh already in progress" "$CATALOG_LOCK_MAX_AGE"
+    write_status "running" "catalog" "Refreshing CelesTrak and SatNOGS catalog data on Pluto"
+    CATALOG_TMP="${STATIC_DATA_DIR}/satellites.tmp.$$"
+    run_python \
+      "${TOOLS_DIR}/update_satellite_catalog.py" \
+      --output "$CATALOG_TMP" || fail "catalog refresh failed"
+    mv "$CATALOG_TMP" "${STATIC_DATA_DIR}/satellites.json"
+    write_generated_status catalog "${STATIC_DATA_DIR}/satellites.json" || fail "catalog status update failed"
+    ;;
+  all)
+    "$0" catalog
+    "$0" passes
+    ;;
+  *)
+    fail "unknown refresh target: $MODE"
+    ;;
+esac

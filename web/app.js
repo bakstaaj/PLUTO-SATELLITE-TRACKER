@@ -768,7 +768,9 @@
           .addTo(target).bindPopup(formatMapPopup(point, label));
       });
 
-      if (livePoint) {
+      /* Satellite icon and observer look-line only appear during an active pass.
+       * Upcoming and stale passes show only the ground track and AOS/TCA/LOS markers. */
+      if (livePoint && passTimingState(pass) === "active") {
         const liveLatLng = [Number(livePoint.latitude_deg || 0), normalizeLongitude(livePoint.longitude_deg)];
         const liveIcon = satelliteLiveIconV3();
         if (liveIcon) {
@@ -2072,9 +2074,9 @@
         if (livePoint && infoEl) {
           infoEl.innerHTML = `
             <div><strong>Sample</strong>${escapeHtml(formatDateTime(livePoint.time_utc))}</div>
-            <div><strong>Ground Point</strong>${escapeHtml(`${livePoint.latitude_deg.toFixed(3)} deg, ${livePoint.longitude_deg.toFixed(3)} deg`)}</div>
-            <div><strong>Look Angles</strong>${escapeHtml(`Az ${livePoint.azimuth_deg} deg, El ${livePoint.elevation_deg} deg`)}</div>
-            <div><strong>Altitude</strong>${escapeHtml(`${livePoint.altitude_km} km`)}</div>
+            <div><strong>Ground Point</strong>${escapeHtml(`${livePoint.latitude_deg.toFixed(2)} deg, ${livePoint.longitude_deg.toFixed(2)} deg`)}</div>
+            <div><strong>Look Angles</strong>${escapeHtml(`Az ${Number(livePoint.azimuth_deg).toFixed(2)} deg, El ${Number(livePoint.elevation_deg).toFixed(2)} deg`)}</div>
+            <div><strong>Altitude</strong>${escapeHtml(`${Number(livePoint.altitude_km).toFixed(2)} km`)}</div>
           `;
         }
         /* Update Leaflet overlays without rebuilding the map */
@@ -2132,9 +2134,9 @@
           ${livePoint ? `
             <div class="map-info">
               <div><strong>Sample</strong>${escapeHtml(formatDateTime(livePoint.time_utc))}</div>
-              <div><strong>Ground Point</strong>${escapeHtml(`${livePoint.latitude_deg.toFixed(3)} deg, ${livePoint.longitude_deg.toFixed(3)} deg`)}</div>
-              <div><strong>Look Angles</strong>${escapeHtml(`Az ${livePoint.azimuth_deg} deg, El ${livePoint.elevation_deg} deg`)}</div>
-              <div><strong>Altitude</strong>${escapeHtml(`${livePoint.altitude_km} km`)}</div>
+              <div><strong>Ground Point</strong>${escapeHtml(`${livePoint.latitude_deg.toFixed(2)} deg, ${livePoint.longitude_deg.toFixed(2)} deg`)}</div>
+              <div><strong>Look Angles</strong>${escapeHtml(`Az ${Number(livePoint.azimuth_deg).toFixed(2)} deg, El ${Number(livePoint.elevation_deg).toFixed(2)} deg`)}</div>
+              <div><strong>Altitude</strong>${escapeHtml(`${Number(livePoint.altitude_km).toFixed(2)} km`)}</div>
             </div>
           ` : ""}
         </div>
@@ -4768,11 +4770,9 @@ const tbody = document.getElementById("satellites");
             await refresh();
             const passesPayload = await getJson("/api/passes");
             const refreshStatus = await getJson("/api/refresh/status");
-            const hours = Number((passesPayload && passesPayload.hours) ||
-              (refreshStatus && refreshStatus.summary && refreshStatus.summary.prediction_hours) || 0);
-            const count = Number((passesPayload && passesPayload.metadata && passesPayload.metadata.pass_count) ||
-              ((passesPayload && passesPayload.passes) || []).length || 0);
-            if ((refreshStatus.state || "") === "ok" && hours >= 23 && count >= 20 && !passPayloadNeedsBrowserRefresh(passesPayload)) {
+            // Stop polling once the refresh is done and passes look current.
+            // No minimum hours/count — we run an 8h/10-pass quick cycle by design.
+            if ((refreshStatus.state || "") === "ok" && !passPayloadNeedsBrowserRefresh(passesPayload)) {
               window.clearInterval(browserRefreshPollTimerId);
               browserRefreshPollTimerId = 0;
               setBrowserStatus("Backend online", "running");
@@ -6317,6 +6317,14 @@ try {
   const voiceModeReV2626E = /(^|[^A-Z0-9])(FM|NFM|WFM|AM|SSB|USB|LSB|VOICE|F3E|A3E|J3E)([^A-Z0-9]|$)/;
 
   function receiveKindForPassV2626E(pass) {
+    /* Absolute priority: if the backend explicitly assigned a CW-family mode
+     * to this transmitter, classify as CW immediately.  This avoids a
+     * satellite with both CW and AFSK transmitters (e.g. KKS-1) being
+     * misclassified as "digital" because AFSK appears in the modes list. */
+    const radioModeDirect = String((pass && pass.radio && pass.radio.mode) || "").toUpperCase().trim();
+    if (/^(CW|MORSE|A1A)$/.test(radioModeDirect)) return "cw";
+    if (/^(FM|NFM|WFM|AM|SSB|USB|LSB)$/.test(radioModeDirect)) return "voice";
+
     const fields = rxFieldsV2626E(pass);
 
     /* The current transmitter Mode field wins first. */
@@ -6440,12 +6448,42 @@ try {
     const title = document.getElementById("receiveDecodeTitleV2626E");
     const subtitle = document.getElementById("receiveDecodeSubtitleV2626E");
     const output = document.getElementById("receiveDecodeOutputV2626E");
-    const backendMode = kind === "cw" ? "cw" : "aprs";
+    /* Map pass data to backend decoder mode.
+     * Priority: explicit CW radio.mode → "cw"
+     *           GFSK/FSK/G3RUH/9600/GMSK in any field → "gfsk"
+     *           everything else (APRS/packet/AFSK) → "aprs"
+     */
+    const _radioModeSafe = String((pass && pass.radio && pass.radio.mode) || "").toUpperCase().trim();
+    const _allFieldsSafe = [
+      _radioModeSafe,
+      String((pass && pass.radio && pass.radio.description) || "").toUpperCase(),
+      ((pass && pass.modes) || []).join(" ").toUpperCase()
+    ].join(" ");
+    let backendMode, backendBaud, backendG3ruh = false;
+    if (kind === "cw" || /^(CW|MORSE|A1A)$/.test(_radioModeSafe)) {
+      backendMode = "cw";
+      backendBaud = null;
+    } else if (/(GFSK|G3RUH|GMSK|9K6|9600\s*BAUD|FSK)/.test(_allFieldsSafe)) {
+      backendMode = "gfsk";
+      /* Pick baud from mode string; default 9600 */
+      backendBaud = /4800/.test(_allFieldsSafe) ? 4800
+                  : /2400/.test(_allFieldsSafe) ? 2400
+                  : /1200/.test(_allFieldsSafe) ? 1200
+                  : 9600;
+      /* G3RUH scrambler: used by most 9600 baud amateur satellites.
+       * Enable when G3RUH or GMSK is explicit, or baud is 9600/4800 with
+       * no indication it is unscrambled. Override with FSK-only if needed. */
+      backendG3ruh = /(G3RUH|GMSK)/.test(_allFieldsSafe) ||
+                     (backendBaud >= 4800 && !(/UNSCRAMBL|NO.SCRAMBL|PLAIN/).test(_allFieldsSafe));
+    } else {
+      backendMode = "aprs";
+      backendBaud = null;
+    }
     const downlink = downlinkHzForPassV2626E(pass);
-    const params = new URLSearchParams({
-      mode: backendMode,
-      downlink_hz: String(downlink || "")
-    });
+    const _decodeParams = { mode: backendMode, downlink_hz: String(downlink || "") };
+    if (backendBaud)  _decodeParams.baud  = String(backendBaud);
+    if (backendG3ruh) _decodeParams.g3ruh = "1";
+    const params = new URLSearchParams(_decodeParams);
 
     button.disabled = true;
     button.textContent = kind === "cw" ? "Starting CW..." : "Starting decode...";
@@ -6457,7 +6495,10 @@ try {
       modal.hidden = false;
       modal.classList.add("open");
       if (title) title.textContent = kind === "cw" ? "Decode CW" : "Decode Digital";
-      if (subtitle) subtitle.textContent = `${(pass && pass.name) || "Selected pass"} | ${backendMode.toUpperCase()} | ${downlink ? formatHz(downlink) : "no downlink"}`;
+      const _modeLabel = backendMode === "gfsk"
+        ? `GFSK ${backendBaud || 9600} baud${backendG3ruh ? " G3RUH" : ""}`
+        : backendMode.toUpperCase();
+      if (subtitle) subtitle.textContent = `${(pass && pass.name) || "Selected pass"} | ${_modeLabel} | ${downlink ? formatHz(downlink) : "no downlink"}`;
       if (output) output.textContent = "Waiting for decoder output...";
       if (window.__plutoDecodeSessionV2626E && window.__plutoDecodeSessionV2626E.timer) {
         window.clearInterval(window.__plutoDecodeSessionV2626E.timer);
@@ -6601,9 +6642,7 @@ try {
       periodicPassRefreshLastRunMsV2629 = Date.now();
       lastAutoPassRefreshMs = periodicPassRefreshLastRunMsV2629;
       periodicPassRefreshStatusV2629("Queued periodic pass refresh on Pluto.");
-      if (typeof startPassFileWatchV3 === "function") {
-        startPassFileWatchV3("Refreshing pass queue...", "Periodic 15-minute refresh queued on Pluto.");
-      }
+      // Periodic background refresh runs silently — passes swap in on the next render tick.
       if (typeof refresh === "function") {
         window.setTimeout(() => refresh().catch(() => {}), 2500);
       }
@@ -6620,7 +6659,8 @@ try {
 
   function startPeriodicPassRefreshV2629() {
     if (periodicPassRefreshTimerV2629) return;
-    window.setTimeout(() => periodicPassRefreshOnceV2629("initial"), PERIODIC_PASS_REFRESH_INITIAL_DELAY_MS_V2629);
+    // No early initial kick — the Pluto runtime runs passes_boot on startup which
+    // handles the first generation. First cycle fires after the full interval.
     periodicPassRefreshTimerV2629 = window.setInterval(() => {
       periodicPassRefreshOnceV2629("timer");
     }, PERIODIC_PASS_REFRESH_INTERVAL_MS_V2629);
@@ -9411,19 +9451,38 @@ function passActionInactiveTextV286(pass) {
 (function installLiveMapTimerV297() {
   "use strict";
 
-  const LIVE_MAP_INTERVAL_MS = 5000;
-
   function tick() {
-    const fn = window.__plutoRenderMapLiveV297;
+    var fn = window.__plutoRenderMapLiveV297;
     if (typeof fn === "function") fn();
   }
 
+  /* Use an inline Web Worker so the 5 s tick fires even when the browser
+   * window is minimised or the tab is in the background.  Worker timers
+   * are NOT subject to the aggressive throttling (up to 1 min) that
+   * Chrome / Firefox apply to main-thread setInterval in hidden tabs. */
+  function startTimer() {
+    try {
+      var blob = new Blob(
+        ['setInterval(function(){postMessage(1);},5000);'],
+        { type: 'application/javascript' }
+      );
+      var url = URL.createObjectURL(blob);
+      var w = new Worker(url);
+      w.onmessage = tick;
+      /* Catch-up: fire one tick immediately when tab comes back to front */
+      document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState === "visible") tick();
+      });
+    } catch (_e) {
+      /* Worker unavailable (file:// or CSP) — fall back to setInterval */
+      window.setInterval(tick, 5000);
+    }
+  }
+
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", function () {
-      window.setInterval(tick, LIVE_MAP_INTERVAL_MS);
-    }, { once: true });
+    document.addEventListener("DOMContentLoaded", startTimer, { once: true });
   } else {
-    window.setInterval(tick, LIVE_MAP_INTERVAL_MS);
+    startTimer();
   }
 })();
 /* LIVE_MAP_UPDATE_TIMER_V2_9_7_END */
@@ -9451,71 +9510,3 @@ function passActionInactiveTextV286(pass) {
   }, 20000);
 })();
 /* STALE_PASS_CHECKER_V2_9_9_END */
-
-/* MAP_LIVE_DIAGNOSTIC_V2_9_14
- * Two-counter badge: rawTick (own 5s interval) vs hookTick (__plutoRenderMapLiveV297 calls).
- * Also shows selected-pass timing from passes payload.
- * Remove once confirmed working.
- */
-(function installMapLiveDiagnosticV2914() {
-  "use strict";
-  var rawTick = 0;
-  var hookTick = 0;
-
-  function pad2(n) { return n < 10 ? '0' + n : String(n); }
-  function nowHMS() {
-    var d = new Date(); return pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
-  }
-
-  function getTimingState() {
-    try {
-      var payload = window.__plutoLastPassesPayload;
-      if (!payload || !Array.isArray(payload.passes) || !payload.passes.length) return 'no-payload';
-      var selRow = document.querySelector('.pass-row.selected strong');
-      var selName = selRow ? selRow.textContent.trim() : '';
-      var pass = payload.passes.find(function(p) { return (p.name || '') === selName; }) || payload.passes[0];
-      var now = Date.now();
-      var aos = Date.parse(pass.aos_utc || '');
-      var los = Date.parse(pass.los_utc || '');
-      var name = pass.name || '?';
-      if (Number.isFinite(los) && now > los) return 'STALE:' + name;
-      if (Number.isFinite(aos) && now < aos) return 'upcoming:' + name;
-      if (Number.isFinite(los) && now <= los) return 'ACTIVE:' + name;
-      return 'unknown:' + name;
-    } catch (e) { return 'err'; }
-  }
-
-  function updateBadge() {
-    var badge = document.getElementById('mapLiveDiagBadgeV2914');
-    if (!badge) {
-      badge = document.createElement('div');
-      badge.id = 'mapLiveDiagBadgeV2914';
-      badge.style.cssText = 'position:fixed;bottom:40px;left:50%;transform:translateX(-50%);z-index:99999;'
-        + 'background:rgba(0,0,0,0.82);color:#0ff;font:13px/1.6 monospace;'
-        + 'padding:6px 14px;border-radius:6px;pointer-events:none;min-width:260px;text-align:center;white-space:pre';
-      document.body && document.body.appendChild(badge);
-    }
-    badge.textContent = nowHMS() + '  raw:' + rawTick + '  hook:' + hookTick + '\n' + getTimingState();
-  }
-
-  /* Independent 5s raw ticker */
-  window.setInterval(function rawTickV2914() { rawTick++; updateBadge(); }, 5000);
-
-  function wrapHook() {
-    var orig = window.__plutoRenderMapLiveV297;
-    if (typeof orig !== 'function') { updateBadge(); return; }
-    window.__plutoRenderMapLiveV297 = function diagHookV2914() {
-      hookTick++;
-      updateBadge();
-      try { orig.apply(this, arguments); } catch (_e) {}
-    };
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', wrapHook, { once: true });
-  } else {
-    wrapHook();
-  }
-  setTimeout(updateBadge, 800);
-})();
-/* MAP_LIVE_DIAGNOSTIC_V2_9_14_END */

@@ -2,16 +2,19 @@
  * pluto_digital_decoder.c
  *
  * Digital signal decoder for Pluto Plus SDR.
- * Supported modes: aprs, cw
+ * Supported modes: aprs, cw, gfsk
  *
  * Usage:
- *   pluto_digital_decoder --freq-hz <hz> --mode <aprs|cw> --output <path>
+ *   pluto_digital_decoder --freq-hz <hz> --mode <aprs|cw|gfsk> --output <path>
+ *                         [--baud <rate>]
  *
  * Captures IQ from iio_readdev, demodulates, and writes NDJSON frames
  * (one JSON object per line) to the output file.
  *
  * APRS: FM demod -> AFSK Bell 202 -> NRZ-I -> AX.25 -> APRS parse
  * CW:   IQ magnitude envelope -> dit/dah timing -> Morse -> text
+ * GFSK: FM demod (25x decim) -> DC block -> MA filter -> Gardner TED ->
+ *       NRZ-I -> AX.25 (9600/4800/2400/1200 baud via --baud, default 9600)
  */
 
 #define _POSIX_C_SOURCE 200809L
@@ -55,6 +58,35 @@
 #define AX25_MAX_FRAME   330
 
 /* ------------------------------------------------------------------ */
+/* GFSK constants (G3RUH / AX.25 9600 baud, configurable)             */
+/* ------------------------------------------------------------------ */
+
+/*
+ * Decimation 25× gives 96 000 sps audio, which divides evenly into all
+ * common satellite baud rates:
+ *   9600 baud → 10 sps/sym   (most CubeSats, G3RUH standard)
+ *   4800 baud → 20 sps/sym
+ *   2400 baud → 40 sps/sym
+ *   1200 baud → 80 sps/sym
+ */
+#define GFSK_DECIM       25
+#define GFSK_AUDIO_RATE  (IQ_SAMPLE_RATE / GFSK_DECIM)   /* 96 000 Hz */
+
+/*
+ * Gardner TED loop gain.  The timing error is normalised by signal
+ * amplitude, so e ∈ [−2, +2].
+ *
+ * Convergence: starting from worst-case half-symbol offset (sps/2 = 5
+ * samples), locking to within 0.5 samples requires N transitions where
+ * (1-gain)^N = 0.1.  At gain=0.05: N≈45 transitions (≈22 flag bytes —
+ * too long for an 8-byte preamble).  At gain=0.10: N≈22 transitions
+ * (≈11 flag bytes), which fits within the 24-byte test_gen preamble
+ * (≈48 usable transitions after 1 ms DC-block convergence).  For real
+ * satellites with 50+ flag preambles this is also fine.
+ */
+#define GFSK_TED_GAIN    0.10
+
+/* ------------------------------------------------------------------ */
 /* CW constants                                                        */
 /* ------------------------------------------------------------------ */
 
@@ -69,6 +101,7 @@
 
 static volatile sig_atomic_t g_running = 1;
 static int g_seq = 0;
+static int g_debug = 0;   /* --debug: verbose stderr diagnostics */
 
 static void on_signal(int signum) { (void)signum; g_running = 0; }
 
@@ -95,11 +128,38 @@ static int write_rx_lo(long long hz)
     return 0;
 }
 
+static void disable_rx2_scan_elements(void)
+{
+    /* The AD9361 in dual-RX (2T2R) mode outputs 4-channel interleaved IQ
+     * data [I1,Q1,I2,Q2,...] from iio_readdev.  The decoder assumes 2-channel
+     * [I,Q] so every other pair comes from RX2, producing random atan2 phase
+     * jumps and ~50% BER.  Disabling voltage2/voltage3 scan elements forces
+     * the kernel DMA to output only RX1 (I,Q) pairs. */
+    int dev, ch;
+    char path[128];
+    FILE *f;
+    for (dev = 0; dev <= 9; dev++) {
+        for (ch = 2; ch <= 3; ch++) {
+            snprintf(path, sizeof(path),
+                "/sys/bus/iio/devices/iio:device%d/scan_elements/in_voltage%d_en",
+                dev, ch);
+            f = fopen(path, "w");
+            if (f) {
+                fputs("0\n", f);
+                fclose(f);
+                fprintf(stderr, "rx: disabled iio:device%d voltage%d scan element\n",
+                        dev, ch);
+            }
+        }
+    }
+}
+
 static int configure_rx(long long hz, int sample_rate_hz)
 {
     char cmd[512];
     int r;
     if (hz < PLUTO_MIN_HZ || hz > PLUTO_MAX_HZ) return 0;
+
     snprintf(cmd, sizeof(cmd),
         "/usr/bin/iio_attr -u local: -c ad9361-phy voltage0 sampling_frequency %d >/dev/null 2>&1",
         sample_rate_hz);
@@ -110,7 +170,13 @@ static int configure_rx(long long hz, int sample_rate_hz)
     snprintf(cmd, sizeof(cmd),
         "/usr/bin/iio_attr -u local: -c ad9361-phy voltage0 gain_control_mode slow_attack >/dev/null 2>&1");
     r = system(cmd); if (r == -1 || !WIFEXITED(r) || WEXITSTATUS(r) != 0) return 0;
-    return write_rx_lo(hz);
+    if (!write_rx_lo(hz)) return 0;
+
+    /* Disable RX2 scan elements AFTER all iio_attr calls.  Attribute writes
+     * such as sampling_frequency may reset the IIO buffer and re-enable all
+     * scan elements, so this must be the last step before start_iio_stream(). */
+    disable_rx2_scan_elements();
+    return 1;
 }
 
 static FILE *start_iio_stream(pid_t *child_pid, int buffer_samps)
@@ -125,9 +191,12 @@ static FILE *start_iio_stream(pid_t *child_pid, int buffer_samps)
         snprintf(buf, sizeof(buf), "%d", buffer_samps);
         dup2(fds[1], STDOUT_FILENO);
         close(fds[0]); close(fds[1]);
+        /* Select only RX1 channels (voltage0=I, voltage1=Q).
+         * Without channel selection, cf-ad9361-lpc outputs interleaved
+         * RX1+RX2 data [I1,Q1,I2,Q2,...] which corrupts the FM demodulator. */
         execl("/usr/bin/iio_readdev", "iio_readdev",
               "-u", "local:", "-b", buf, "-s", "0",
-              "cf-ad9361-lpc", (char *)NULL);
+              "cf-ad9361-lpc", "voltage0", "voltage1", (char *)NULL);
         _exit(127);
     }
     close(fds[1]);
@@ -172,7 +241,7 @@ static void json_str(char *dst, size_t sz, const char *src)
 /* ------------------------------------------------------------------ */
 
 struct fm_state {
-    double prev_i, prev_q, prev_demod, dc_y;
+    double prev_i, prev_q;
     int have_prev;
     long long acc;
     int acc_n;
@@ -183,6 +252,14 @@ static void fm_state_init(struct fm_state *s) { memset(s, 0, sizeof(*s)); }
 /*
  * Process one IQ pair through FM discriminator and decimation.
  * Returns 1 and fills *pcm when a decimated sample is ready.
+ *
+ * atan2(cross, dot) gives the instantaneous phase increment between
+ * consecutive IQ samples, which is directly proportional to the
+ * instantaneous frequency deviation — that IS the FM demodulated audio.
+ * Accumulate it directly; no further differentiation.
+ *
+ * DC offset from a mistuned carrier is constant and doesn't affect the
+ * Goertzel energy comparison at 1200 Hz vs 2200 Hz, so no DC block needed.
  */
 static int fm_process(struct fm_state *s, short i_raw, short q_raw,
                       int decimation, short *pcm)
@@ -198,9 +275,15 @@ static int fm_process(struct fm_state *s, short i_raw, short q_raw,
     }
     s->have_prev = 1;
     s->prev_i = i; s->prev_q = q;
-    s->dc_y = (demod - s->prev_demod) + 0.995 * s->dc_y;
-    s->prev_demod = demod;
-    s->acc += (long long)lrint(s->dc_y * 12000.0);
+
+    /*
+     * Scale factor: demod is ~2π*f_dev/Fs radians per sample (tiny).
+     * Multiply by a large constant so the decimated average stays in
+     * short range. The Goertzel comparison is relative so exact scale
+     * doesn't matter — just needs to avoid acc overflow over 100 samples.
+     * 2π * 3000 Hz / 2400000 sps * 100 samples * 8192 ≈ 6434 — well within range.
+     */
+    s->acc += (long long)lrint(demod * 8192.0);
     s->acc_n++;
 
     if (s->acc_n >= decimation) {
@@ -368,9 +451,23 @@ static const uint8_t *hdlc_push_bit(struct hdlc_state *s, int raw_bit, int *fram
     s->flag_sr = (s->flag_sr >> 1) | (data_bit ? 0x80 : 0);
 
     if (s->flag_sr == AX25_FLAG) {
-        /* Flag received */
-        if (s->in_frame && s->len >= 4 && s->bit_pos == 0) {
+        /* Flag received.
+         *
+         * When in_frame=1 the 7 bits of the closing flag that precede the
+         * 8th (trigger) bit are processed through byte-assembly, advancing
+         * bit_pos from 0 to 7.  So a correctly-terminated frame always
+         * arrives here with bit_pos==7, not 0.
+         */
+        if (g_debug && (s->in_frame || s->len || s->bit_pos || s->ones || s->crc)) {
+            fprintf(stderr, "hdlc: FLAG in_frame=%d len=%d bit_pos=%d ones=%d crc=0x%04X\n",
+                    s->in_frame, s->len, s->bit_pos, s->ones, s->crc);
+        }
+        if (s->in_frame && s->len >= 4 && s->bit_pos == 7) {
             /* Frame complete; last 2 bytes are CRC */
+            if (g_debug) {
+                fprintf(stderr, "hdlc: FRAME_CANDIDATE len=%d crc=0x%04X (want 0xF0B8)\n",
+                        s->len, s->crc);
+            }
             if (s->crc == 0xF0B8) {
                 *frame_len = s->len - 2;
                 s->in_frame = 0;
@@ -391,7 +488,7 @@ static const uint8_t *hdlc_push_bit(struct hdlc_state *s, int raw_bit, int *fram
     /* Bit stuffing */
     if (data_bit == 1) {
         s->ones++;
-        if (s->ones >= 6) { s->in_frame = 0; return NULL; } /* abort */
+        if (s->ones > 6) { s->in_frame = 0; return NULL; } /* abort: 7+ ones = error */
     } else {
         if (s->ones == 5) { s->ones = 0; return NULL; } /* stuffed 0 */
         s->ones = 0;
@@ -615,17 +712,17 @@ static void run_aprs(long long freq_hz, FILE *out)
 typedef struct { const char *code; char ch; } morse_entry;
 
 static const morse_entry MORSE[] = {
-    {".-", 'A'}, {"-...", 'B'}, {"-.-.", 'C'}, {"-..", 'D'},
-    {".", 'E'},  {"..-.", 'F'}, {"--.", 'G'},  {"....", 'H'},
-    {"..", 'I'}, {".---", 'J'}, {"-.-", 'K'},  {".-..", 'L'},
-    {"--", 'M'}, {"-.", 'N'},   {"---", 'O'},  {".--.", 'P'},
-    {"--.-", 'Q'},{"-.", 'R'},  {"...", 'S'},   {"-", 'T'},
-    {"..-", 'U'},{"..-", 'V'}, {".--", 'W'},   {"-..-", 'X'},
-    {"-.--", 'Y'},{"--.", 'Z'},
-    {"-----", '0'},{"----", '1'},{".---", '2'},{"..---", '3'},
-    {"...--", '4'},{"....-", '5'},{".....", '6'},{"-....", '7'},
-    {"--...", '8'},{"----..", '9'},
-    {".-.-.-", '.'},{"--..--", ','},{"..--..", '?'},
+    {".-",   'A'}, {"-...", 'B'}, {"-.-.", 'C'}, {"-..", 'D'},
+    {".",    'E'}, {"..-.", 'F'}, {"--.",  'G'}, {"....", 'H'},
+    {"..",   'I'}, {".---", 'J'}, {"-.-",  'K'}, {".-..", 'L'},
+    {"--",   'M'}, {"-.",   'N'}, {"---",  'O'}, {".--.", 'P'},
+    {"--.-", 'Q'}, {".-.",  'R'}, {"...",  'S'}, {"-",    'T'},
+    {"..-",  'U'}, {"...-", 'V'}, {".--",  'W'}, {"-..-", 'X'},
+    {"-.--", 'Y'}, {"--..", 'Z'},
+    {"-----", '0'}, {".----", '1'}, {"..---", '2'}, {"...--", '3'},
+    {"....-", '4'}, {".....", '5'}, {"-....", '6'}, {"--...", '7'},
+    {"---..", '8'}, {"----.", '9'},
+    {".-.-.-", '.'}, {"--..--", ','}, {"..--..", '?'},
     {NULL, 0}
 };
 
@@ -788,6 +885,327 @@ static void run_cw(long long freq_hz, FILE *out)
 }
 
 /* ------------------------------------------------------------------ */
+/* G3RUH descrambler                                                  */
+/* ------------------------------------------------------------------ */
+
+/*
+ * G3RUH self-synchronizing scrambler/descrambler.
+ * Polynomial: g(x) = 1 + x^12 + x^17
+ *
+ * Descramble: out[n] = in[n] XOR in[n-12] XOR in[n-17]
+ *
+ * Self-synchronizing means no framing alignment is needed — the
+ * descrambler locks within 17 bits of the start of a valid signal.
+ * This is the de facto standard for 9600 baud satellite packet radio
+ * (G3RUH modem, JAMSAT standard, used by most CubeSat downlinks).
+ *
+ * The shift register holds the last 17 *received* (scrambled) bits.
+ * Before shifting in bit n:
+ *   sr[11] = received bit n-12
+ *   sr[16] = received bit n-17
+ */
+
+struct g3ruh_state {
+    uint32_t sr;   /* 17-bit shift register of received scrambled bits */
+};
+
+static void g3ruh_init(struct g3ruh_state *s) { s->sr = 0; }
+
+static int g3ruh_descramble(struct g3ruh_state *s, int bit)
+{
+    int out = bit ^ ((int)(s->sr >> 11) & 1) ^ ((int)(s->sr >> 16) & 1);
+    s->sr = ((s->sr << 1) | (unsigned)(bit & 1)) & 0x1FFFFU;
+    return out;
+}
+
+/* ------------------------------------------------------------------ */
+/* GFSK decode loop (G3RUH / AX.25 9600 baud, configurable)          */
+/* ------------------------------------------------------------------ */
+
+/*
+ * FM demod → DC block → moving-average matched filter →
+ * Gardner TED clock recovery → NRZ-I HDLC → AX.25 frame output.
+ *
+ * Decimation: GFSK_DECIM=25 → 96 000 sps audio.
+ * sps = 96000 / baud  (10 at 9600, 20 at 4800, 40 at 2400, 80 at 1200)
+ *
+ * The moving-average filter integrates FM energy over exactly one symbol
+ * period.  This is the integrate-and-dump matched filter for rectangular
+ * FSK symbols and a good approximation for GFSK (BT=0.5) where the
+ * Gaussian shaping spreads energy to ~1.5 symbol widths.
+ *
+ * Gardner TED: at every symbol boundary we have:
+ *   e = x_mid × (sign(x_now) − sign(x_prev))
+ * Normalised by signal amplitude so loop gain is data-independent.
+ * When consecutive bits are equal (no transition) sign difference = 0,
+ * so TED is quiescent — it only adjusts on transitions, as intended.
+ */
+static void run_gfsk(long long freq_hz, int baud, int use_g3ruh, FILE *out)
+{
+    pid_t child = -1;
+    FILE *iq_pipe = NULL;
+    struct fm_state fm;
+    struct hdlc_state hdlc;
+    struct g3ruh_state g3ruh;
+    unsigned char raw[IIO_BUFFER_SAMPS * 4];
+
+    int sps;
+    double *ma_buf;
+    int    ma_idx;
+    double ma_sum;
+
+    double dc_avg;
+    double phi;
+    double filt_prev, filt_mid;
+    int    mid_taken;
+
+    sps = GFSK_AUDIO_RATE / baud;
+    if (sps < 4) {
+        fprintf(stderr, "gfsk: baud %d too high for audio rate %d (sps=%d < 4)\n",
+                baud, GFSK_AUDIO_RATE, sps);
+        return;
+    }
+
+    ma_buf = (double *)calloc((size_t)sps, sizeof(double));
+    if (!ma_buf) { fprintf(stderr, "gfsk: calloc failed\n"); return; }
+
+    fm_state_init(&fm);
+    hdlc_init(&hdlc);
+    g3ruh_init(&g3ruh);
+
+    dc_avg    = 0.0;
+    ma_sum    = 0.0;
+    ma_idx    = 0;
+    phi       = 0.0;
+    filt_prev = 0.0;
+    filt_mid  = 0.0;
+    mid_taken = 0;
+
+    /* IQ power block accumulator for carrier detection.
+     * We sum i²+q² over each 25-IQ-sample decimation block and compare
+     * the block total to a fixed threshold rather than using a slow EMA.
+     *
+     * WHY NOT A SLOW EMA: the slow EMA (τ=500ms) stays above the threshold
+     * even during 200ms silence (decays only to ~67% of signal level), so
+     * the gate is always open and dc_avg gets dragged toward 0 by noise.
+     *
+     * Measured values (from debug):
+     *   Noise floor block total : 25 × 215        =     5,375
+     *   Signal block total      : 25 × 2,187,441  = 54,686,025
+     * Threshold 1,000,000 sits 186× above noise and 54× below signal.
+     * During silence the gate closes IMMEDIATELY (within 1 block = 0.26 µs),
+     * holding dc_avg at its converged value for the next preamble. */
+    double iq_pwr_block_acc = 0.0;  /* accumulates i²+q² over current block */
+    double dbg_iq_pwr_peak  = 0.0;  /* peak block power per reporting window */
+    long long dbg_carrier_hold = 0; /* audio samples where dc_avg was held */
+    double    dbg_pcm_sum    = 0.0; /* sum of pcm on gate-open samples */
+    long long dbg_pcm_n      = 0;   /* count of gate-open samples */
+
+    /* Per-symbol gate tracker.
+     * sym_gate_ok  : set when gate opens for any sample in current symbol.
+     * gate_quiet   : consecutive gated-off symbols; used to reset HDLC after
+     *                a silence gap so stale frame state does not corrupt the
+     *                next real frame.  At 9600 baud, 48 symbols = 5 ms. */
+    int sym_gate_ok  = 0;
+    int gate_quiet   = 0;
+
+    if (!configure_rx(freq_hz, IQ_SAMPLE_RATE)) {
+        fprintf(stderr, "gfsk: configure_rx failed\n");
+        free(ma_buf);
+        return;
+    }
+
+    iq_pipe = start_iio_stream(&child, IIO_BUFFER_SAMPS);
+    if (!iq_pipe) {
+        fprintf(stderr, "gfsk: iio stream failed\n");
+        free(ma_buf);
+        return;
+    }
+
+    /* Debug diagnostic counters */
+    long long dbg_bits = 0, dbg_ones = 0;
+    double dbg_peak = 0.0;      /* peak MA-filtered output */
+    double dbg_pcm_peak = 0.0;  /* peak raw FM demod PCM (before MA filter) */
+    /* Fire first report after 1 s, then every 5 s.
+     * dbg_bits counts symbols (bits), not audio samples, so compare to baud. */
+    long long dbg_next_report = (long long)baud * 1; /* first report after 1 s */
+
+    while (g_running) {
+        size_t got = fread(raw, 1, sizeof(raw), iq_pipe);
+        size_t pairs = got / 4;
+        size_t idx;
+
+        for (idx = 0; idx < pairs && g_running; idx++) {
+            int    off   = (int)(idx * 4);
+            short  i_raw = (short)((uint16_t)raw[off]   | ((uint16_t)raw[off+1] << 8));
+            short  q_raw = (short)((uint16_t)raw[off+2] | ((uint16_t)raw[off+3] << 8));
+            short  pcm;
+
+            /* 0. Accumulate i²+q² for this IQ sample into the current block. */
+            iq_pwr_block_acc += (double)i_raw * i_raw + (double)q_raw * q_raw;
+
+            /* 1. FM demodulate + decimate 25× → GFSK_AUDIO_RATE */
+            if (!fm_process(&fm, i_raw, q_raw, GFSK_DECIM, &pcm)) continue;
+
+            /* debug: track raw FM demod level (before DC block and MA filter) */
+            if (g_debug) {
+                double rp = fabs((double)pcm);
+                if (rp > dbg_pcm_peak) dbg_pcm_peak = rp;
+            }
+
+            /* 2. DC block — instantaneous IQ-block-power-gated hold.
+             *    α=0.9995 → τ=2000 audio samples = 200 bit periods.
+             *    Tracks the static carrier frequency offset (~12 PCM),
+             *    NOT individual bit deviations (±52 PCM).  Converges in
+             *    5τ=10000 gate-open samples; we get ~81K/window so fine.
+             *
+             *    Drain the block accumulator (25 IQ samples → 1 audio sample).
+             *    Gate: above noise floor AND below ADC saturation.
+             *    25×2048² = 209,715,200 = full ADC clip.  The upper bound
+             *    rejects the slow-attack AGC transient at each frame start
+             *    (where FM output is garbage) while still updating during
+             *    the settled-signal window (iq_block ≈ 27,225).
+             *    iq_gate_ok is also used to zero the MA filter input during
+             *    invalid (saturated or noise) blocks. */
+            int iq_gate_ok;
+            {
+                double iq_block = iq_pwr_block_acc;
+                iq_pwr_block_acc = 0.0;
+                if (g_debug && iq_block > dbg_iq_pwr_peak) dbg_iq_pwr_peak = iq_block;
+                /* Gate: above noise floor AND below ADC saturation transient.
+                 * Noise floor peak ≈ 9K; GATE_LO=15K keeps noise out.
+                 * slow_attack AGC transient pushes iq_block >100M at frame
+                 * start; GATE_HI=100M excludes that clipped/distorted window.
+                 * Settled signal (after AGC attack) lands in 15K-100M. */
+                iq_gate_ok = (iq_block > 15000.0 && iq_block < 100000000.0);
+                if (iq_gate_ok) {
+                    sym_gate_ok = 1;  /* signal present in this symbol period */
+                    dc_avg = 0.9995 * dc_avg + 0.0005 * (double)pcm;
+                    if (g_debug) { dbg_pcm_sum += (double)pcm; dbg_pcm_n++; }
+                } else {
+                    if (g_debug) dbg_carrier_hold++;
+                }
+            }
+            /* When IQ power is outside the valid gate window (noise or ADC
+             * saturation transient) feed zero into the MA filter so garbage
+             * PCM cannot corrupt the filtered output and produce false peaks. */
+            double y = iq_gate_ok ? ((double)pcm - dc_avg) : 0.0;
+
+            /* 3. Moving-average matched filter over one symbol period.
+             *    Circular buffer: drop oldest, add newest. */
+            ma_sum -= ma_buf[ma_idx];
+            ma_buf[ma_idx] = y;
+            ma_sum += y;
+            ma_idx = (ma_idx + 1) % sps;
+            double filtered = ma_sum;
+
+            /* debug: track signal level */
+            if (g_debug) {
+                double af = fabs(filtered);
+                if (af > dbg_peak) dbg_peak = af;
+            }
+
+            /* 4. Advance fractional symbol-clock phase by one audio sample */
+            phi += 1.0;
+
+            /* Capture mid-symbol sample for Gardner TED on first crossing */
+            if (!mid_taken && phi >= (double)sps * 0.5) {
+                filt_mid  = filtered;
+                mid_taken = 1;
+            }
+
+            /* 5. Symbol boundary: make bit decision and update clock */
+            if (phi >= (double)sps) {
+                phi -= (double)sps;
+                mid_taken = 0;
+
+                /* Hard bit decision: positive FM deviation = mark = 1 */
+                int bit = (filtered >= 0.0) ? 1 : 0;
+
+                /*
+                 * 6. Gardner timing error detector (sign-normalised).
+                 *
+                 *   sign(x_now) - sign(x_prev) ∈ {−2, 0, +2}
+                 *   Zero when no transition → TED is silent during bit runs.
+                 *   Non-zero only at transitions where timing info exists.
+                 *
+                 *   Normalise by amplitude so gain is signal-level independent.
+                 *   e ∈ [−2, +2]; GFSK_TED_GAIN = 0.05 → max correction 0.1 sps.
+                 */
+                double sign_now  = (filtered  >= 0.0) ?  1.0 : -1.0;
+                double sign_prev = (filt_prev >= 0.0) ?  1.0 : -1.0;
+                double amplitude = fabs(filtered) + fabs(filt_prev) + 1e-10;
+                double ted_err   = (filt_mid / amplitude) * (sign_now - sign_prev);
+
+                phi -= GFSK_TED_GAIN * ted_err;
+                /* Clamp phi into [0, sps) to prevent runaway */
+                if (phi <  0.0)           phi += (double)sps;
+                if (phi >= (double)sps)   phi -= (double)sps;
+
+                filt_prev = filtered;
+
+                /* debug counters */
+                if (g_debug) {
+                    dbg_bits++;
+                    if (bit) dbg_ones++;
+                    if (dbg_bits >= dbg_next_report) {
+                        /* pcm_peak expected ~51 for 2400 Hz dev at 2.4 MHz sps.
+                         * filtered peak expected ~510 (MA over 10 sps).
+                         * If pcm_peak < 5, FM demod sees no signal (noise only). */
+                        fprintf(stderr,
+                            "gfsk: %lld bits  ones=%lld%%  pcm_peak=%.0f"
+                            "  filtered_peak=%.0f  iq_blk_peak=%.0f"
+                            "  dc_avg=%.1f  held=%lld  pcm_mean=%.1f(n=%lld)\n",
+                            dbg_bits, dbg_ones * 100 / (dbg_bits + 1),
+                            dbg_pcm_peak, dbg_peak,
+                            dbg_iq_pwr_peak, dc_avg, dbg_carrier_hold,
+                            dbg_pcm_n > 0 ? dbg_pcm_sum / (double)dbg_pcm_n : 0.0,
+                            dbg_pcm_n);
+                        dbg_peak = 0.0;
+                        dbg_pcm_peak = 0.0;
+                        dbg_iq_pwr_peak = 0.0;
+                        dbg_carrier_hold = 0;
+                        dbg_pcm_sum = 0.0;
+                        dbg_pcm_n = 0;
+                        /* subsequent reports every 5 s */
+                        dbg_next_report += (long long)baud * 5;
+                    }
+                }
+
+                /* 7. Optional G3RUH descramble, then NRZ-I HDLC + AX.25.
+                 *    Only push bits when the gate was open for this symbol.
+                 *    During silence / AGC transient the gate is closed and
+                 *    y=0 → bit=1 always — injecting false 1-bits that would
+                 *    corrupt HDLC alignment.  After GATE_QUIET_RESET consecutive
+                 *    gated-off symbols reset HDLC so stale frame state does not
+                 *    poison the next real preamble. */
+#define GATE_QUIET_RESET  480   /* 480 symbols × (1/9600 s) = 50 ms */
+                if (sym_gate_ok) {
+                    gate_quiet = 0;
+                    int decoded_bit = use_g3ruh ? g3ruh_descramble(&g3ruh, bit) : bit;
+                    int frame_len = 0;
+                    const uint8_t *frame = hdlc_push_bit(&hdlc, decoded_bit, &frame_len);
+                    if (frame) write_aprs_frame(out, frame, frame_len);
+                } else {
+                    gate_quiet++;
+                    if (gate_quiet == GATE_QUIET_RESET) {
+                        hdlc_init(&hdlc);   /* clear stale frame state */
+                        gate_quiet = 0;
+                    }
+                }
+                sym_gate_ok = 0;  /* reset for next symbol period */
+            }
+        }
+
+        if (got == 0 && feof(iq_pipe)) break;
+    }
+
+    free(ma_buf);
+    fclose(iq_pipe);
+    if (child > 0) { kill(child, SIGTERM); waitpid(child, NULL, 0); }
+}
+
+/* ------------------------------------------------------------------ */
 /* main                                                                */
 /* ------------------------------------------------------------------ */
 
@@ -796,6 +1214,8 @@ int main(int argc, char **argv)
     long long freq_hz = 0;
     const char *mode = NULL;
     const char *output_path = NULL;
+    int baud = 9600;    /* GFSK baud rate; ignored for aprs/cw */
+    int use_g3ruh = 0;  /* --g3ruh: enable G3RUH descrambler for GFSK */
     FILE *out = NULL;
     int i;
 
@@ -814,14 +1234,29 @@ int main(int argc, char **argv)
             mode = argv[++i];
         } else if (strcmp(argv[i], "--output") == 0 && i + 1 < argc) {
             output_path = argv[++i];
+        } else if (strcmp(argv[i], "--baud") == 0 && i + 1 < argc) {
+            char *end = NULL;
+            errno = 0;
+            baud = (int)strtol(argv[++i], &end, 10);
+            if (errno || !end || *end || baud <= 0) {
+                fprintf(stderr, "Invalid --baud\n"); return 2;
+            }
+        } else if (strcmp(argv[i], "--g3ruh") == 0) {
+            use_g3ruh = 1;
+        } else if (strcmp(argv[i], "--debug") == 0) {
+            g_debug = 1;
         } else {
-            fprintf(stderr, "Usage: %s --freq-hz <hz> --mode <aprs|cw> --output <path>\n", argv[0]);
+            fprintf(stderr,
+                "Usage: %s --freq-hz <hz> --mode <aprs|cw|gfsk> --output <path>"
+                " [--baud <rate>] [--g3ruh]\n", argv[0]);
             return 2;
         }
     }
 
     if (freq_hz < PLUTO_MIN_HZ || freq_hz > PLUTO_MAX_HZ || !mode || !output_path) {
-        fprintf(stderr, "Usage: %s --freq-hz <hz> --mode <aprs|cw> --output <path>\n", argv[0]);
+        fprintf(stderr,
+            "Usage: %s --freq-hz <hz> --mode <aprs|cw|gfsk> --output <path>"
+            " [--baud <rate>]\n", argv[0]);
         return 2;
     }
 
@@ -833,8 +1268,10 @@ int main(int argc, char **argv)
         run_aprs(freq_hz, out);
     } else if (strcmp(mode, "cw") == 0) {
         run_cw(freq_hz, out);
+    } else if (strcmp(mode, "gfsk") == 0) {
+        run_gfsk(freq_hz, baud, use_g3ruh, out);
     } else {
-        fprintf(stderr, "Unknown mode: %s (supported: aprs, cw)\n", mode);
+        fprintf(stderr, "Unknown mode: %s (supported: aprs, cw, gfsk)\n", mode);
         fclose(out);
         return 2;
     }
